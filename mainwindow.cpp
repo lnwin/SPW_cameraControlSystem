@@ -35,6 +35,34 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+
+    auto sock = new QUdpSocket(this);
+    // 接收缓冲大一点，避免丢包
+    sock->setSocketOption(QUdpSocket::ReceiveBufferSizeSocketOption, 1<<20);
+
+    const quint16 PORT = 9999;
+    bool ok = sock->bind(QHostAddress::AnyIPv4, PORT,
+                         QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint);
+    qDebug() << "[SRV] bind 0.0.0.0:" << PORT << (ok ? "OK" : "FAIL");
+
+
+    QObject::connect(sock, &QUdpSocket::readyRead, [sock](){
+        while (sock->hasPendingDatagrams()) {
+            QHostAddress cli; quint16 cliPort = 0;
+            QByteArray buf; buf.resize(int(sock->pendingDatagramSize()));
+            sock->readDatagram(buf.data(), buf.size(), &cli, &cliPort);
+            const QString msg = QString::fromUtf8(buf).trimmed();
+            qDebug() << "[SRV] recv" << msg << "from" << cli.toString() << ":" << cliPort;
+
+            if (msg.startsWith("DISCOVER_REQUEST")) {
+                const QByteArray rep = "DISCOVER_REPLY host=192.168.124.77 port=10000";
+                const auto n = sock->writeDatagram(rep, cli, cliPort);
+                qDebug() << "[SRV] send reply bytes=" << n << "to" << cli.toString() << ":" << cliPort;
+            }
+        }
+    });
+
+
     on_updateSystemIP_clicked();
     dhcp_ = new DhcpMiniServer(this);
     setCurBindIp(curBindIp_);   // 自动配置浑水相机的主机IP，跟随上位机的前三位，第四位配置为：200-250之间。
