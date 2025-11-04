@@ -11,12 +11,16 @@ CONFIG += c++17
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    dhcpminiserver.cpp \
     main.cpp \
     mainwindow.cpp \
+    restipclient.cpp \
     rtspviewerqt.cpp
 
 HEADERS += \
+    dhcpminiserver.h \
     mainwindow.h \
+    restipclient.h \
     rtspviewerqt.h
 FORMS += \
     mainwindow.ui
@@ -42,5 +46,8 @@ win32: LIBS += -LE:/ThirdParty/opencv-4.7.0-NoCudda/opencv/build/x64/vc16/lib/ -
 
 INCLUDEPATH += E:/ThirdParty/opencv-4.7.0-NoCudda/opencv/build/include
 DEPENDPATH += E:/ThirdParty/opencv-4.7.0-NoCudda/opencv/build/include
+LIBS += -lIphlpapi -lWs2_32
+DEFINES += _WIN32_WINNT=0x0601 WIN32_LEAN_AND_MEAN NOMINMAX
+
 
 

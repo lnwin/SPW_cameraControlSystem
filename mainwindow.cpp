@@ -35,11 +35,14 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
+    on_updateSystemIP_clicked();
+    dhcp_ = new DhcpMiniServer(this);
+    setCurBindIp(curBindIp_);   // 自动配置浑水相机的主机IP，跟随上位机的前三位，第四位配置为：200-250之间。
     probeWiredIPv4s();
-   // relaunchMediaMTX(curBindIp_);
+    // relaunchMediaMTX(curBindIp_);
     // 程序启动即拉起 MediaMTX
-  //  startMediaMTX();
-   // viewer_->start();
+    //  startMediaMTX();
+    // viewer_->start();
 
 }
 bool MainWindow::stopMediaMTXBlocking(int gracefulMs, int killMs)
@@ -80,7 +83,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
         viewer_->wait(1500);
         viewer_ = nullptr;
     }
-
+    dhcp_->stop();
     // 停止 MediaMTX（阻塞直到退出）
     stopMediaMTXBlocking();
 
@@ -299,9 +302,44 @@ void MainWindow::on_changeCameraIP_clicked()
 
 }
 
+void MainWindow::setCurBindIp(const QString& ip){
+    curBindIp_ = ip;
+    // 若 DHCP 已在跑，先停再按新IP配置
+    if (dhcp_->isRunning()) dhcp_->stop();
+    applyDhcpFromCurBindIp();
 
+    QString err;
+    if (!dhcp_->start(&err)) {
+        QMessageBox::critical(this, "DHCP 启动失败", err);
+    }
+}
+
+void MainWindow::applyDhcpFromCurBindIp(){
+    // 基于 curBindIp_ 生成同网段的池：.200 ~ .250（/24）
+    const QStringList parts = curBindIp_.split('.');
+    if (parts.size() != 4) {
+        qWarning() << "curBindIp_ invalid:" << curBindIp_;
+        return;
+    }
+    const QString prefix = QString("%1.%2.%3").arg(parts[0], parts[1], parts[2]);
+    const QString poolStart = prefix + ".200";
+    const QString poolEnd   = prefix + ".250";
+
+    // 配 DHCP 基础参数
+    dhcp_->setInterfaceIp(curBindIp_);
+    dhcp_->setMask("255.255.255.0");
+    dhcp_->setPool(poolStart, poolEnd);
+    dhcp_->setLeaseSeconds(3600);
+    dhcp_->disableRouterOption(true);   // 👈 关键：不发送默认路由
+
+
+    qInfo().noquote() << QString("DHCP config by curBindIp_: iface=%1, pool=%2-%3, mask=255.255.255.0, gw=%4")
+                             .arg(curBindIp_, poolStart, poolEnd, curBindIp_);
+}
 void MainWindow::on_updateCameraIP_clicked()
 {
+
+    //setCurBindIp(curBindIp_);   // 会自动 stop → 重新配置 → start
 
 }
 
@@ -311,6 +349,7 @@ void MainWindow::on_changeSystemIP_clicked()
     curBindIp_   =ui->systemIPcomboBox->currentText();
 
     relaunchMediaMTX(curBindIp_);
+    setCurBindIp(curBindIp_);
 }
 
 QStringList MainWindow::probeWiredIPv4s()

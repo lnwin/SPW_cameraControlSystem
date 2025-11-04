@@ -204,6 +204,11 @@
        <height>23</height>
       </rect>
      </property>
+     <item>
+      <property name="text">
+       <string>192.168.194.88</string>
+      </property>
+     </item>
     </widget>
    </widget>
    <widget class="QTextEdit" name="messageBox">
