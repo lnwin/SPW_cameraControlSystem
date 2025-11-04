@@ -1,36 +1,67 @@
-#pragma once
-#include <QMainWindow>
-#include <QLabel>
-#include <QElapsedTimer>
-#include <QPixmap>
+#ifndef MAINWINDOW_H
+#define MAINWINDOW_H
 
+#include <QMainWindow>
+#include <QProcess>
+#include <rtspviewerqt.h>
+#include <QtNetwork/QNetworkInterface>
+#include <QtNetwork/QHostAddress>
+class RtspViewerQt;
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
+struct MediaMtxRuntimeCfg {
+    QString logLevel = "info";
+    bool rtsp = true;
+    bool rtmp = false;
+    bool hls  = false;
+    bool webrtc = false;
 
-class GstRtspRecordServerQt; // 前向声明
+    // v1.15.3：用 rtspTransports 代替 protocols
+    QStringList rtspTransports = {"udp"};
 
-class MainWindow : public QMainWindow {
+    // 监听与 RTP/RTCP（支持 "IP:PORT" 或 ":PORT"）
+    QString rtspAddress = ":10000";
+    QString rtpAddress  = ":10002";
+    QString rtcpAddress = ":10003";
+
+    // 路径
+    QString pathName = "mystream";
+    bool sourceOnDemand = false;
+};
+
+class MainWindow : public QMainWindow
+{
     Q_OBJECT
+
 public:
     explicit MainWindow(QWidget *parent = nullptr);
-    ~MainWindow() override;
-
-protected:
-    void resizeEvent(QResizeEvent* e) override;
+    ~MainWindow();
 
 private:
-    Ui::MainWindow* ui = nullptr;
+    Ui::MainWindow *ui;
+    RtspViewerQt* viewer_ = nullptr;
+    // ---- MediaMTX 管理 ----
+    QProcess* mtxProc_ = nullptr;
+    void startMediaMTX();
+    void stopMediaMTX();
+    QString writeMediaMtxYaml(const QString& dir, const MediaMtxRuntimeCfg& c);
+    void relaunchMediaMTX(const QString& bindIp);
 
-    // 预览显示
-    QLabel* previewLabel_ = nullptr;
-    QPixmap lastPixmap_;                 // 缓存最后一帧，窗口尺寸变化时复用
-    QElapsedTimer uiFpsTimer_;           // UI 刷新节流
-    int uiMinIntervalMs_ = 30;           // 约 33ms ≈ 30FPS；你的源是 21FPS，可以设 40~45
-
-    // RTSP RECORD 服务器
-    GstRtspRecordServerQt* srv_ = nullptr;
-
-    void ensurePreviewLabel();
-    void showFrameOnLabel(const QImage& img);
+    // 当前配置（便于遇错重试）
+    QString curBindIp_ = "192.168.194.77";
+    int     curRtspPort_ = 10000;
+    int     curRtpBase_  = 10002;
+    QString curPath_     = "mystream";
+    QStringList probeWiredIPv4s();  // 枚举并返回所有有线 IPv4
+private slots:
+    void onFrame(const QImage& img);
+    void on_openCamera_clicked();
+    void on_closeCamera_clicked();
+    void on_changeCameraIP_clicked();
+    void on_updateCameraIP_clicked();
+    void on_changeSystemIP_clicked();
+    void on_updateSystemIP_clicked();
 };
+
+#endif // MAINWINDOW_H

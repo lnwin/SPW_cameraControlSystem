@@ -39,7 +39,7 @@
     <property name="title">
      <string>相机控制</string>
     </property>
-    <widget class="QPushButton" name="pushButton">
+    <widget class="QPushButton" name="openCamera">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -56,7 +56,7 @@
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>30</y>
+       <y>20</y>
        <width>61</width>
        <height>20</height>
       </rect>
@@ -65,33 +65,33 @@
       <string>当前相机IP</string>
      </property>
     </widget>
-    <widget class="QLineEdit" name="lineEdit">
+    <widget class="QLineEdit" name="cameraIP">
      <property name="enabled">
       <bool>false</bool>
      </property>
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>50</y>
+       <y>40</y>
        <width>161</width>
        <height>23</height>
       </rect>
      </property>
     </widget>
-    <widget class="QPushButton" name="pushButton_2">
+    <widget class="QPushButton" name="changeCameraIP">
      <property name="geometry">
       <rect>
        <x>10</x>
        <y>80</y>
        <width>161</width>
-       <height>23</height>
+       <height>31</height>
       </rect>
      </property>
      <property name="text">
       <string>修改相机IP地址</string>
      </property>
     </widget>
-    <widget class="QPushButton" name="pushButton_3">
+    <widget class="QPushButton" name="closeCamera">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -104,7 +104,7 @@
       <string>关闭相机</string>
      </property>
     </widget>
-    <widget class="QPushButton" name="pushButton_4">
+    <widget class="QPushButton" name="grapOneFrame">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -117,7 +117,7 @@
       <string>单帧截图</string>
      </property>
     </widget>
-    <widget class="QPushButton" name="pushButton_5">
+    <widget class="QPushButton" name="startRecord">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -130,7 +130,7 @@
       <string>开始录像</string>
      </property>
     </widget>
-    <widget class="QPushButton" name="pushButton_6">
+    <widget class="QPushButton" name="stopRecord">
      <property name="geometry">
       <rect>
        <x>10</x>
@@ -143,11 +143,11 @@
       <string>停止录像</string>
      </property>
     </widget>
-    <widget class="QPushButton" name="pushButton_7">
+    <widget class="QPushButton" name="updateCameraIP">
      <property name="geometry">
       <rect>
        <x>180</x>
-       <y>50</y>
+       <y>40</y>
        <width>21</width>
        <height>23</height>
       </rect>
@@ -156,8 +156,57 @@
       <string>O</string>
      </property>
     </widget>
+    <widget class="QPushButton" name="changeSystemIP">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>460</y>
+       <width>161</width>
+       <height>31</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>修改系统IP</string>
+     </property>
+    </widget>
+    <widget class="QPushButton" name="updateSystemIP">
+     <property name="geometry">
+      <rect>
+       <x>180</x>
+       <y>430</y>
+       <width>21</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>O</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_3">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>400</y>
+       <width>61</width>
+       <height>20</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>当前系统IP</string>
+     </property>
+    </widget>
+    <widget class="QComboBox" name="systemIPcomboBox">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>430</y>
+       <width>161</width>
+       <height>23</height>
+      </rect>
+     </property>
+    </widget>
    </widget>
-   <widget class="QTextEdit" name="textEdit">
+   <widget class="QTextEdit" name="messageBox">
     <property name="geometry">
      <rect>
       <x>10</x>
