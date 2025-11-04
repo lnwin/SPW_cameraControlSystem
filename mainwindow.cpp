@@ -6,6 +6,7 @@
 #include <QFileInfo>
 #include <QDebug>
 #include <QRegularExpression>
+Q_OS_WIN
 //==================================================================================================================
 static bool isValidIPv4(const QString& ip){
     // 简单 IPv4 校验
@@ -21,22 +22,70 @@ static bool isUsableIPv4(const QHostAddress& ip) {
     if (v == 0u) return false;                           // 0.0.0.0
     return true;
 }
+#ifdef Q_OS_WIN
+#include <windows.h>
+static void killProcessTreeWindows(qint64 pid){
+    QProcess p;
+    p.start("cmd.exe", {"/C", QString("taskkill /PID %1 /T /F").arg(pid)});
+    p.waitForFinished(3000);
+}
+#endif
 //===================================================================================================================
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-
     probeWiredIPv4s();
-    relaunchMediaMTX(curBindIp_);
+   // relaunchMediaMTX(curBindIp_);
     // 程序启动即拉起 MediaMTX
-    startMediaMTX();
-
-
-
-
+  //  startMediaMTX();
    // viewer_->start();
 
+}
+bool MainWindow::stopMediaMTXBlocking(int gracefulMs, int killMs)
+{
+    if (!mtxProc_) return true;
+
+    // 弹出“请等待系统断开…”的进度对话框（不可取消）
+    QMessageBox tip(this);
+    tip.setIcon(QMessageBox::Information);
+    tip.setWindowTitle(QString::fromUtf8(u8"正在退出"));
+    tip.setText(QString::fromUtf8(u8"请等待系统断开…"));
+    tip.show();
+    QApplication::processEvents();
+
+    // 先优雅退出
+    mtxProc_->terminate();
+    if (!mtxProc_->waitForFinished(gracefulMs)) {
+#ifdef Q_OS_WIN
+        // Windows 下强杀进程树，避免残留占端口
+        const qint64 pid = mtxProc_->processId();
+        if (pid > 0) killProcessTreeWindows(pid);
+        mtxProc_->waitForFinished(killMs);
+#else
+        mtxProc_->kill();
+        mtxProc_->waitForFinished(killMs);
+#endif
+    }
+    tip.close();
+    mtxProc_->deleteLater();
+    mtxProc_ = nullptr;
+    return true;
+}
+void MainWindow::closeEvent(QCloseEvent* event)
+{
+    // 停止拉流线程
+    if (viewer_) {
+        viewer_->stop();
+        viewer_->wait(1500);
+        viewer_ = nullptr;
+    }
+
+    // 停止 MediaMTX（阻塞直到退出）
+    stopMediaMTXBlocking();
+
+    // 一切正常，允许退出
+    event->accept();
 }
 
 MainWindow::~MainWindow()
@@ -109,9 +158,9 @@ void MainWindow::relaunchMediaMTX(const QString& bindIp)
     }
 
     MediaMtxRuntimeCfg cfg;
-    cfg.rtspAddress = QString("%1:%2").arg(bindIp).arg(curBindIp_);
-    cfg.rtpAddress  = QString("%1:%2").arg(bindIp).arg(curRtspPort_);
-    cfg.rtcpAddress = QString("%1:%2").arg(bindIp).arg(curRtpBase_+1);
+    cfg.rtspAddress = QString("%1:%2").arg(curBindIp_).arg(curRtspPort_);
+    cfg.rtpAddress  = QString("%1:%2").arg(curBindIp_).arg(curRtspPort_);
+    cfg.rtcpAddress = QString("%1:%2").arg(curBindIp_).arg(curRtspPort_+1);
 
     const QString runtimeCfg = writeMediaMtxYaml(mtxDir, cfg);
     if (runtimeCfg.isEmpty()) return;
@@ -241,7 +290,6 @@ void MainWindow::on_openCamera_clicked()
 void MainWindow::on_closeCamera_clicked()
 {
     viewer_->stop();
-    viewer_->destroyed();
     viewer_=NULL;
 }
 
@@ -262,7 +310,7 @@ void MainWindow::on_changeSystemIP_clicked()
 {
     curBindIp_   =ui->systemIPcomboBox->currentText();
 
-    //relaunchMediaMTX(ui->systemIP->text());
+    relaunchMediaMTX(curBindIp_);
 }
 
 QStringList MainWindow::probeWiredIPv4s()

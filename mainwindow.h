@@ -6,6 +6,10 @@
 #include <rtspviewerqt.h>
 #include <QtNetwork/QNetworkInterface>
 #include <QtNetwork/QHostAddress>
+#include <QCloseEvent>
+#include <QProgressDialog>
+#include <QElapsedTimer>
+#include <QMessageBox>
 class RtspViewerQt;
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -54,6 +58,8 @@ private:
     int     curRtpBase_  = 10002;
     QString curPath_     = "mystream";
     QStringList probeWiredIPv4s();  // 枚举并返回所有有线 IPv4
+
+    bool stopMediaMTXBlocking(int gracefulMs = 3000, int killMs = 2000);
 private slots:
     void onFrame(const QImage& img);
     void on_openCamera_clicked();
@@ -62,6 +68,8 @@ private slots:
     void on_updateCameraIP_clicked();
     void on_changeSystemIP_clicked();
     void on_updateSystemIP_clicked();
+protected:
+    void closeEvent(QCloseEvent* event) override;
 };
 
 #endif // MAINWINDOW_H
