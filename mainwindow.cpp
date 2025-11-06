@@ -35,32 +35,22 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-
-    auto sock = new QUdpSocket(this);
-    // 接收缓冲大一点，避免丢包
-    sock->setSocketOption(QUdpSocket::ReceiveBufferSizeSocketOption, 1<<20);
-
-    const quint16 PORT = 9999;
-    bool ok = sock->bind(QHostAddress::AnyIPv4, PORT,
-                         QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint);
-    qDebug() << "[SRV] bind 0.0.0.0:" << PORT << (ok ? "OK" : "FAIL");
-
-
-    QObject::connect(sock, &QUdpSocket::readyRead, [sock](){
-        while (sock->hasPendingDatagrams()) {
-            QHostAddress cli; quint16 cliPort = 0;
-            QByteArray buf; buf.resize(int(sock->pendingDatagramSize()));
-            sock->readDatagram(buf.data(), buf.size(), &cli, &cliPort);
-            const QString msg = QString::fromUtf8(buf).trimmed();
-            qDebug() << "[SRV] recv" << msg << "from" << cli.toString() << ":" << cliPort;
-
-            if (msg.startsWith("DISCOVER_REQUEST")) {
-                const QByteArray rep = "DISCOVER_REPLY host=192.168.124.77 port=10000";
-                const auto n = sock->writeDatagram(rep, cli, cliPort);
-                qDebug() << "[SRV] send reply bytes=" << n << "to" << cli.toString() << ":" << cliPort;
-            }
-        }
+    mgr_ = new UdpDeviceManager(this);
+    mgr_->setDefaultCmdPort(10000);
+    if (!mgr_->start(7777, 8888)) {
+        qWarning() << "UdpDeviceManager start failed";
+        return;
+    }
+    // 日志
+    connect(mgr_, &UdpDeviceManager::logLine, this, [](const QString& s){
+        qDebug().noquote() << s;
     });
+    // 发现 SN → 更新 UI
+    connect(mgr_, &UdpDeviceManager::snDiscoveredOrUpdated, this, [this](const QString& sn){
+        QMetaObject::invokeMethod(this, [this, sn](){ upsertCameraSN(sn); }, Qt::QueuedConnection);
+    });
+
+    //========================================================================
 
 
     on_updateSystemIP_clicked();
@@ -73,6 +63,16 @@ MainWindow::MainWindow(QWidget *parent)
     // viewer_->start();
 
 }
+// MainWindow.cpp
+void MainWindow::upsertCameraSN(const QString& sn){
+    if (sn.isEmpty()) return;
+    auto cb = ui->cameraIPCombox;
+    int idx = cb->findText(sn);
+    if (idx < 0) cb->addItem(sn);
+    else         cb->setItemText(idx, sn); // “相同则替换/刷新”
+    cb->setCurrentText(sn);
+}
+
 bool MainWindow::stopMediaMTXBlocking(int gracefulMs, int killMs)
 {
     if (!mtxProc_) return true;

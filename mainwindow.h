@@ -11,6 +11,7 @@
 #include <QMessageBox>
 #include <QTimer>
 #include <dhcpminiserver.h>
+#include <udpserver.h>
 class RtspViewerQt;
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -66,6 +67,10 @@ private:
     // 设置并应用（对外一个入口）
     void setCurBindIp(const QString& ip);
     void applyDhcpFromCurBindIp();  // 根据 curBindIp_ 动态设置 DHCP 参数
+
+    UdpDeviceManager* mgr_ = nullptr;
+    void upsertCameraSN(const QString& sn);
+    QHash<QString, QString> sn2ip_;
 
 private slots:
     void onFrame(const QImage& img);

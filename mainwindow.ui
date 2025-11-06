@@ -65,19 +65,6 @@
       <string>当前相机IP</string>
      </property>
     </widget>
-    <widget class="QLineEdit" name="cameraIP">
-     <property name="enabled">
-      <bool>false</bool>
-     </property>
-     <property name="geometry">
-      <rect>
-       <x>10</x>
-       <y>40</y>
-       <width>161</width>
-       <height>23</height>
-      </rect>
-     </property>
-    </widget>
     <widget class="QPushButton" name="changeCameraIP">
      <property name="geometry">
       <rect>
@@ -209,6 +196,16 @@
        <string>192.168.194.88</string>
       </property>
      </item>
+    </widget>
+    <widget class="QComboBox" name="cameraIPCombox">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>40</y>
+       <width>161</width>
+       <height>23</height>
+      </rect>
+     </property>
     </widget>
    </widget>
    <widget class="QTextEdit" name="messageBox">

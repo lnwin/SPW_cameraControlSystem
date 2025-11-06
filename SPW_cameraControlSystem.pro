@@ -15,13 +15,15 @@ SOURCES += \
     main.cpp \
     mainwindow.cpp \
     restipclient.cpp \
-    rtspviewerqt.cpp
+    rtspviewerqt.cpp \
+    udpserver.cpp
 
 HEADERS += \
     dhcpminiserver.h \
     mainwindow.h \
     restipclient.h \
-    rtspviewerqt.h
+    rtspviewerqt.h \
+    udpserver.h
 FORMS += \
     mainwindow.ui
 
