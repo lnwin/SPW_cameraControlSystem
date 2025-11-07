@@ -1,5 +1,8 @@
 #include "udpserver.h"
 #include <QCoreApplication>
+#include <winsock2.h>              // 必须在 <windows.h> 之前
+#pragma comment(lib, "Ws2_32.lib") // VS 自动链接 winsock 库
+
 
 static QRegularExpression kReSn(R"(sn\s*=\s*([A-Za-z0-9\-_]+))", QRegularExpression::CaseInsensitiveOption);
 
@@ -9,27 +12,26 @@ UdpDeviceManager::UdpDeviceManager(QObject* parent)
 }
 
 bool UdpDeviceManager::start(quint16 discoverPort, quint16 heartbeatPort){
-    // 先停掉旧的
     stop();
 
     listenPort_ = discoverPort;
     hbPort_     = heartbeatPort;
 
-    // 1) 发现/普通UDP（你已有）
+    // 1) 发现口 7777
     sock_ = new QUdpSocket(this);
     sock_->setSocketOption(QUdpSocket::ReceiveBufferSizeSocketOption, 1<<20);
     bool ok1 = sock_->bind(QHostAddress::AnyIPv4, listenPort_,
-                           QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint);
+                           QUdpSocket::DontShareAddress);   // ← 建议改为 DontShareAddress
     emit logLine(QString("[UDP-Mgr] bind DISC 0.0.0.0:%1 %2").arg(listenPort_).arg(ok1?"OK":"FAIL"));
     if (!ok1){ sock_->deleteLater(); sock_=nullptr; return false; }
 
     connect(sock_, &QUdpSocket::readyRead, this, &UdpDeviceManager::onReadyRead);
 
-    // 2) 心跳端口 8888
+    // 2) 心跳口 8888
     sockHb_ = new QUdpSocket(this);
     sockHb_->setSocketOption(QUdpSocket::ReceiveBufferSizeSocketOption, 1<<20);
     bool ok2 = sockHb_->bind(QHostAddress::AnyIPv4, hbPort_,
-                             QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint);
+                             QUdpSocket::DontShareAddress); // ← 同上
     emit logLine(QString("[UDP-Mgr] bind HB   0.0.0.0:%1 %2").arg(hbPort_).arg(ok2?"OK":"FAIL"));
     if (!ok2){
         disconnect(sock_, nullptr, this, nullptr);
@@ -41,6 +43,7 @@ bool UdpDeviceManager::start(quint16 discoverPort, quint16 heartbeatPort){
 
     return true;
 }
+
 
 void UdpDeviceManager::stop(){
     auto closeDel = [](QUdpSocket*& s){
@@ -60,20 +63,47 @@ void UdpDeviceManager::onReadyReadHb(){
         sockHb_->readDatagram(buf.data(), buf.size(), &peer, &peerPort);
         const QString msg = QString::fromUtf8(buf).trimmed();
 
-        // 打印收到的心跳
         emit logLine(QString("[HB-SRV] <-- RECV '%1' from %2:%3")
                          .arg(msg, peer.toString()).arg(peerPort));
 
-        if (msg.startsWith("HB_PING")){
-            static const QByteArray pong = "HB_PONG";
-            const qint64 n = sockHb_->writeDatagram(pong, peer, peerPort);
-            emit logLine(QString("[HB-SRV] --> PONG %1 bytes to %2:%3")
+        if (msg.startsWith("HB_PING", Qt::CaseInsensitive)) {
+
+            // （可选）只在同网段时才回 ACK；不同网段只记录不响应
+            QHostAddress local = pickLocalIpSameSubnet(peer);
+            QByteArray rep = "DISCOVER_REPLY ";
+            if (local.isNull() || local.isLoopback()) {
+                // 找不到同网段地址 -> 不写 host=（交给下位机用 peer）
+                rep += "port=" + QByteArray::number(hbPort_);
+            } else {
+                // 再保险：确认 local 与 peer 同网段，才写 host=
+                bool same = false;
+                for (const auto& nic : QNetworkInterface::allInterfaces()){
+                    if (!(nic.flags() & QNetworkInterface::IsUp) || !(nic.flags() & QNetworkInterface::IsRunning)) continue;
+                    for (const auto& e : nic.addressEntries()){
+                        if (e.ip() != local || e.ip().protocol()!=QAbstractSocket::IPv4Protocol) continue;
+                        const auto mask = e.netmask().isNull()? 0u : e.netmask().toIPv4Address();
+                        if (mask && ((local.toIPv4Address() & mask) == (peer.toIPv4Address() & mask))) { same = true; break; }
+                    }
+                    if (same) break;
+                }
+                if (same) {
+                    rep += "host=" + local.toString().toUtf8()
+                           + " port=" + QByteArray::number(hbPort_);
+                } else {
+                    // 不同网段也不要写 host=，避免回 26.26.26.1 这种错误地址
+                    rep += "port=" + QByteArray::number(hbPort_);
+                }
+            }
+
+            const qint64 n = sock_->writeDatagram(rep, peer, listenPort_);
+
+            emit logLine(QString("[HB-SRV] --> ACK %1 bytes to %2:%3")
                              .arg(n).arg(peer.toString()).arg(peerPort));
         }
-        // 如需把心跳也透传给你的上层回调：
-        // emit datagramReceived(QString(), peer, peerPort, buf);
     }
 }
+
+
 
 
 qint64 UdpDeviceManager::sendCommandToSn(const QString& sn, const QByteArray& payload, quint16 port){
@@ -128,16 +158,27 @@ void UdpDeviceManager::onReadyRead(){
 
         // ① 发现应答：收到 DISCOVER_REQUEST 就回 DISCOVER_REPLY
         if (msg.startsWith("DISCOVER_REQUEST")){
-            const QHostAddress local = pickLocalIpSameSubnet(peer);
-            // 下位机只需要 host 就能建立心跳；业务端口按需附带
+           QHostAddress local = pickLocalIpSameSubnet(peer);
+            if (local == QHostAddress::LocalHost || local.isNull() || local.isLoopback()) {
+                local = peer;
+            }
+
+            // 用 local 构造 host= 字段
             const QByteArray rep = QByteArray("DISCOVER_REPLY host=")
                                    + local.toString().toUtf8()
-                                   + " hb=" + QByteArray::number(hbPort_)
-                                   + " port=" + QByteArray::number(defaultCmdPort_);
-            const qint64 n = sock_->writeDatagram(rep, peer, peerPort);
+                                   + " port=" + QByteArray::number(hbPort_); // 建议用心跳端口
+            emit logLine(QString("[UDP-Mgr] --> DISCOVER_REPLY '%1' to %2:%3 via %4")
+                             .arg(QString::fromUtf8(rep), peer.toString()).arg(listenPort_).arg(local.toString()));
+
+
+            // ★★ 关键：回到固定的发现端口，而不是 peer 的临时端口 ★★
+            const qint64 n = sock_->writeDatagram(rep, peer, listenPort_);  // ← 改这里
+
             emit logLine(QString("[UDP-Mgr] --> DISCOVER_REPLY (%1 bytes) to %2:%3 via %4")
-                             .arg(n).arg(peer.toString()).arg(peerPort).arg(local.toString()));
+                             .arg(n).arg(peer.toString()).arg(listenPort_).arg(local.toString()));
         }
+
+
 
         // ② 解析 SN（例如 DISCOVER_REQUEST sn=YSMC300-SN0001 ts=...）
         const QString sn = parseSn(msg);
@@ -190,3 +231,74 @@ QHostAddress UdpDeviceManager::pickLocalIpSameSubnet(const QHostAddress& peer) c
     }
     return QHostAddress::LocalHost;
 }
+
+static void enableBroadcast(QUdpSocket* sock){
+    if (!sock) return;
+    qintptr fd = sock->socketDescriptor();
+    if (fd < 0) return;
+
+#if defined(Q_OS_WIN)
+    // WinSock 需要 const char*；用 BOOL 也行，但要强转为 const char*
+    BOOL opt = TRUE;
+    ::setsockopt((SOCKET)fd, SOL_SOCKET, SO_BROADCAST,
+                 reinterpret_cast<const char*>(&opt), sizeof(opt));
+#else
+    int opt = 1;
+    ::setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &opt, sizeof(opt));
+#endif
+}
+qint64 UdpDeviceManager::sendSetIp(const QString& sn, const QString& ip, int mask, const QString& iface)
+{
+    QByteArray payload = "CMD_SET_IP sn=" + sn.toUtf8()
+                         + " ip=" + ip.toUtf8()
+                         + " mask=" + QByteArray::number(mask);
+    if (!iface.isEmpty()) payload += " iface=" + iface.toUtf8();
+
+    int sent=0, errs=0;
+    qint64 last=-1;
+
+    auto looksVirtual = [](const QString& name){
+        const QString n = name.toLower();
+        // 典型 Windows 虚拟口：Hyper-V(vEthernet)、VMware、VirtualBox、Docker、TAP/TUN、桥
+        return n.contains("vethernet") || n.contains("vmware") || n.contains("vbox")
+               || n.contains("docker") || n.contains("loopback") || n.contains("tap")
+               || n.contains("bridge")  || n.contains("br-");
+    };
+
+    for (const auto& nic : QNetworkInterface::allInterfaces()){
+        if (!(nic.flags() & QNetworkInterface::IsUp) || !(nic.flags() & QNetworkInterface::IsRunning))
+            continue;
+        if (!iface.isEmpty() && nic.humanReadableName() != iface) continue;
+        if (looksVirtual(nic.humanReadableName())) continue;
+
+        for (const auto& e : nic.addressEntries()){
+            if (e.ip().protocol() != QAbstractSocket::IPv4Protocol) continue;
+            const QHostAddress local = e.ip();
+            if (local == QHostAddress::LocalHost) continue; // 跳过 127.0.0.1
+
+            QUdpSocket tx;
+            if (!tx.bind(local, 0, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint)){
+                emit logLine(QString("[UDP-Mgr] setip bind(%1) fail: %2").arg(local.toString(), tx.errorString()));
+                ++errs; continue;
+            }
+            tx.setSocketOption(QAbstractSocket::LowDelayOption, 1);
+#if defined(Q_OS_WIN)
+            { char opt=1; ::setsockopt((SOCKET)tx.socketDescriptor(), SOL_SOCKET, SO_BROADCAST, &opt, sizeof(opt)); }
+#else
+            { int  opt=1; ::setsockopt(tx.socketDescriptor(), SOL_SOCKET, SO_BROADCAST, &opt, sizeof(opt)); }
+#endif
+
+            qint64 n = tx.writeDatagram(payload, QHostAddress::Broadcast /*255.255.255.255*/, listenPort_);
+            last = n; (n>=0)? ++sent : ++errs;
+            emit logLine(QString("[UDP-Mgr] CMD_SET_IP(limited-bcast) SN=%1 -> 255.255.255.255:%2 via %3 bytes=%4")
+                             .arg(sn).arg(listenPort_).arg(local.toString()).arg(static_cast<qlonglong>(n)));
+        }
+    }
+    emit logLine(QString("[UDP-Mgr] CMD_SET_IP limited-broadcast summary: sent=%1 err=%2").arg(sent).arg(errs));
+    return last;
+}
+
+
+
+
+

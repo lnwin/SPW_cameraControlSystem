@@ -17,9 +17,9 @@
    <widget class="QLabel" name="label">
     <property name="geometry">
      <rect>
-      <x>230</x>
+      <x>350</x>
       <y>20</y>
-      <width>901</width>
+      <width>561</width>
       <height>481</height>
      </rect>
     </property>
@@ -32,7 +32,7 @@
      <rect>
       <x>10</x>
       <y>0</y>
-      <width>211</width>
+      <width>341</width>
       <height>501</height>
      </rect>
     </property>
@@ -130,19 +130,6 @@
       <string>停止录像</string>
      </property>
     </widget>
-    <widget class="QPushButton" name="updateCameraIP">
-     <property name="geometry">
-      <rect>
-       <x>180</x>
-       <y>40</y>
-       <width>21</width>
-       <height>23</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>O</string>
-     </property>
-    </widget>
     <widget class="QPushButton" name="changeSystemIP">
      <property name="geometry">
       <rect>
@@ -205,6 +192,32 @@
        <width>161</width>
        <height>23</height>
       </rect>
+     </property>
+    </widget>
+    <widget class="QLineEdit" name="cameraTargetIP">
+     <property name="geometry">
+      <rect>
+       <x>190</x>
+       <y>40</y>
+       <width>141</width>
+       <height>23</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>192.168.1.10</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_4">
+     <property name="geometry">
+      <rect>
+       <x>190</x>
+       <y>20</y>
+       <width>71</width>
+       <height>20</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>相机目标IP</string>
      </property>
     </widget>
    </widget>

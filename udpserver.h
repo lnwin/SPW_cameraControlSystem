@@ -39,6 +39,9 @@ public:
     void setDefaultCmdPort(quint16 p) { defaultCmdPort_ = p; }
     quint16 defaultCmdPort() const { return defaultCmdPort_; }
 
+    qint64 sendSetIp(const QString& sn, const QString& ip, int mask, const QString& iface = QString());
+
+
 signals:
     // 发现新设备或已存在设备信息更新（UI 用这个把 SN 填到 ComboBox）
     void snDiscoveredOrUpdated(const QString& sn);

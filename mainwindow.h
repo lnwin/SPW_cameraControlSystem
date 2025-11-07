@@ -64,9 +64,6 @@ private:
     bool stopMediaMTXBlocking(int gracefulMs = 3000, int killMs = 2000);
 
     DhcpMiniServer* dhcp_ = nullptr;
-    // 设置并应用（对外一个入口）
-    void setCurBindIp(const QString& ip);
-    void applyDhcpFromCurBindIp();  // 根据 curBindIp_ 动态设置 DHCP 参数
 
     UdpDeviceManager* mgr_ = nullptr;
     void upsertCameraSN(const QString& sn);
@@ -77,9 +74,8 @@ private slots:
     void on_openCamera_clicked();
     void on_closeCamera_clicked();
     void on_changeCameraIP_clicked();
-    void on_updateCameraIP_clicked();
-    void on_changeSystemIP_clicked();
-    void on_updateSystemIP_clicked();
+
+    void updateSystemIP();
 protected:
     void closeEvent(QCloseEvent* event) override;
 };
