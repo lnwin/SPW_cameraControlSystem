@@ -65,6 +65,15 @@ void UdpDeviceManager::onReadyReadHb(){
 
         emit logLine(QString("[HB-SRV] <-- RECV '%1' from %2:%3")
                          .arg(msg, peer.toString()).arg(peerPort));
+        // 从 msg 里提取 sn=... 的值，然后 emit
+        static const QRegularExpression kSnRe(R"(\bsn=([^\s]+))",
+                                              QRegularExpression::CaseInsensitiveOption);
+        QRegularExpressionMatch m = kSnRe.match(msg);
+        if (m.hasMatch()) {
+            const QString sn = m.captured(1);
+            upsertDevice(sn, peer, peerPort);   // ← 补这一行，刷新 SN→IP
+            emit snDiscoveredOrUpdated(sn);
+        }
 
         if (msg.startsWith("HB_PING", Qt::CaseInsensitive)) {
 
@@ -232,21 +241,21 @@ QHostAddress UdpDeviceManager::pickLocalIpSameSubnet(const QHostAddress& peer) c
     return QHostAddress::LocalHost;
 }
 
-static void enableBroadcast(QUdpSocket* sock){
-    if (!sock) return;
-    qintptr fd = sock->socketDescriptor();
-    if (fd < 0) return;
+// static void enableBroadcast(QUdpSocket* sock){
+//     if (!sock) return;
+//     qintptr fd = sock->socketDescriptor();
+//     if (fd < 0) return;
 
-#if defined(Q_OS_WIN)
-    // WinSock 需要 const char*；用 BOOL 也行，但要强转为 const char*
-    BOOL opt = TRUE;
-    ::setsockopt((SOCKET)fd, SOL_SOCKET, SO_BROADCAST,
-                 reinterpret_cast<const char*>(&opt), sizeof(opt));
-#else
-    int opt = 1;
-    ::setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &opt, sizeof(opt));
-#endif
-}
+// #if defined(Q_OS_WIN)
+//     // WinSock 需要 const char*；用 BOOL 也行，但要强转为 const char*
+//     BOOL opt = TRUE;
+//     ::setsockopt((SOCKET)fd, SOL_SOCKET, SO_BROADCAST,
+//                  reinterpret_cast<const char*>(&opt), sizeof(opt));
+// #else
+//     int opt = 1;
+//     ::setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &opt, sizeof(opt));
+// #endif
+// }
 qint64 UdpDeviceManager::sendSetIp(const QString& sn, const QString& ip, int mask, const QString& iface)
 {
     QByteArray payload = "CMD_SET_IP sn=" + sn.toUtf8()
