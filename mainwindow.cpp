@@ -58,8 +58,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     probeWiredIPv4s();
 
-    //  startMediaMTX();
-    // viewer_->start();
+    startMediaMTX();
+    //viewer_->start();
 
 }
 // MainWindow.cpp
@@ -241,47 +241,60 @@ void MainWindow::startMediaMTX()
     if (mtxProc_) return;
 
     const QString appDir = QCoreApplication::applicationDirPath();
-    const QString mtxDir = QDir(appDir).filePath("mediamtx");
+    const QString mtxDir = QDir(appDir).filePath("mediamtx");   // ✅ FIX: 正确拼接子目录
     const QString mtxExe = QDir(mtxDir).filePath("mediamtx.exe");
     const QString mtxCfg = QDir(mtxDir).filePath("mediamtx.yml");
 
     if (!QFileInfo::exists(mtxExe)) {
-        qWarning() << "[MediaMTX] not found:" << mtxExe;
+        qWarning().noquote() << "[MediaMTX] not found exe:" << mtxExe;
         return;
     }
 
     mtxProc_ = new QProcess(this);
-    mtxProc_->setWorkingDirectory(mtxDir);
+    mtxProc_->setWorkingDirectory(mtxDir);  // ✅ 让 yml 里的相对路径按此目录解析
     mtxProc_->setProgram(mtxExe);
 
+    // ✅ FIX: v1.15.3 不要 --config；如果 yml 存在，作为“位置参数”传入
     QStringList args;
     if (QFileInfo::exists(mtxCfg)) {
-        args << mtxCfg;               // 直接传配置文件路径（无任何 flag）
+        args << mtxCfg;                      // 位置参数
     }
     mtxProc_->setArguments(args);
-    mtxProc_->setProcessChannelMode(QProcess::MergedChannels);
 
+    // 合并 stdout/stderr 并逐行打印
+    mtxProc_->setProcessChannelMode(QProcess::MergedChannels);
     connect(mtxProc_, &QProcess::readyReadStandardOutput, this, [this]{
-        qDebug().noquote() << QString::fromLocal8Bit(mtxProc_->readAllStandardOutput());
+        const QByteArray all = mtxProc_->readAllStandardOutput();
+        for (const QByteArray& line : all.split('\n')) {
+            const auto s = QString::fromLocal8Bit(line).trimmed();
+            if (!s.isEmpty()) qInfo().noquote() << "[MediaMTX]" << s;
+        }
+    });
+    connect(mtxProc_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e){
+        qWarning() << "[MediaMTX] QProcess error:" << e << mtxProc_->errorString();
     });
     connect(mtxProc_, QOverload<int,QProcess::ExitStatus>::of(&QProcess::finished),
-            this, [](int code, QProcess::ExitStatus st){
-                qWarning() << "[MediaMTX] exited, code =" << code << "status =" << st;
+            this, [this](int code, QProcess::ExitStatus st){
+                qWarning() << "[MediaMTX] exited, code=" << code << "status=" << st;
+                qWarning().noquote()
+                    << "[MediaMTX] hint: check port conflicts (554/8554/8000/9000/10000), and"
+                    << "relative paths in mediamtx.yml (base dir):" << mtxProc_->workingDirectory();
+                mtxProc_->deleteLater();
+                mtxProc_ = nullptr;
             });
 
     mtxProc_->start();
+
     if (!mtxProc_->waitForStarted(3000)) {
         qWarning() << "[MediaMTX] failed to start:" << mtxProc_->errorString();
-        mtxProc_->deleteLater();
+        delete mtxProc_;
         mtxProc_ = nullptr;
         return;
     }
-    else
-    {
-        qInfo() << "[MediaMTX] started at" << mtxExe
-                << (QFileInfo::exists(mtxCfg) ? QString("with config \"%1\"").arg(mtxCfg)
-                                              : "(no config arg)");
-    }
+
+    qInfo().noquote() << "[MediaMTX] start OK ->" << mtxExe
+                      << (QFileInfo::exists(mtxCfg) ? QString(" \"%1\"").arg(mtxCfg)
+                                                    : " (no explicit yml; using default search)");
 }
 
 
