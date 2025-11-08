@@ -11,7 +11,6 @@ CONFIG += c++17
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
-    dhcpminiserver.cpp \
     main.cpp \
     mainwindow.cpp \
     restipclient.cpp \
@@ -19,7 +18,6 @@ SOURCES += \
     udpserver.cpp
 
 HEADERS += \
-    dhcpminiserver.h \
     mainwindow.h \
     restipclient.h \
     rtspviewerqt.h \

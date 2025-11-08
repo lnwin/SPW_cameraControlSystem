@@ -10,7 +10,6 @@
 #include <QElapsedTimer>
 #include <QMessageBox>
 #include <QTimer>
-#include <dhcpminiserver.h>
 #include <udpserver.h>
 class RtspViewerQt;
 QT_BEGIN_NAMESPACE
@@ -51,9 +50,6 @@ private:
     QProcess* mtxProc_ = nullptr;
     void startMediaMTX();
     void stopMediaMTX();
-    QString writeMediaMtxYaml(const QString& dir, const MediaMtxRuntimeCfg& c);
-    void relaunchMediaMTX(const QString& bindIp);
-
     // 当前配置（便于遇错重试）
     QString curBindIp_ = "192.168.194.77";
     int     curRtspPort_ = 10000;
@@ -63,7 +59,7 @@ private:
 
     bool stopMediaMTXBlocking(int gracefulMs = 3000, int killMs = 2000);
 
-    DhcpMiniServer* dhcp_ = nullptr;
+
 
     UdpDeviceManager* mgr_ = nullptr;
     void upsertCameraSN(const QString& sn);
@@ -76,6 +72,8 @@ private slots:
     void on_changeCameraIP_clicked();
 
     void updateSystemIP();
+    void on_changeSystemIP_clicked();
+
 protected:
     void closeEvent(QCloseEvent* event) override;
 };
