@@ -11,6 +11,12 @@
 #include <QMessageBox>
 #include <QTimer>
 #include <udpserver.h>
+#include <QInputDialog>
+#include <QProgressDialog>
+#include <QMessageBox>
+
+#include <QDateTime>
+
 class RtspViewerQt;
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -65,6 +71,15 @@ private:
     void upsertCameraSN(const QString& sn);
     QHash<QString, QString> sn2ip_;
 
+    // ---- 改相机 IP 相关状态 ----
+    QString        pendingIpSn_;       // 正在修改的 SN
+    QString        pendingIpNew_;      // 目标 IP
+    bool           ipChangeWaiting_ = false;
+    QProgressDialog* ipWaitDlg_ = nullptr;
+    QTimer*        ipChangeTimer_ = nullptr;
+    QTimer* devAliveTimer_ = nullptr;
+    void finishIpChange(bool ok, const QString& msg);
+
 private slots:
     void onFrame(const QImage& img);
     void on_openCamera_clicked();
@@ -73,7 +88,10 @@ private slots:
 
     void updateSystemIP();
     void on_changeSystemIP_clicked();
-
+    void onSnUpdatedForIpChange(const QString& sn);  // 监听 SN 更新，判断是否已经用新 IP 上线
+    void onIpChangeTimeout();                        // 等待超时
+    void updateTableDevice(const QString& sn);
+    void onCheckDeviceAlive();   // 周期检查设备在线/离线
 protected:
     void closeEvent(QCloseEvent* event) override;
 };

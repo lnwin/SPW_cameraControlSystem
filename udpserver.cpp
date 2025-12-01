@@ -208,7 +208,12 @@ void UdpDeviceManager::upsertDevice(const QString& sn, const QHostAddress& ip, q
     d.ip = ip;                 // 若同 SN IP 变动，这里会刷新
     d.lastPort = srcPort;      // 最近源端口（方便单播回包/发命令）
     d.lastSeenMs = QDateTime::currentMSecsSinceEpoch();
+
+    // 🔥 打印一条映射日志，方便你确认抓到的 IP 是多少
+    emit logLine(QString("[UDP-Mgr] device map: SN=%1 -> %2:%3")
+                     .arg(sn, ip.toString()).arg(srcPort));
 }
+
 
 QString UdpDeviceManager::parseSn(const QString& msg) const{
     auto m = kReSn.match(msg);
@@ -261,52 +266,35 @@ qint64 UdpDeviceManager::sendSetIp(const QString& sn, const QString& ip, int mas
     QByteArray payload = "CMD_SET_IP sn=" + sn.toUtf8()
                          + " ip=" + ip.toUtf8()
                          + " mask=" + QByteArray::number(mask);
-    if (!iface.isEmpty()) payload += " iface=" + iface.toUtf8();
+    if (!iface.isEmpty())
+        payload += " iface=" + iface.toUtf8();
 
-    int sent=0, errs=0;
-    qint64 last=-1;
-
-    auto looksVirtual = [](const QString& name){
-        const QString n = name.toLower();
-        // 典型 Windows 虚拟口：Hyper-V(vEthernet)、VMware、VirtualBox、Docker、TAP/TUN、桥
-        return n.contains("vethernet") || n.contains("vmware") || n.contains("vbox")
-               || n.contains("docker") || n.contains("loopback") || n.contains("tap")
-               || n.contains("bridge")  || n.contains("br-");
-    };
-
-    for (const auto& nic : QNetworkInterface::allInterfaces()){
-        if (!(nic.flags() & QNetworkInterface::IsUp) || !(nic.flags() & QNetworkInterface::IsRunning))
-            continue;
-        if (!iface.isEmpty() && nic.humanReadableName() != iface) continue;
-        if (looksVirtual(nic.humanReadableName())) continue;
-
-        for (const auto& e : nic.addressEntries()){
-            if (e.ip().protocol() != QAbstractSocket::IPv4Protocol) continue;
-            const QHostAddress local = e.ip();
-            if (local == QHostAddress::LocalHost) continue; // 跳过 127.0.0.1
-
-            QUdpSocket tx;
-            if (!tx.bind(local, 0, QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint)){
-                emit logLine(QString("[UDP-Mgr] setip bind(%1) fail: %2").arg(local.toString(), tx.errorString()));
-                ++errs; continue;
-            }
-            tx.setSocketOption(QAbstractSocket::LowDelayOption, 1);
-#if defined(Q_OS_WIN)
-            { char opt=1; ::setsockopt((SOCKET)tx.socketDescriptor(), SOL_SOCKET, SO_BROADCAST, &opt, sizeof(opt)); }
-#else
-            { int  opt=1; ::setsockopt(tx.socketDescriptor(), SOL_SOCKET, SO_BROADCAST, &opt, sizeof(opt)); }
-#endif
-
-            qint64 n = tx.writeDatagram(payload, QHostAddress::Broadcast /*255.255.255.255*/, listenPort_);
-            last = n; (n>=0)? ++sent : ++errs;
-            emit logLine(QString("[UDP-Mgr] CMD_SET_IP(limited-bcast) SN=%1 -> 255.255.255.255:%2 via %3 bytes=%4")
-                             .arg(sn).arg(listenPort_).arg(local.toString()).arg(static_cast<qlonglong>(n)));
-        }
+    // 1) 先从设备表里找到这个 SN 对应的当前 IP
+    DeviceInfo dev;
+    if (!getDevice(sn, dev)) {
+        emit logLine(QString("[UDP-Mgr] setip fail: SN '%1' not found in devices_").arg(sn));
+        return -1;
     }
-    emit logLine(QString("[UDP-Mgr] CMD_SET_IP limited-broadcast summary: sent=%1 err=%2").arg(sent).arg(errs));
-    return last;
-}
 
+    if (!sock_) {
+        emit logLine("[UDP-Mgr] setip fail: DISC socket not started");
+        return -2;
+    }
+
+    // 2) 直接用发现口的 socket（已绑定在 0.0.0.0:7777）
+    //    单播到“下位机当前 IP:发现端口(7777)”
+    const QHostAddress dstIp   = dev.ip;
+    const quint16      dstPort = listenPort_;   // == 7777
+
+    const qint64 n = sock_->writeDatagram(payload, dstIp, dstPort);
+
+    emit logLine(QString("[UDP-Mgr] CMD_SET_IP(unicast via DISC) SN=%1 -> %2:%3 bytes=%4")
+                     .arg(sn, dstIp.toString())
+                     .arg(dstPort)
+                     .arg(static_cast<qlonglong>(n)));
+
+    return n;
+}
 
 
 
