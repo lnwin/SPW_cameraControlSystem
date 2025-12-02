@@ -30,15 +30,22 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent), ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
-    ui->tableWidget->setColumnCount(3);
+
+    // ==== 表格：4 列，多一列“操作” ====
+    ui->tableWidget->setColumnCount(4);
     ui->tableWidget->setHorizontalHeaderLabels(QStringList()
                                                << "设备SN"
                                                << "IP地址"
-                                               << "状态");
+                                               << "状态"
+                                               << "操作");
     ui->tableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     ui->tableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
     ui->tableWidget->setSelectionMode(QAbstractItemView::SingleSelection);
     ui->tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    // 选中行变化 → 更新当前 SN + 刷新按钮状态
+    connect(ui->tableWidget, &QTableWidget::itemSelectionChanged,
+            this, &MainWindow::onTableSelectionChanged);
 
     mgr_ = new UdpDeviceManager(this);
     mgr_->setDefaultCmdPort(10000);
@@ -57,6 +64,7 @@ MainWindow::MainWindow(QWidget *parent)
     // 发现 SN → 额外用于判断“改 IP 是否已经用新 IP 上线”
     connect(mgr_, &UdpDeviceManager::snDiscoveredOrUpdated,
             this, &MainWindow::onSnUpdatedForIpChange);
+
     // === 周期检查设备是否离线 ===
     devAliveTimer_ = new QTimer(this);
     devAliveTimer_->setInterval(2000); // 每 2 秒检查一次
@@ -74,7 +82,13 @@ MainWindow::MainWindow(QWidget *parent)
     updateSystemIP();
     probeWiredIPv4s();
     startMediaMTX();
+
+    // ==== 初始状态：没有选中任何相机 → 打开/关闭按钮全部禁用 ====
+    curSelectedSn_.clear();
+    previewActive_ = false;
+    updateCameraButtons();
 }
+
 
 // MainWindow.cpp
 void MainWindow::upsertCameraSN(const QString& sn){
@@ -150,18 +164,23 @@ MainWindow::~MainWindow()
 
 
 
-// 等比显示到 QLabel（不裁剪，留黑边）
 void MainWindow::onFrame(const QImage& img)
 {
     if (!ui->label) return;
 
-    // Qt 自带保持比例缩放
+    // 第一次收到帧：认为预览已成功建立，更新按钮状态
+    if (!previewActive_) {
+        previewActive_ = true;
+        updateCameraButtons();
+    }
+
     QPixmap pm = QPixmap::fromImage(img).scaled(
         ui->label->size(),
         Qt::KeepAspectRatio,
         Qt::SmoothTransformation);
     ui->label->setPixmap(pm);
 }
+
 void MainWindow::startMediaMTX()
 {
     if (mtxProc_) return;
@@ -241,121 +260,49 @@ void MainWindow::stopMediaMTX()
 
 void MainWindow::on_openCamera_clicked()
 {
-    if(viewer_==NULL)
+    // 没选中设备，直接返回（理论上此时按钮应是 disabled）
+    if (curSelectedSn_.isEmpty())
+        return;
+
+    if (viewer_ == nullptr)
     {
         viewer_ = new RtspViewerQt(this);
         connect(viewer_, &RtspViewerQt::frameReady, this, &MainWindow::onFrame);
 
-        curPath_=ui->cameraIPCombox->currentText();
+        // 路径仍然用 combobox 里的（和你原来一致）
+        curPath_ = ui->cameraIPCombox->currentText();
 
         const QString url = QString("rtsp://%1:%2/%3")
                                 .arg(curBindIp_)
                                 .arg(curRtspPort_)
                                 .arg(curPath_);
+        previewActive_ = false;   // 刚启动还没看到帧
         viewer_->setUrl(url);
         viewer_->start();
+
+        updateCameraButtons();
     }
 }
+
 
 
 void MainWindow::on_closeCamera_clicked()
 {
-    viewer_->stop();
-    viewer_=NULL;
+    doStopViewer();
 }
+
 
 
 void MainWindow::on_changeCameraIP_clicked()
 {
-    if (ipChangeWaiting_) {
-        QMessageBox::information(this, tr("提示"),
-                                 tr("已有一个修改 IP 操作正在进行，请稍候。"));
-        return;
-    }
+    // 优先用 combobox 里的 SN，如果为空则用当前选中的行
+    QString sn = ui->cameraIPCombox ? ui->cameraIPCombox->currentText().trimmed()
+                                    : QString();
+    if (sn.isEmpty())
+        sn = curSelectedSn_;
 
-    const QString sn = ui->cameraIPCombox->currentText().trimmed();
-    if (sn.isEmpty()) {
-        QMessageBox::warning(this, tr("提示"), tr("请先选择一个设备 ID (SN)。"));
-        return;
-    }
-
-    // 取当前 IP（用于弹窗里显示 & 默认值）
-    QString curIp;
-    if (mgr_) {
-        DeviceInfo dev;
-        if (mgr_->getDevice(sn, dev)) {
-            curIp = dev.ip.toString();
-        }
-    }
-
-    if (curIp.isEmpty())
-        curIp = "192.168.0.100";   // 找不到就给个默认值，防止为空
-
-    // 弹出输入 IP 的对话框（默认值为当前 IP）
-    bool ok = false;
-    QString newIp = QInputDialog::getText(
-        this,
-        tr("修改相机 IP"),
-        tr("设备 SN: %1\n当前 IP: %2\n\n请输入新的 IP：").arg(sn, curIp),
-        QLineEdit::Normal,
-        curIp,
-        &ok
-        );
-
-    if (!ok) {
-        // 用户按了“取消”
-        return;
-    }
-
-    newIp = newIp.trimmed();
-
-    // IP 格式简单校验
-    QRegularExpression re(R"(^((25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(25[0-5]|2[0-4]\d|1?\d?\d)$)");
-    if (!re.match(newIp).hasMatch()) {
-        QMessageBox::warning(this, tr("错误"), tr("IP 地址格式不正确，请重新输入。"));
-        return;
-    }
-
-    const int mask = 16;  // 你原来就是 16，我保持不变；如果统一用 /24 就改成 24
-
-    const qint64 n = mgr_->sendSetIp(sn, newIp, mask);
-    qDebug() << QString("sendSetIp ret=%1").arg(n);
-
-    if (n <= 0) {
-        QMessageBox::warning(this, tr("错误"),
-                             tr("发送改 IP 命令失败（ret=%1）。").arg(n));
-        return;
-    }
-
-    // === 命令已发出，进入“等待设备用新 IP 上线”的阶段 ===
-    pendingIpSn_   = sn;
-    pendingIpNew_  = newIp;
-    ipChangeWaiting_ = true;
-
-    // 懒加载等待对话框
-    if (!ipWaitDlg_) {
-        ipWaitDlg_ = new QProgressDialog(this);
-        ipWaitDlg_->setWindowModality(Qt::ApplicationModal);
-        ipWaitDlg_->setCancelButton(nullptr);        // 不允许取消按钮
-        ipWaitDlg_->setMinimum(0);
-        ipWaitDlg_->setMaximum(0);                   // 0~0 表示“忙碌”样式
-        ipWaitDlg_->setAutoClose(false);
-        ipWaitDlg_->setAutoReset(false);
-    }
-
-    ipWaitDlg_->setWindowTitle(tr("正在修改 IP"));
-    ipWaitDlg_->setLabelText(
-        tr("正在将设备 [%1] 的 IP 从 %2 修改为 %3...\n"
-           "请等待设备使用新 IP 重新上线。")
-            .arg(sn, curIp, newIp)
-        );
-    ipWaitDlg_->show();
-
-    // 启动超时计时（例如 15 秒）
-    if (ipChangeTimer_)
-        ipChangeTimer_->start(15000);
+    changeCameraIpForSn(sn);
 }
-
 
 
 
@@ -477,7 +424,7 @@ void MainWindow::updateTableDevice(const QString& sn)
         return;
 
     QString ip = dev.ip.toString();
-    QString status = "在线";
+    QString status = QStringLiteral("在线");
 
     // 找这一行是否已经存在
     int row = -1;
@@ -495,7 +442,7 @@ void MainWindow::updateTableDevice(const QString& sn)
         ui->tableWidget->insertRow(row);
     }
 
-    auto set = [&](int col, const QString &text) {
+    auto setTextItem = [&](int col, const QString &text) {
         QTableWidgetItem *it = ui->tableWidget->item(row, col);
         if (!it) {
             it = new QTableWidgetItem;
@@ -504,10 +451,29 @@ void MainWindow::updateTableDevice(const QString& sn)
         it->setText(text);
     };
 
-    set(0, sn);
-    set(1, ip);
-    set(2, status);
+    setTextItem(0, sn);
+    setTextItem(1, ip);
+    setTextItem(2, status);
+
+    // 在线显示绿色
+    QTableWidgetItem* stItem = ui->tableWidget->item(row, 2);
+    if (stItem)
+        stItem->setForeground(Qt::darkGreen);
+
+    // === 第 3 列：操作按钮“修改IP” ===
+    if (!ui->tableWidget->cellWidget(row, 3)) {
+        QPushButton* btn = new QPushButton(QStringLiteral("修改IP"), ui->tableWidget);
+        // 捕获当前 SN，点击时修改该相机 IP
+        connect(btn, &QPushButton::clicked, this, [this, sn]() {
+            changeCameraIpForSn(sn);
+        });
+        ui->tableWidget->setCellWidget(row, 3, btn);
+    }
+
+    // 行内容变化后，刷新一下按钮状态（比如刚上线）
+    updateCameraButtons();
 }
+
 void MainWindow::onCheckDeviceAlive()
 {
     if (!mgr_) return;
@@ -524,27 +490,210 @@ void MainWindow::onCheckDeviceAlive()
         DeviceInfo dev;
         QString status;
 
-        if (!mgr_->getDevice(sn, dev)) {
-            // mgr_ 里已经没有这个 SN 了，直接离线
-            status = QStringLiteral("离线");
-        } else if (now - dev.lastSeenMs > offlineMs) {
-            status = QStringLiteral("离线");
-        } else {
-            status = QStringLiteral("在线");
-        }
+        bool exists = mgr_->getDevice(sn, dev);
+        bool online = exists && (now - dev.lastSeenMs <= offlineMs);
+
+        if (online) status = QStringLiteral("在线");
+        else        status = QStringLiteral("离线");
 
         QTableWidgetItem *stItem = ui->tableWidget->item(r, 2);
+        QString oldStatus;
         if (!stItem) {
             stItem = new QTableWidgetItem;
             ui->tableWidget->setItem(r, 2, stItem);
+        } else {
+            oldStatus = stItem->text();
         }
-        stItem->setText(status);
 
-        // 可选：在线/离线不同颜色，看的更直观
+        stItem->setText(status);
         if (status == QStringLiteral("在线")) {
             stItem->setForeground(Qt::darkGreen);
         } else {
             stItem->setForeground(Qt::red);
         }
+
+        // 在线 → 离线 的边沿：如果是当前预览相机，则自动关闭预览
+        if (oldStatus == QStringLiteral("在线") &&
+            status   == QStringLiteral("离线") &&
+            !curSelectedSn_.isEmpty() &&
+            sn == curSelectedSn_ &&
+            viewer_) {
+
+            QMessageBox::information(this, tr("提示"),
+                                     tr("设备 [%1] 网络中断，预览已自动停止。").arg(sn));
+            doStopViewer();
+        }
     }
+
+    // 整体状态更新后，统一再刷一次按钮状态
+    updateCameraButtons();
+}
+
+void MainWindow::doStopViewer()
+{
+    if (viewer_) {
+        viewer_->stop();
+        viewer_->wait(1500);
+        viewer_ = nullptr;
+    }
+    previewActive_ = false;
+    updateCameraButtons();
+}
+void MainWindow::onTableSelectionChanged()
+{
+    QString newSn;
+
+    auto sel = ui->tableWidget->selectionModel();
+    if (sel) {
+        const QModelIndexList rows = sel->selectedRows(0); // 第 0 列是 SN
+        if (!rows.isEmpty()) {
+            int row = rows.first().row();
+            QTableWidgetItem* snItem = ui->tableWidget->item(row, 0);
+            if (snItem)
+                newSn = snItem->text().trimmed();
+        }
+    }
+
+    curSelectedSn_ = newSn;
+
+    // 同步到 combobox（便于复用原来的改 IP 按钮）
+    if (!curSelectedSn_.isEmpty() && ui->cameraIPCombox) {
+        int idx = ui->cameraIPCombox->findText(curSelectedSn_);
+        if (idx >= 0)
+            ui->cameraIPCombox->setCurrentIndex(idx);
+        else
+            ui->cameraIPCombox->setCurrentText(curSelectedSn_);
+    }
+
+    // 选中变化 → 按钮重新判断
+    updateCameraButtons();
+}
+void MainWindow::updateCameraButtons()
+{
+    // 防止 ui 还没 setup 完
+    if (!ui) return;
+
+    // 先全部禁用
+    if (ui->openCamera)
+        ui->openCamera->setEnabled(false);
+    if (ui->closeCamera)
+        ui->closeCamera->setEnabled(false);
+
+    // ① 没选中任何相机 → 保持禁用
+    if (curSelectedSn_.isEmpty())
+        return;
+
+    // ② 查这个 SN 是否在线（与 onCheckDeviceAlive 的 offlineMs 保持一致）
+    DeviceInfo dev;
+    bool online = false;
+    if (mgr_ && mgr_->getDevice(curSelectedSn_, dev)) {
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        const qint64 offlineMs = 10000;
+        if (now - dev.lastSeenMs <= offlineMs)
+            online = true;
+    }
+
+    if (!online) {
+        // 离线 → 也保持全部禁用
+        return;
+    }
+
+    // ③ 在线情况下，看预览是否已经建立
+    if (viewer_ && previewActive_) {
+        // 正在预览：允许关闭
+        ui->closeCamera->setEnabled(true);
+    } else {
+        // 未预览：允许打开
+        ui->openCamera->setEnabled(true);
+    }
+}
+void MainWindow::changeCameraIpForSn(const QString& sn)
+{
+    if (ipChangeWaiting_) {
+        QMessageBox::information(this, tr("提示"),
+                                 tr("已有一个修改 IP 操作正在进行，请稍候。"));
+        return;
+    }
+
+    const QString trimmedSn = sn.trimmed();
+    if (trimmedSn.isEmpty()) {
+        QMessageBox::warning(this, tr("提示"), tr("请先选择一个设备 ID (SN)。"));
+        return;
+    }
+
+    // 取当前 IP（用于弹窗里显示 & 默认值）
+    QString curIp;
+    if (mgr_) {
+        DeviceInfo dev;
+        if (mgr_->getDevice(trimmedSn, dev)) {
+            curIp = dev.ip.toString();
+        }
+    }
+
+    if (curIp.isEmpty())
+        curIp = "192.168.0.100";   // 找不到就给个默认值，防止为空
+
+    // 弹出输入 IP 的对话框（默认值为当前 IP）
+    bool ok = false;
+    QString newIp = QInputDialog::getText(
+        this,
+        tr("修改相机 IP"),
+        tr("设备 SN: %1\n当前 IP: %2\n\n请输入新的 IP：").arg(trimmedSn, curIp),
+        QLineEdit::Normal,
+        curIp,
+        &ok
+        );
+
+    if (!ok) {
+        // 用户按了“取消”
+        return;
+    }
+
+    newIp = newIp.trimmed();
+
+    // IP 格式简单校验
+    QRegularExpression re(R"(^((25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(25[0-5]|2[0-4]\d|1?\d?\d)$)");
+    if (!re.match(newIp).hasMatch()) {
+        QMessageBox::warning(this, tr("错误"), tr("IP 地址格式不正确，请重新输入。"));
+        return;
+    }
+
+    const int mask = 16;  // 你原来就是 16，我保持不变
+
+    const qint64 n = mgr_->sendSetIp(trimmedSn, newIp, mask);
+    qDebug() << QString("sendSetIp ret=%1").arg(n);
+
+    if (n <= 0) {
+        QMessageBox::warning(this, tr("错误"),
+                             tr("发送改 IP 命令失败（ret=%1）。").arg(n));
+        return;
+    }
+
+    // === 命令已发出，进入“等待设备用新 IP 上线”的阶段 ===
+    pendingIpSn_     = trimmedSn;
+    pendingIpNew_    = newIp;
+    ipChangeWaiting_ = true;
+
+    // 懒加载等待对话框
+    if (!ipWaitDlg_) {
+        ipWaitDlg_ = new QProgressDialog(this);
+        ipWaitDlg_->setWindowModality(Qt::ApplicationModal);
+        ipWaitDlg_->setCancelButton(nullptr);        // 不允许取消按钮
+        ipWaitDlg_->setMinimum(0);
+        ipWaitDlg_->setMaximum(0);                   // 0~0 表示“忙碌”样式
+        ipWaitDlg_->setAutoClose(false);
+        ipWaitDlg_->setAutoReset(false);
+    }
+
+    ipWaitDlg_->setWindowTitle(tr("正在修改 IP"));
+    ipWaitDlg_->setLabelText(
+        tr("正在将设备 [%1] 的 IP 从 %2 修改为 %3...\n"
+           "请等待设备使用新 IP 重新上线。")
+            .arg(trimmedSn, curIp, newIp)
+        );
+    ipWaitDlg_->show();
+
+    // 启动超时计时（例如 15 秒）
+    if (ipChangeTimer_)
+        ipChangeTimer_->start(15000);
 }

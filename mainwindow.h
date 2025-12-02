@@ -14,13 +14,14 @@
 #include <QInputDialog>
 #include <QProgressDialog>
 #include <QMessageBox>
-
 #include <QDateTime>
+#include <QPushButton>
 
 class RtspViewerQt;
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
+
 struct MediaMtxRuntimeCfg {
     QString logLevel = "info";
     bool rtsp = true;
@@ -52,6 +53,7 @@ public:
 private:
     Ui::MainWindow *ui;
     RtspViewerQt* viewer_ = nullptr;
+
     // ---- MediaMTX 管理 ----
     QProcess* mtxProc_ = nullptr;
     void startMediaMTX();
@@ -65,8 +67,6 @@ private:
 
     bool stopMediaMTXBlocking(int gracefulMs = 3000, int killMs = 2000);
 
-
-
     UdpDeviceManager* mgr_ = nullptr;
     void upsertCameraSN(const QString& sn);
     QHash<QString, QString> sn2ip_;
@@ -77,8 +77,17 @@ private:
     bool           ipChangeWaiting_ = false;
     QProgressDialog* ipWaitDlg_ = nullptr;
     QTimer*        ipChangeTimer_ = nullptr;
-    QTimer* devAliveTimer_ = nullptr;
+    QTimer*        devAliveTimer_ = nullptr;
     void finishIpChange(bool ok, const QString& msg);
+
+    // ---- 新增：与相机状态 / UI 相关 ----
+    QString curSelectedSn_;       // 当前 table 中选中的设备 SN（没选中则为空）
+    bool    previewActive_ = false; // 是否已经收到至少一帧图像
+
+    void updateCameraButtons();        // 统一管理“打开/关闭相机”按钮 enable 状态
+    void onTableSelectionChanged();    // tableWidget 选中行变化
+    void doStopViewer();               // 统一关闭预览 + 更新按钮
+    void changeCameraIpForSn(const QString& sn); // 按 SN 修改 IP 的核心逻辑
 
 private slots:
     void onFrame(const QImage& img);
@@ -92,6 +101,7 @@ private slots:
     void onIpChangeTimeout();                        // 等待超时
     void updateTableDevice(const QString& sn);
     void onCheckDeviceAlive();   // 周期检查设备在线/离线
+
 protected:
     void closeEvent(QCloseEvent* event) override;
 };
