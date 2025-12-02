@@ -1,5 +1,6 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
+
 #include <QMainWindow>
 #include <QProcess>
 #include <rtspviewerqt.h>
@@ -16,6 +17,7 @@
 #include <QMessageBox>
 #include <QDateTime>
 #include <QPushButton>
+#include <QHash>            // ★ 新增：path 状态表用到
 
 class RtspViewerQt;
 QT_BEGIN_NAMESPACE
@@ -88,6 +90,15 @@ private:
     void onTableSelectionChanged();    // tableWidget 选中行变化
     void doStopViewer();               // 统一关闭预览 + 更新按钮
     void changeCameraIpForSn(const QString& sn); // 按 SN 修改 IP 的核心逻辑
+
+    // ---- ★ 新增：MediaMTX 推流状态表（path 维度，一般 path == SN） ----
+    struct PathState {
+        bool   hasPublisher = false;   // 当前是否检测到 publisher
+        qint64 lastPubMs    = 0;       // 最近一次 "is publishing" 的时间
+    };
+    QHash<QString, PathState> pathStates_;  // key = RTSP path，一般就是 SN
+
+    void onMediaMtxLogLine(const QString& line);  // 解析 MediaMTX 一行日志，更新 pathStates_
 
 private slots:
     void onFrame(const QImage& img);

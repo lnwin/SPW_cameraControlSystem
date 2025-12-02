@@ -64,7 +64,10 @@ MainWindow::MainWindow(QWidget *parent)
     // 发现 SN → 额外用于判断“改 IP 是否已经用新 IP 上线”
     connect(mgr_, &UdpDeviceManager::snDiscoveredOrUpdated,
             this, &MainWindow::onSnUpdatedForIpChange);
-
+    // 选中行变化时，更新当前 SN + 按钮状态
+    connect(ui->tableWidget->selectionModel(),
+            &QItemSelectionModel::selectionChanged,
+            this, &MainWindow::onTableSelectionChanged);
     // === 周期检查设备是否离线 ===
     devAliveTimer_ = new QTimer(this);
     devAliveTimer_->setInterval(2000); // 每 2 秒检查一次
@@ -90,22 +93,15 @@ MainWindow::MainWindow(QWidget *parent)
 }
 
 
-// MainWindow.cpp
-void MainWindow::upsertCameraSN(const QString& sn){
-    if (sn.isEmpty()) return;
-    auto cb = ui->cameraIPCombox;
-    int idx = cb->findText(sn);
-    if (idx < 0) cb->addItem(sn);
-    else         cb->setItemText(idx, sn); // “相同则替换/刷新”
-    cb->setCurrentText(sn);
-    connect(mgr_, &UdpDeviceManager::snDiscoveredOrUpdated,
-            this, [this](const QString& sn){
-                QMetaObject::invokeMethod(this, [this, sn](){
-                        updateTableDevice(sn);
-                    }, Qt::QueuedConnection);
-            });
+void MainWindow::upsertCameraSN(const QString& sn)
+{
+    if (sn.isEmpty())
+        return;
 
+    // 直接更新下面的设备表即可
+    updateTableDevice(sn);
 }
+
 
 bool MainWindow::stopMediaMTXBlocking(int gracefulMs, int killMs)
 {
@@ -168,25 +164,25 @@ void MainWindow::onFrame(const QImage& img)
 {
     if (!ui->label) return;
 
-    // 第一次收到帧：认为预览已成功建立，更新按钮状态
-    if (!previewActive_) {
-        previewActive_ = true;
-        updateCameraButtons();
-    }
-
     QPixmap pm = QPixmap::fromImage(img).scaled(
         ui->label->size(),
         Qt::KeepAspectRatio,
         Qt::SmoothTransformation);
     ui->label->setPixmap(pm);
+
+    if (!previewActive_) {
+        previewActive_ = true;
+        updateCameraButtons();   // 第一次收到图像时，刷新一次按钮状态
+    }
 }
+
 
 void MainWindow::startMediaMTX()
 {
     if (mtxProc_) return;
 
     const QString appDir = QCoreApplication::applicationDirPath();
-    const QString mtxDir = QDir(appDir).filePath("mediamtx");   // ✅ FIX: 正确拼接子目录
+    const QString mtxDir = QDir(appDir).filePath("mediamtx");
     const QString mtxExe = QDir(mtxDir).filePath("mediamtx.exe");
     const QString mtxCfg = QDir(mtxDir).filePath("mediamtx.yml");
 
@@ -196,36 +192,45 @@ void MainWindow::startMediaMTX()
     }
 
     mtxProc_ = new QProcess(this);
-    mtxProc_->setWorkingDirectory(mtxDir);  // ✅ 让 yml 里的相对路径按此目录解析
+    mtxProc_->setWorkingDirectory(mtxDir);
     mtxProc_->setProgram(mtxExe);
 
-    // ✅ FIX: v1.15.3 不要 --config；如果 yml 存在，作为“位置参数”传入
     QStringList args;
     if (QFileInfo::exists(mtxCfg)) {
-        args << mtxCfg;                      // 位置参数
+        args << mtxCfg;
     }
     mtxProc_->setArguments(args);
 
-    // 合并 stdout/stderr 并逐行打印
+    // 合并 stdout/stderr 并逐行打印 + 解析
     mtxProc_->setProcessChannelMode(QProcess::MergedChannels);
     connect(mtxProc_, &QProcess::readyReadStandardOutput, this, [this]{
         const QByteArray all = mtxProc_->readAllStandardOutput();
         for (const QByteArray& line : all.split('\n')) {
             const auto s = QString::fromLocal8Bit(line).trimmed();
-            if (!s.isEmpty()) qInfo().noquote() << "[MediaMTX]" << s;
+            if (!s.isEmpty()) {
+                qInfo().noquote() << "[MediaMTX]" << s;
+                onMediaMtxLogLine(s);   // ★ 关键：在这里顺手解析有没有 publisher
+            }
         }
     });
+
     connect(mtxProc_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e){
         qWarning() << "[MediaMTX] QProcess error:" << e << mtxProc_->errorString();
     });
+
     connect(mtxProc_, QOverload<int,QProcess::ExitStatus>::of(&QProcess::finished),
             this, [this](int code, QProcess::ExitStatus st){
                 qWarning() << "[MediaMTX] exited, code=" << code << "status=" << st;
                 qWarning().noquote()
                     << "[MediaMTX] hint: check port conflicts (554/8554/8000/9000/10000), and"
                     << "relative paths in mediamtx.yml (base dir):" << mtxProc_->workingDirectory();
+
                 mtxProc_->deleteLater();
                 mtxProc_ = nullptr;
+
+                // MediaMTX 掉了，所有 path 的 publisher 状态也就无效了
+                pathStates_.clear();
+                updateCameraButtons();
             });
 
     mtxProc_->start();
@@ -241,6 +246,7 @@ void MainWindow::startMediaMTX()
                       << (QFileInfo::exists(mtxCfg) ? QString(" \"%1\"").arg(mtxCfg)
                                                     : " (no explicit yml; using default search)");
 }
+
 
 
 void MainWindow::stopMediaMTX()
@@ -260,29 +266,43 @@ void MainWindow::stopMediaMTX()
 
 void MainWindow::on_openCamera_clicked()
 {
-    // 没选中设备，直接返回（理论上此时按钮应是 disabled）
-    if (curSelectedSn_.isEmpty())
+    qInfo() << "[UI] on_openCamera_clicked, curSelectedSn_=" << curSelectedSn_
+            << " viewer_=" << viewer_;
+
+    if (viewer_) {
+        // 已经有 viewer 在跑了，防止重复点击
         return;
-
-    if (viewer_ == nullptr)
-    {
-        viewer_ = new RtspViewerQt(this);
-        connect(viewer_, &RtspViewerQt::frameReady, this, &MainWindow::onFrame);
-
-        // 路径仍然用 combobox 里的（和你原来一致）
-        curPath_ = ui->cameraIPCombox->currentText();
-
-        const QString url = QString("rtsp://%1:%2/%3")
-                                .arg(curBindIp_)
-                                .arg(curRtspPort_)
-                                .arg(curPath_);
-        previewActive_ = false;   // 刚启动还没看到帧
-        viewer_->setUrl(url);
-        viewer_->start();
-
-        updateCameraButtons();
     }
+    if (curSelectedSn_.isEmpty()) {
+        QMessageBox::warning(this, tr("提示"), tr("请先在列表中选择一台相机。"));
+        return;
+    }
+
+    // RTSP path 就用 SN
+    curPath_ = curSelectedSn_;
+
+    const QString url = QString("rtsp://%1:%2/%3")
+                            .arg(curBindIp_)
+                            .arg(curRtspPort_)
+                            .arg(curPath_);
+
+    qInfo().noquote() << "[RTSP] start viewer url =" << url;
+
+    viewer_ = new RtspViewerQt(this);
+    previewActive_ = false;
+
+    connect(viewer_, &RtspViewerQt::frameReady,
+            this, &MainWindow::onFrame);
+
+    viewer_->setUrl(url);
+    viewer_->start();
+
+    // 创建 viewer 后，按钮状态交给统一逻辑
+    updateCameraButtons();
 }
+
+
+
 
 
 
@@ -295,11 +315,8 @@ void MainWindow::on_closeCamera_clicked()
 
 void MainWindow::on_changeCameraIP_clicked()
 {
-    // 优先用 combobox 里的 SN，如果为空则用当前选中的行
-    QString sn = ui->cameraIPCombox ? ui->cameraIPCombox->currentText().trimmed()
-                                    : QString();
-    if (sn.isEmpty())
-        sn = curSelectedSn_;
+    // 现在没有 cameraIPCombox，就直接用当前选中的 SN
+    QString sn = curSelectedSn_.trimmed();
 
     changeCameraIpForSn(sn);
 }
@@ -353,15 +370,16 @@ QStringList MainWindow::probeWiredIPv4s()
 void MainWindow::updateSystemIP()
 {
     const QStringList ips = probeWiredIPv4s();
-
-    // 将结果写入 UI 下拉框
-    if (ui->systemIPcomboBox) {
-        ui->systemIPcomboBox->clear();
-        ui->systemIPcomboBox->addItems(ips);
-        if (!ips.isEmpty())
-            ui->systemIPcomboBox->setCurrentIndex(0);
+    if (ips.isEmpty()) {
+        // 没找到可用 IP，就先清空 / 或保持原值都行
+        // 这里我选择不动 curBindIp_，只打个日志
+        qWarning() << "[IP] no usable wired IPv4 found, keep curBindIp_ =" << curBindIp_;
+        return;
     }
-     curBindIp_  = ips.first();
+
+    // 取第一个有线 IPv4 作为 RTSP 监听 IP
+    curBindIp_ = ips.first();
+    qInfo() << "[IP] curBindIp_ set to" << curBindIp_;
 }
 
 
@@ -531,82 +549,116 @@ void MainWindow::onCheckDeviceAlive()
 
 void MainWindow::doStopViewer()
 {
-    if (viewer_) {
-        viewer_->stop();
-        viewer_->wait(1500);
-        viewer_ = nullptr;
-    }
+    if (!viewer_) return;
+
+    qInfo() << "[RTSP] doStopViewer(): stopping viewer thread";
+    viewer_->stop();
+    viewer_->wait(1500);   // 你之前 closeEvent 里就是这么用的
+
+    viewer_->deleteLater();
+    viewer_ = nullptr;
     previewActive_ = false;
+
     updateCameraButtons();
 }
+
+
 void MainWindow::onTableSelectionChanged()
 {
-    QString newSn;
+    curSelectedSn_.clear();
 
-    auto sel = ui->tableWidget->selectionModel();
-    if (sel) {
-        const QModelIndexList rows = sel->selectedRows(0); // 第 0 列是 SN
-        if (!rows.isEmpty()) {
-            int row = rows.first().row();
-            QTableWidgetItem* snItem = ui->tableWidget->item(row, 0);
-            if (snItem)
-                newSn = snItem->text().trimmed();
+    if (!ui || !ui->tableWidget) {
+        updateCameraButtons();
+        return;
+    }
+
+    QItemSelectionModel* sel = ui->tableWidget->selectionModel();
+    if (!sel) {
+        updateCameraButtons();
+        return;
+    }
+
+    const QModelIndexList rows = sel->selectedRows();
+    if (!rows.isEmpty()) {
+        int row = rows.first().row();
+        QTableWidgetItem *item = ui->tableWidget->item(row, 0); // 第 0 列是 SN
+        if (item) {
+            curSelectedSn_ = item->text().trimmed();
         }
     }
 
-    curSelectedSn_ = newSn;
-
-    // 同步到 combobox（便于复用原来的改 IP 按钮）
-    if (!curSelectedSn_.isEmpty() && ui->cameraIPCombox) {
-        int idx = ui->cameraIPCombox->findText(curSelectedSn_);
-        if (idx >= 0)
-            ui->cameraIPCombox->setCurrentIndex(idx);
-        else
-            ui->cameraIPCombox->setCurrentText(curSelectedSn_);
-    }
-
-    // 选中变化 → 按钮重新判断
+    qInfo() << "[UI] selection changed, curSelectedSn_=" << curSelectedSn_;
     updateCameraButtons();
 }
+
 void MainWindow::updateCameraButtons()
 {
-    // 防止 ui 还没 setup 完
     if (!ui) return;
 
-    // 先全部禁用
-    if (ui->openCamera)
-        ui->openCamera->setEnabled(false);
-    if (ui->closeCamera)
-        ui->closeCamera->setEnabled(false);
+    QPushButton* btnOpen  = ui->openCamera;
+    QPushButton* btnClose = ui->closeCamera;
 
-    // ① 没选中任何相机 → 保持禁用
-    if (curSelectedSn_.isEmpty())
+    // 默认全部禁用
+    if (btnOpen)  btnOpen->setEnabled(false);
+    if (btnClose) btnClose->setEnabled(false);
+
+    // 0) 没选中任何相机：按钮全禁用（即使 viewer_ 在跑也一样）
+    if (curSelectedSn_.isEmpty()) {
+        qInfo() << "[UI] updateCameraButtons: no SN selected, all disabled";
         return;
+    }
 
-    // ② 查这个 SN 是否在线（与 onCheckDeviceAlive 的 offlineMs 保持一致）
+    // 1) 正在修改 IP：强制禁用
+    if (ipChangeWaiting_) {
+        qInfo() << "[UI] updateCameraButtons: IP change in progress, buttons disabled";
+        return;
+    }
+
+    // 2) 如果当前已经在预览：允许关闭相机，禁止再打开
+    if (viewer_) {
+        if (btnClose) btnClose->setEnabled(true);
+        if (btnOpen)  btnOpen->setEnabled(false);
+        qInfo() << "[UI] updateCameraButtons: viewer active -> enable CLOSE only";
+        return;
+    }
+
+    // ========= 下面是“没在预览时，决定能不能打开相机”的逻辑 =========
+
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+
+    // 3) 心跳判断在线
     DeviceInfo dev;
     bool online = false;
     if (mgr_ && mgr_->getDevice(curSelectedSn_, dev)) {
-        const qint64 now = QDateTime::currentMSecsSinceEpoch();
         const qint64 offlineMs = 10000;
-        if (now - dev.lastSeenMs <= offlineMs)
-            online = true;
+        online = (now - dev.lastSeenMs <= offlineMs);
     }
-
     if (!online) {
-        // 离线 → 也保持全部禁用
+        qInfo() << "[UI] device offline, keep buttons disabled";
         return;
     }
 
-    // ③ 在线情况下，看预览是否已经建立
-    if (viewer_ && previewActive_) {
-        // 正在预览：允许关闭
-        ui->closeCamera->setEnabled(true);
-    } else {
-        // 未预览：允许打开
-        ui->openCamera->setEnabled(true);
+    // 4) MediaMTX 判断有没有 publisher
+    bool pushing = false;
+    {
+        const QString path = curSelectedSn_;
+        auto it = pathStates_.find(path);
+        if (it != pathStates_.end()) {
+            const PathState &ps = it.value();
+            pushing = ps.hasPublisher;    // 不再做 5 秒过期
+        }
     }
+    if (!pushing) {
+        qInfo() << "[UI] device online but stream not ready, keep buttons disabled";
+        return;
+    }
+
+    // 5) 在线 + 有 publisher + 没在预览 -> 允许“打开相机”
+    if (btnOpen)  btnOpen->setEnabled(true);
+    if (btnClose) btnClose->setEnabled(false);
 }
+
+
 void MainWindow::changeCameraIpForSn(const QString& sn)
 {
     if (ipChangeWaiting_) {
@@ -619,6 +671,13 @@ void MainWindow::changeCameraIpForSn(const QString& sn)
     if (trimmedSn.isEmpty()) {
         QMessageBox::warning(this, tr("提示"), tr("请先选择一个设备 ID (SN)。"));
         return;
+    }
+
+    // 🔴 关键：如果当前正在预览这台相机，先把预览停掉
+    if (!curSelectedSn_.isEmpty() &&
+        curSelectedSn_ == trimmedSn &&
+        viewer_) {
+        doStopViewer();   // 会把 viewer_ 置空、previewActive_ = false，并刷新按钮
     }
 
     // 取当前 IP（用于弹窗里显示 & 默认值）
@@ -696,4 +755,58 @@ void MainWindow::changeCameraIpForSn(const QString& sn)
     // 启动超时计时（例如 15 秒）
     if (ipChangeTimer_)
         ipChangeTimer_->start(15000);
+}
+void MainWindow::onMediaMtxLogLine(const QString& s)
+{
+    // 只关心两类日志：
+    // 1) session ... is publishing to path 'PATH'
+    // 2) [path PATH] closing existing publisher
+
+    static QRegularExpression rePub(
+        R"(is publishing to path '([^']+)')",
+        QRegularExpression::CaseInsensitiveOption);
+
+    static QRegularExpression reClose(
+        R"(\[path ([^]]+)\] closing existing publisher)",
+        QRegularExpression::CaseInsensitiveOption);
+
+    qint64 now = QDateTime::currentMSecsSinceEpoch();
+
+    // ① publisher 建立
+    QRegularExpressionMatch m1 = rePub.match(s);
+    if (m1.hasMatch()) {
+        const QString path = m1.captured(1).trimmed();
+        PathState &ps = pathStates_[path];
+        ps.hasPublisher = true;
+        ps.lastPubMs    = now;
+
+        qInfo().noquote() << "[UI] MediaMTX: path" << path
+                          << "has publisher=1 at" << now;
+
+        // 如果当前选中的 SN 对应这个 path，刷新一次按钮状态
+        if (!curSelectedSn_.isEmpty() && curSelectedSn_ == path) {
+            updateCameraButtons();
+        }
+        return;
+    }
+
+    // ② publisher 被关闭（可选，用于更快反应）
+    QRegularExpressionMatch m2 = reClose.match(s);
+    if (m2.hasMatch()) {
+        const QString path = m2.captured(1).trimmed();
+        auto it = pathStates_.find(path);
+        if (it != pathStates_.end()) {
+            it->hasPublisher = false;
+        }
+
+        qInfo().noquote() << "[UI] MediaMTX: path" << path
+                          << "publisher closed";
+
+        if (!curSelectedSn_.isEmpty() && curSelectedSn_ == path) {
+            updateCameraButtons();
+        }
+        return;
+    }
+
+    // 其他日志不处理
 }
