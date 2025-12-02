@@ -1,0 +1,41 @@
+<RCC>
+    <qresource prefix="/new/prefix1">
+        <file>release/icons/current/03.png</file>
+        <file>release/icons/current/04.png</file>
+        <file>release/icons/current/05.png</file>
+        <file>release/icons/current/06.png</file>
+        <file>release/icons/current/aboutsu.svg</file>
+        <file>release/icons/current/angles-left.svg</file>
+        <file>release/icons/current/angles-right.svg</file>
+        <file>release/icons/current/back2center.svg</file>
+        <file>release/icons/current/calibrate.svg</file>
+        <file>release/icons/current/camera-calibrate.svg</file>
+        <file>release/icons/current/camera-close.svg</file>
+        <file>release/icons/current/camera-open.svg</file>
+        <file>release/icons/current/circle-stop.svg</file>
+        <file>release/icons/current/company-logo.png</file>
+        <file>release/icons/current/connect-false.svg</file>
+        <file>release/icons/current/connect-true.svg</file>
+        <file>release/icons/current/file-arrow-up.svg</file>
+        <file>release/icons/current/file-pen.svg</file>
+        <file>release/icons/current/frog.svg</file>
+        <file>release/icons/current/IMG.bmp</file>
+        <file>release/icons/current/opencvLOGO.jpg</file>
+        <file>release/icons/current/opengl_logo.jpg</file>
+        <file>release/icons/current/plug-circle-bolt.svg</file>
+        <file>release/icons/current/plug-circle-xmark.svg</file>
+        <file>release/icons/current/project.svg</file>
+        <file>release/icons/current/Qt_logo_2016.svg.png</file>
+        <file>release/icons/current/scan-start.svg</file>
+        <file>release/icons/current/scan-stop.svg</file>
+        <file>release/icons/current/selectFocus.svg</file>
+        <file>release/icons/current/selectPath.svg</file>
+        <file>release/icons/current/sensor-false.svg</file>
+        <file>release/icons/current/sensor-true.svg</file>
+        <file>release/icons/current/set.svg</file>
+        <file>release/icons/current/Slogo.png</file>
+        <file>release/icons/current/system-calibrate.svg</file>
+        <file>release/icons/current/TH Tech1.png</file>
+        <file>release/icons/current/TH Tech2.png</file>
+    </qresource>
+</RCC>

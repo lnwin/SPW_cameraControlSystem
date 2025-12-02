@@ -49,5 +49,8 @@ DEPENDPATH += E:/ThirdParty/opencv-4.7.0-NoCudda/opencv/build/include
 LIBS += -lIphlpapi -lWs2_32
 DEFINES += _WIN32_WINNT=0x0601 WIN32_LEAN_AND_MEAN NOMINMAX
 
+RESOURCES += \
+    icons.qrc
+
 
 

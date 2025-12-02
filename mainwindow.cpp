@@ -27,81 +27,98 @@ static void killProcessTreeWindows(qint64 pid){
 #endif
 //===================================================================================================================
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), ui(new Ui::MainWindow)
+    : QMainWindow(parent)
+    , ui(new Ui::MainWindow)
 {
     ui->setupUi(this);
 
-    // ==== 表格：4 列，多一列“操作” ====
-    ui->tableWidget->setColumnCount(4);
-    ui->tableWidget->setHorizontalHeaderLabels(QStringList()
-                                               << "设备SN"
-                                               << "IP地址"
-                                               << "状态"
-                                               << "操作");
-    ui->tableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    ui->tableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
-    ui->tableWidget->setSelectionMode(QAbstractItemView::SingleSelection);
-    ui->tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    // ====== 上下分割条样式 ======
+    ui->deviceSplitter->setHandleWidth(3);
+    ui->deviceSplitter->setStyleSheet(
+        "QSplitter::handle {"
+        "    background: #aaaaaa;"
+        "}"
+        "QSplitter::handle:vertical {"
+        "    height: 4px;"
+        "}"
+        );
+    ui->deviceSplitter->setStretchFactor(0, 3);
+    ui->deviceSplitter->setStretchFactor(1, 2);
 
-    // 选中行变化 → 更新当前 SN + 刷新按钮状态
-    connect(ui->tableWidget, &QTableWidget::itemSelectionChanged,
+    // ====== 设备列表：QTableWidget，3 列 ======
+    ui->deviceList->setColumnCount(3);
+    ui->deviceList->setHorizontalHeaderLabels(
+        { "设备名称", "设备状态", "功能" });
+
+    auto* header = ui->deviceList->horizontalHeader();
+    header->setSectionResizeMode(0, QHeaderView::Stretch);          // 名称：拉伸
+    header->setSectionResizeMode(1, QHeaderView::ResizeToContents); // 状态
+    header->setSectionResizeMode(2, QHeaderView::ResizeToContents); // 按钮
+
+    ui->deviceList->setSelectionBehavior(QAbstractItemView::SelectRows);
+    ui->deviceList->setSelectionMode(QAbstractItemView::SingleSelection);
+    ui->deviceList->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    connect(ui->deviceList, &QTableWidget::itemSelectionChanged,
             this, &MainWindow::onTableSelectionChanged);
 
+    // ================== UdpDeviceManager ==================
     mgr_ = new UdpDeviceManager(this);
     mgr_->setDefaultCmdPort(10000);
     if (!mgr_->start(7777, 8888)) {
         qWarning() << "UdpDeviceManager start failed";
         return;
     }
+
     // 日志
-    connect(mgr_, &UdpDeviceManager::logLine, this, [](const QString& s){
+    connect(mgr_, &UdpDeviceManager::logLine, this, [](const QString& s) {
         qDebug().noquote() << s;
     });
-    // 发现 SN → 更新 UI 下拉框
-    connect(mgr_, &UdpDeviceManager::snDiscoveredOrUpdated, this, [this](const QString& sn){
-        QMetaObject::invokeMethod(this, [this, sn](){ upsertCameraSN(sn); }, Qt::QueuedConnection);
-    });
-    // 发现 SN → 额外用于判断“改 IP 是否已经用新 IP 上线”
+
+    // 发现 SN → 更新设备表
+    connect(mgr_, &UdpDeviceManager::snDiscoveredOrUpdated,
+            this, [this](const QString& sn) {
+                QMetaObject::invokeMethod(this, [this, sn] {
+                        upsertCameraSN(sn);
+                    }, Qt::QueuedConnection);
+            });
+
+    // 改 IP 完成检测
     connect(mgr_, &UdpDeviceManager::snDiscoveredOrUpdated,
             this, &MainWindow::onSnUpdatedForIpChange);
-    // 选中行变化时，更新当前 SN + 按钮状态
-    connect(ui->tableWidget->selectionModel(),
-            &QItemSelectionModel::selectionChanged,
-            this, &MainWindow::onTableSelectionChanged);
+
     // === 周期检查设备是否离线 ===
     devAliveTimer_ = new QTimer(this);
-    devAliveTimer_->setInterval(2000); // 每 2 秒检查一次
+    devAliveTimer_->setInterval(2000);
     connect(devAliveTimer_, &QTimer::timeout,
             this, &MainWindow::onCheckDeviceAlive);
     devAliveTimer_->start();
 
-    // 初始化等待改 IP 的计时器
+    // === 等待改 IP 的计时器 ===
     ipChangeTimer_ = new QTimer(this);
     ipChangeTimer_->setSingleShot(true);
     connect(ipChangeTimer_, &QTimer::timeout,
             this, &MainWindow::onIpChangeTimeout);
 
-    //========================================================================
-    updateSystemIP();
-    probeWiredIPv4s();
+    // ==== 系统 IP + MediaMTX ====
+    updateSystemIP();   // 里面会顺手更新 lblHostIp
     startMediaMTX();
 
-    // ==== 初始状态：没有选中任何相机 → 打开/关闭按钮全部禁用 ====
+    // ==== 初始状态 ====
     curSelectedSn_.clear();
     previewActive_ = false;
+     clearDeviceInfoPanel();
     updateCameraButtons();
 }
 
 
 void MainWindow::upsertCameraSN(const QString& sn)
 {
-    if (sn.isEmpty())
+    if (sn.isEmpty() || !mgr_)
         return;
 
-    // 直接更新下面的设备表即可
     updateTableDevice(sn);
 }
-
 
 bool MainWindow::stopMediaMTXBlocking(int gracefulMs, int killMs)
 {
@@ -371,16 +388,19 @@ void MainWindow::updateSystemIP()
 {
     const QStringList ips = probeWiredIPv4s();
     if (ips.isEmpty()) {
-        // 没找到可用 IP，就先清空 / 或保持原值都行
-        // 这里我选择不动 curBindIp_，只打个日志
         qWarning() << "[IP] no usable wired IPv4 found, keep curBindIp_ =" << curBindIp_;
+        if (ui->lblHostIp)
+            ui->lblHostIp->setText(tr("无可用 IP"));
         return;
     }
 
-    // 取第一个有线 IPv4 作为 RTSP 监听 IP
     curBindIp_ = ips.first();
     qInfo() << "[IP] curBindIp_ set to" << curBindIp_;
+
+    if (ui->lblHostIp)
+        ui->lblHostIp->setText(curBindIp_);
 }
+
 
 
 void MainWindow::on_changeSystemIP_clicked()
@@ -441,109 +461,130 @@ void MainWindow::updateTableDevice(const QString& sn)
     if (!mgr_->getDevice(sn, dev))
         return;
 
-    QString ip = dev.ip.toString();
-    QString status = QStringLiteral("在线");
+    // 名称 和 SN
+    QString name = dev.sn;      // 按你的 DeviceInfo 实际字段改
+    if (name.isEmpty())
+        name = sn;
 
-    // 找这一行是否已经存在
+    QString displayName;
+    if (!name.isEmpty() && name != sn)
+        displayName = QString("%1 | %2").arg(name, sn);
+    else
+        displayName = sn;
+
+    // 查找是否已有这一行（通过 SN）
     int row = -1;
-    for (int r = 0; r < ui->tableWidget->rowCount(); ++r) {
-        QTableWidgetItem *item = ui->tableWidget->item(r, 0);
-        if (item && item->text() == sn) {
+    for (int r = 0; r < ui->deviceList->rowCount(); ++r) {
+        auto* item = ui->deviceList->item(r, 0);
+        if (!item) continue;
+        if (item->data(Qt::UserRole).toString() == sn) {
             row = r;
             break;
         }
     }
 
-    // 不存在则新增
     if (row < 0) {
-        row = ui->tableWidget->rowCount();
-        ui->tableWidget->insertRow(row);
+        row = ui->deviceList->rowCount();
+        ui->deviceList->insertRow(row);
     }
 
-    auto setTextItem = [&](int col, const QString &text) {
-        QTableWidgetItem *it = ui->tableWidget->item(row, col);
-        if (!it) {
-            it = new QTableWidgetItem;
-            ui->tableWidget->setItem(row, col, it);
-        }
-        it->setText(text);
-    };
+    // 第 0 列：设备名称（显示 名称 | SN），data 里存 SN
+    QTableWidgetItem* nameItem = ui->deviceList->item(row, 0);
+    if (!nameItem) {
+        nameItem = new QTableWidgetItem;
+        ui->deviceList->setItem(row, 0, nameItem);
+    }
+    nameItem->setText(displayName);
+    nameItem->setData(Qt::UserRole, sn);
+    nameItem->setTextAlignment(Qt::AlignVCenter | Qt::AlignLeft);
 
-    setTextItem(0, sn);
-    setTextItem(1, ip);
-    setTextItem(2, status);
+    // 第 1 列：状态（刚发现默认在线）
+    QTableWidgetItem* stItem = ui->deviceList->item(row, 1);
+    if (!stItem) {
+        stItem = new QTableWidgetItem;
+        ui->deviceList->setItem(row, 1, stItem);
+    }
+    stItem->setText(QStringLiteral("在线"));
+    stItem->setTextAlignment(Qt::AlignCenter);
+    stItem->setForeground(Qt::white);
+    stItem->setBackground(QColor(0, 170, 0));
 
-    // 在线显示绿色
-    QTableWidgetItem* stItem = ui->tableWidget->item(row, 2);
-    if (stItem)
-        stItem->setForeground(Qt::darkGreen);
-
-    // === 第 3 列：操作按钮“修改IP” ===
-    if (!ui->tableWidget->cellWidget(row, 3)) {
-        QPushButton* btn = new QPushButton(QStringLiteral("修改IP"), ui->tableWidget);
-        // 捕获当前 SN，点击时修改该相机 IP
-        connect(btn, &QPushButton::clicked, this, [this, sn]() {
+    // 第 2 列：功能按钮（修改 IP）
+    if (!ui->deviceList->cellWidget(row, 2)) {
+        auto* btn = new QPushButton(QStringLiteral("修改IP"), ui->deviceList);
+        connect(btn, &QPushButton::clicked, this, [this, sn] {
             changeCameraIpForSn(sn);
         });
-        ui->tableWidget->setCellWidget(row, 3, btn);
+        ui->deviceList->setCellWidget(row, 2, btn);
     }
 
-    // 行内容变化后，刷新一下按钮状态（比如刚上线）
     updateCameraButtons();
 }
 
 void MainWindow::onCheckDeviceAlive()
 {
-    if (!mgr_) return;
+    if (!mgr_)
+        return;
 
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    const qint64 offlineMs = 10000; // 超过 10 秒没心跳就判离线，可按需调整
+    const qint64 now       = QDateTime::currentMSecsSinceEpoch();
+    const qint64 offlineMs = 10000;
 
-    const int rows = ui->tableWidget->rowCount();
+    const int rows = ui->deviceList->rowCount();
     for (int r = 0; r < rows; ++r) {
-        QTableWidgetItem *snItem = ui->tableWidget->item(r, 0);
-        if (!snItem) continue;
+        QTableWidgetItem* nameItem = ui->deviceList->item(r, 0);
+        if (!nameItem)
+            continue;
 
-        const QString sn = snItem->text();
+        const QString sn = nameItem->data(Qt::UserRole).toString();
+        if (sn.isEmpty())
+            continue;
+
         DeviceInfo dev;
-        QString status;
+        const bool exists = mgr_->getDevice(sn, dev);
+        const bool online = exists && (now - dev.lastSeenMs <= offlineMs);
 
-        bool exists = mgr_->getDevice(sn, dev);
-        bool online = exists && (now - dev.lastSeenMs <= offlineMs);
-
-        if (online) status = QStringLiteral("在线");
-        else        status = QStringLiteral("离线");
-
-        QTableWidgetItem *stItem = ui->tableWidget->item(r, 2);
-        QString oldStatus;
+        // 状态单元格
+        QTableWidgetItem* stItem = ui->deviceList->item(r, 1);
         if (!stItem) {
             stItem = new QTableWidgetItem;
-            ui->tableWidget->setItem(r, 2, stItem);
+            ui->deviceList->setItem(r, 1, stItem);
+        }
+
+        const QString newStatus = online ? QStringLiteral("在线")
+                                         : QStringLiteral("离线");
+        const QString oldStatus = stItem->text();
+
+        stItem->setText(newStatus);
+        stItem->setTextAlignment(Qt::AlignCenter);
+        if (online) {
+            stItem->setForeground(Qt::white);
+            stItem->setBackground(QColor(0, 170, 0));
         } else {
-            oldStatus = stItem->text();
+            stItem->setForeground(Qt::white);
+            stItem->setBackground(QColor(200, 0, 0));
         }
 
-        stItem->setText(status);
-        if (status == QStringLiteral("在线")) {
-            stItem->setForeground(Qt::darkGreen);
-        } else {
-            stItem->setForeground(Qt::red);
+        if (!curSelectedSn_.isEmpty() && sn == curSelectedSn_) {
+            // ★ 当前选中设备：同步刷新下方信息区
+            if (exists) {
+                updateDeviceInfoPanel(&dev, online);
+            } else {
+                clearDeviceInfoPanel();
+            }
+
+            // 在线 → 离线 且正在预览：自动关闭预览
+            if (oldStatus == QStringLiteral("在线") &&
+                newStatus == QStringLiteral("离线") &&
+                viewer_) {
+
+                QMessageBox::information(this, tr("提示"),
+                                         tr("设备 [%1] 网络中断，预览已自动停止。").arg(sn));
+                doStopViewer();
+            }
         }
 
-        // 在线 → 离线 的边沿：如果是当前预览相机，则自动关闭预览
-        if (oldStatus == QStringLiteral("在线") &&
-            status   == QStringLiteral("离线") &&
-            !curSelectedSn_.isEmpty() &&
-            sn == curSelectedSn_ &&
-            viewer_) {
-
-            QMessageBox::information(this, tr("提示"),
-                                     tr("设备 [%1] 网络中断，预览已自动停止。").arg(sn));
-            doStopViewer();
-        }
     }
 
-    // 整体状态更新后，统一再刷一次按钮状态
     updateCameraButtons();
 }
 
@@ -567,29 +608,48 @@ void MainWindow::onTableSelectionChanged()
 {
     curSelectedSn_.clear();
 
-    if (!ui || !ui->tableWidget) {
+    if (!ui || !ui->deviceList) {
+        clearDeviceInfoPanel();
         updateCameraButtons();
         return;
     }
 
-    QItemSelectionModel* sel = ui->tableWidget->selectionModel();
+    auto* sel = ui->deviceList->selectionModel();
     if (!sel) {
+        clearDeviceInfoPanel();
         updateCameraButtons();
         return;
     }
 
     const QModelIndexList rows = sel->selectedRows();
     if (!rows.isEmpty()) {
-        int row = rows.first().row();
-        QTableWidgetItem *item = ui->tableWidget->item(row, 0); // 第 0 列是 SN
-        if (item) {
-            curSelectedSn_ = item->text().trimmed();
-        }
+        const int row = rows.first().row();
+        QTableWidgetItem* nameItem = ui->deviceList->item(row, 0);
+        if (nameItem)
+            curSelectedSn_ = nameItem->data(Qt::UserRole).toString().trimmed();
     }
 
     qInfo() << "[UI] selection changed, curSelectedSn_=" << curSelectedSn_;
+
+    // 根据当前选中的 SN，更新下方信息区
+    if (curSelectedSn_.isEmpty() || !mgr_) {
+        clearDeviceInfoPanel();
+    } else {
+        DeviceInfo dev;
+        if (mgr_->getDevice(curSelectedSn_, dev)) {
+            const qint64 now       = QDateTime::currentMSecsSinceEpoch();
+            const qint64 offlineMs = 10000;
+            const bool online      = (now - dev.lastSeenMs <= offlineMs);
+            updateDeviceInfoPanel(&dev, online);
+        } else {
+            clearDeviceInfoPanel();
+        }
+    }
+
     updateCameraButtons();
 }
+
+
 
 void MainWindow::updateCameraButtons()
 {
@@ -810,3 +870,47 @@ void MainWindow::onMediaMtxLogLine(const QString& s)
 
     // 其他日志不处理
 }
+void MainWindow::updateDeviceInfoPanel(const DeviceInfo* dev, bool online)
+{
+    // 1) 当前主机 IP（始终显示）
+    if (ui->lblHostIp) {
+        ui->lblHostIp->setText(curBindIp_.isEmpty() ? tr("--") : curBindIp_);
+    }
+
+    // 2) 没有设备（未选中）时
+    if (!dev) {
+        if (ui->lblCamIp)
+            ui->lblCamIp->setText(tr("--"));
+
+        if (ui->lblCamStatus) {
+            ui->lblCamStatus->setText(tr("未选择"));
+            QPalette pal = ui->lblCamStatus->palette();
+            pal.setColor(QPalette::WindowText, QColor(128, 128, 128));
+            ui->lblCamStatus->setPalette(pal);
+        }
+        return;
+    }
+
+    // 3) 有选中设备：显示相机 IP 和状态
+    if (ui->lblCamIp)
+        ui->lblCamIp->setText(dev->ip.toString());
+
+    if (ui->lblCamStatus) {
+        ui->lblCamStatus->setText(online ? tr("在线") : tr("离线"));
+        QPalette pal = ui->lblCamStatus->palette();
+        pal.setColor(QPalette::WindowText,
+                     online ? QColor(0, 170, 0) : QColor(200, 0, 0));
+        ui->lblCamStatus->setPalette(pal);
+    }
+}
+
+void MainWindow::clearDeviceInfoPanel()
+{
+    updateDeviceInfoPanel(nullptr, false);
+}
+
+void MainWindow::on_action_triggered()
+{
+
+}
+

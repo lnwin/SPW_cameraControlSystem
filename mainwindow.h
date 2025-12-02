@@ -99,6 +99,8 @@ private:
     QHash<QString, PathState> pathStates_;  // key = RTSP path，一般就是 SN
 
     void onMediaMtxLogLine(const QString& line);  // 解析 MediaMTX 一行日志，更新 pathStates_
+    void updateDeviceInfoPanel(const DeviceInfo* dev, bool online);
+    void clearDeviceInfoPanel();
 
 private slots:
     void onFrame(const QImage& img);
@@ -112,6 +114,8 @@ private slots:
     void onIpChangeTimeout();                        // 等待超时
     void updateTableDevice(const QString& sn);
     void onCheckDeviceAlive();   // 周期检查设备在线/离线
+
+    void on_action_triggered();
 
 protected:
     void closeEvent(QCloseEvent* event) override;
