@@ -61,6 +61,26 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(ui->deviceList, &QTableWidget::itemSelectionChanged,
             this, &MainWindow::onTableSelectionChanged);
+    // ====== 状态小圆点图标（在线 / 离线） ======
+    auto makeDotIcon = [](const QColor& fill, const QColor& border) -> QIcon {
+        const int size = 12;
+        QPixmap pm(size, size);
+        pm.fill(Qt::transparent);
+
+        QPainter p(&pm);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        QPen pen(border);
+        pen.setWidth(1);
+        p.setPen(pen);
+        p.setBrush(fill);
+        p.drawEllipse(1, 1, size - 2, size - 2);
+        p.end();
+
+        return QIcon(pm);
+    };
+
+    iconOnline_  = makeDotIcon(QColor(0, 200, 0),   QColor(0, 120, 0));    // 绿色圆点
+    iconOffline_ = makeDotIcon(QColor(180, 180, 180), QColor(120, 120, 120)); // 灰色圆点
 
     // ================== UdpDeviceManager ==================
     mgr_ = new UdpDeviceManager(this);
@@ -461,6 +481,12 @@ void MainWindow::updateTableDevice(const QString& sn)
     if (!mgr_->getDevice(sn, dev))
         return;
 
+    // 记录“本次上线开始时间”：第一次发现这个 SN 时写入
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (!camOnlineSinceMs_.contains(sn)) {
+        camOnlineSinceMs_.insert(sn, now);
+    }
+
     // 名称 和 SN
     QString name = dev.sn;      // 按你的 DeviceInfo 实际字段改
     if (name.isEmpty())
@@ -498,16 +524,17 @@ void MainWindow::updateTableDevice(const QString& sn)
     nameItem->setData(Qt::UserRole, sn);
     nameItem->setTextAlignment(Qt::AlignVCenter | Qt::AlignLeft);
 
-    // 第 1 列：状态（刚发现默认在线）
+    // 第 1 列：状态（刚发现默认在线） -> 绿色圆点 + “在线”
     QTableWidgetItem* stItem = ui->deviceList->item(row, 1);
     if (!stItem) {
         stItem = new QTableWidgetItem;
         ui->deviceList->setItem(row, 1, stItem);
     }
+    stItem->setIcon(iconOnline_);
     stItem->setText(QStringLiteral("在线"));
     stItem->setTextAlignment(Qt::AlignCenter);
-    stItem->setForeground(Qt::white);
-    stItem->setBackground(QColor(0, 170, 0));
+    stItem->setForeground(Qt::black);  // 字体颜色，用黑色即可
+    // 不再 setBackground()，避免被选中状态覆盖
 
     // 第 2 列：功能按钮（修改 IP）
     if (!ui->deviceList->cellWidget(row, 2)) {
@@ -520,6 +547,7 @@ void MainWindow::updateTableDevice(const QString& sn)
 
     updateCameraButtons();
 }
+
 
 void MainWindow::onCheckDeviceAlive()
 {
@@ -550,29 +578,37 @@ void MainWindow::onCheckDeviceAlive()
             ui->deviceList->setItem(r, 1, stItem);
         }
 
+        const QString oldStatus = stItem->text();
         const QString newStatus = online ? QStringLiteral("在线")
                                          : QStringLiteral("离线");
-        const QString oldStatus = stItem->text();
 
         stItem->setText(newStatus);
         stItem->setTextAlignment(Qt::AlignCenter);
+
         if (online) {
-            stItem->setForeground(Qt::white);
-            stItem->setBackground(QColor(0, 170, 0));
+            stItem->setIcon(iconOnline_);
+            stItem->setForeground(Qt::black);
         } else {
-            stItem->setForeground(Qt::white);
-            stItem->setBackground(QColor(200, 0, 0));
+            stItem->setIcon(iconOffline_);
+            stItem->setForeground(Qt::gray);
+        }
+        // 不再 setBackground()，全靠图标 + 字体颜色
+
+        // ★ 1) 离线 -> 在线：表示本次新上线，更新时间戳
+        if (online && oldStatus == QStringLiteral("离线")) {
+            camOnlineSinceMs_[sn] = now;
         }
 
+        // ★ 2) 如果是当前选中设备，同步刷新下方信息区
         if (!curSelectedSn_.isEmpty() && sn == curSelectedSn_) {
-            // ★ 当前选中设备：同步刷新下方信息区
+
             if (exists) {
                 updateDeviceInfoPanel(&dev, online);
             } else {
                 clearDeviceInfoPanel();
             }
 
-            // 在线 → 离线 且正在预览：自动关闭预览
+            // 在线 -> 离线 且正在预览：自动关闭预览
             if (oldStatus == QStringLiteral("在线") &&
                 newStatus == QStringLiteral("离线") &&
                 viewer_) {
@@ -582,11 +618,11 @@ void MainWindow::onCheckDeviceAlive()
                 doStopViewer();
             }
         }
-
     }
 
     updateCameraButtons();
 }
+
 
 void MainWindow::doStopViewer()
 {
@@ -650,19 +686,29 @@ void MainWindow::onTableSelectionChanged()
 }
 
 
-
 void MainWindow::updateCameraButtons()
 {
     if (!ui) return;
 
-    QPushButton* btnOpen  = ui->openCamera;
-    QPushButton* btnClose = ui->closeCamera;
+    // toolbar 上的所有 QAction
+    QAction* actOpen      = ui->action_openCamera;
+    QAction* actClose     = ui->action_closeCamera;
+    QAction* actGrab      = ui->action_grap;
+    QAction* actStartRec  = ui->action_startRecord;
+    QAction* actStopRec   = ui->action_stopRecord;
 
-    // 默认全部禁用
-    if (btnOpen)  btnOpen->setEnabled(false);
-    if (btnClose) btnClose->setEnabled(false);
+    auto setAllEnabled = [&](bool en) {
+        if (actOpen)     actOpen->setEnabled(en);
+        if (actClose)    actClose->setEnabled(en);
+        if (actGrab)     actGrab->setEnabled(en);
+        if (actStartRec) actStartRec->setEnabled(en);
+        if (actStopRec)  actStopRec->setEnabled(en);
+    };
 
-    // 0) 没选中任何相机：按钮全禁用（即使 viewer_ 在跑也一样）
+    // 默认：全部禁用
+    setAllEnabled(false);
+
+    // 0) 没选中任何相机：全部 disabled
     if (curSelectedSn_.isEmpty()) {
         qInfo() << "[UI] updateCameraButtons: no SN selected, all disabled";
         return;
@@ -674,11 +720,30 @@ void MainWindow::updateCameraButtons()
         return;
     }
 
-    // 2) 如果当前已经在预览：允许关闭相机，禁止再打开
+    // 2) 如果当前已经在预览：允许关闭相机，
+    //    抓图和录制根据录制状态控制
+    //
+    // 这里假设有一个成员变量 bool isRecording_ 表示“当前是否正在录制”
+    // 如果你项目里变量名不一样，改成你自己的即可。
     if (viewer_) {
-        if (btnClose) btnClose->setEnabled(true);
-        if (btnOpen)  btnOpen->setEnabled(false);
-        qInfo() << "[UI] updateCameraButtons: viewer active -> enable CLOSE only";
+        // 打开/关闭
+        if (actOpen)  actOpen->setEnabled(false);
+        if (actClose) actClose->setEnabled(true);
+
+        // 抓图：只要在预览就允许
+        if (actGrab)  actGrab->setEnabled(true);
+
+        // 录制：根据 isRecording_ 控制
+        if (isRecording_) {
+            if (actStartRec) actStartRec->setEnabled(false);
+            if (actStopRec)  actStopRec->setEnabled(true);
+        } else {
+            if (actStartRec) actStartRec->setEnabled(true);
+            if (actStopRec)  actStopRec->setEnabled(false);
+        }
+
+        qInfo() << "[UI] updateCameraButtons: viewer active, "
+                   "grab & record enabled according to recording state";
         return;
     }
 
@@ -686,7 +751,7 @@ void MainWindow::updateCameraButtons()
 
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
 
-    // 3) 心跳判断在线
+    // 3) 心跳判断在线：不在线 -> 所有保持 disabled
     DeviceInfo dev;
     bool online = false;
     if (mgr_ && mgr_->getDevice(curSelectedSn_, dev)) {
@@ -694,11 +759,11 @@ void MainWindow::updateCameraButtons()
         online = (now - dev.lastSeenMs <= offlineMs);
     }
     if (!online) {
-        qInfo() << "[UI] device offline, keep buttons disabled";
+        qInfo() << "[UI] device offline, keep all actions disabled";
         return;
     }
 
-    // 4) MediaMTX 判断有没有 publisher
+    // 4) MediaMTX 判断有没有 publisher：没有 -> 所有保持 disabled
     bool pushing = false;
     {
         const QString path = curSelectedSn_;
@@ -709,14 +774,22 @@ void MainWindow::updateCameraButtons()
         }
     }
     if (!pushing) {
-        qInfo() << "[UI] device online but stream not ready, keep buttons disabled";
+        qInfo() << "[UI] device online but stream not ready, keep all actions disabled";
         return;
     }
 
-    // 5) 在线 + 有 publisher + 没在预览 -> 允许“打开相机”
-    if (btnOpen)  btnOpen->setEnabled(true);
-    if (btnClose) btnClose->setEnabled(false);
+    // 5) 在线 + 有 publisher + 没在预览：
+    //    只允许“打开相机”，其他都禁用
+    if (actOpen)     actOpen->setEnabled(true);
+    if (actClose)    actClose->setEnabled(false);
+    if (actGrab)     actGrab->setEnabled(false);
+    if (actStartRec) actStartRec->setEnabled(false);
+    if (actStopRec)  actStopRec->setEnabled(false);
+
+    qInfo() << "[UI] device online & pushing, viewer not active -> enable OPEN only";
 }
+
+
 
 
 void MainWindow::changeCameraIpForSn(const QString& sn)
@@ -874,43 +947,128 @@ void MainWindow::updateDeviceInfoPanel(const DeviceInfo* dev, bool online)
 {
     // 1) 当前主机 IP（始终显示）
     if (ui->lblHostIp) {
-        ui->lblHostIp->setText(curBindIp_.isEmpty() ? tr("--") : curBindIp_);
+        ui->lblHostIp->setText("当前主机IP：" +
+                               (curBindIp_.isEmpty() ? tr("--") : curBindIp_));
     }
 
     // 2) 没有设备（未选中）时
     if (!dev) {
         if (ui->lblCamIp)
-            ui->lblCamIp->setText(tr("--"));
+            ui->lblCamIp->setText("当前相机IP：--");
 
         if (ui->lblCamStatus) {
-            ui->lblCamStatus->setText(tr("未选择"));
+            ui->lblCamStatus->setText("设备状态：未选择");
             QPalette pal = ui->lblCamStatus->palette();
             pal.setColor(QPalette::WindowText, QColor(128, 128, 128));
             ui->lblCamStatus->setPalette(pal);
         }
+
+        if (ui->lblCamLastSeen)
+            ui->lblCamLastSeen->setText("该相机本次上线时间：--");
+
         return;
     }
 
     // 3) 有选中设备：显示相机 IP 和状态
     if (ui->lblCamIp)
-        ui->lblCamIp->setText(dev->ip.toString());
+        ui->lblCamIp->setText("当前相机IP：" + dev->ip.toString());
 
     if (ui->lblCamStatus) {
-        ui->lblCamStatus->setText(online ? tr("在线") : tr("离线"));
+        ui->lblCamStatus->setText("设备状态：" +
+                                  (online ? tr("在线") : tr("离线")));
         QPalette pal = ui->lblCamStatus->palette();
         pal.setColor(QPalette::WindowText,
                      online ? QColor(0, 170, 0) : QColor(200, 0, 0));
         ui->lblCamStatus->setPalette(pal);
     }
+
+    // 4) 该相机“本次上线开始时间”：来自 camOnlineSinceMs_
+    if (ui->lblCamLastSeen) {
+        QString sn;
+        // 优先用 dev 里的 sn，如果没有就退回当前选中 SN
+        sn = dev->sn;
+        if (sn.isEmpty())
+            sn = curSelectedSn_;
+
+        QString tsText = "该相机本次上线时间：--";
+
+        if (!sn.isEmpty()) {
+            const qint64 t0 = camOnlineSinceMs_.value(sn, 0);
+            if (t0 > 0) {
+                QDateTime dt = QDateTime::fromMSecsSinceEpoch(t0);
+                tsText = "该相机本次上线时间：" + dt.toString("yyyy-MM-dd HH:mm:ss");
+            }
+        }
+
+        ui->lblCamLastSeen->setText(tsText);
+    }
 }
+
 
 void MainWindow::clearDeviceInfoPanel()
 {
     updateDeviceInfoPanel(nullptr, false);
 }
 
-void MainWindow::on_action_triggered()
+
+void MainWindow::on_action_openCamera_triggered()
+{
+    qInfo() << "[UI] on_openCamera_clicked, curSelectedSn_=" << curSelectedSn_
+            << " viewer_=" << viewer_;
+
+    if (viewer_) {
+        // 已经有 viewer 在跑了，防止重复点击
+        return;
+    }
+    if (curSelectedSn_.isEmpty()) {
+        QMessageBox::warning(this, tr("提示"), tr("请先在列表中选择一台相机。"));
+        return;
+    }
+
+    // RTSP path 就用 SN
+    curPath_ = curSelectedSn_;
+
+    const QString url = QString("rtsp://%1:%2/%3")
+                            .arg(curBindIp_)
+                            .arg(curRtspPort_)
+                            .arg(curPath_);
+
+    qInfo().noquote() << "[RTSP] start viewer url =" << url;
+
+    viewer_ = new RtspViewerQt(this);
+    previewActive_ = false;
+
+    connect(viewer_, &RtspViewerQt::frameReady,
+            this, &MainWindow::onFrame);
+
+    viewer_->setUrl(url);
+    viewer_->start();
+
+    // 创建 viewer 后，按钮状态交给统一逻辑
+    updateCameraButtons();
+}
+
+
+void MainWindow::on_action_closeCamera_triggered()
+{
+    doStopViewer();
+}
+
+
+void MainWindow::on_action_grap_triggered()
 {
 
+}
+
+
+void MainWindow::on_action_startRecord_triggered()
+{
+     isRecording_ = true;
+}
+
+
+void MainWindow::on_action_stopRecord_triggered()
+{
+     isRecording_ = false;
 }
 

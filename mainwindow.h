@@ -18,6 +18,7 @@
 #include <QDateTime>
 #include <QPushButton>
 #include <QHash>            // ★ 新增：path 状态表用到
+#include <QPainter>
 
 class RtspViewerQt;
 QT_BEGIN_NAMESPACE
@@ -101,7 +102,10 @@ private:
     void onMediaMtxLogLine(const QString& line);  // 解析 MediaMTX 一行日志，更新 pathStates_
     void updateDeviceInfoPanel(const DeviceInfo* dev, bool online);
     void clearDeviceInfoPanel();
-
+    QHash<QString, qint64> camOnlineSinceMs_;   // key: SN, value: 本次上线开始时间(ms)
+    QIcon iconOnline_;
+    QIcon iconOffline_;
+    bool isRecording_ = false;
 private slots:
     void onFrame(const QImage& img);
     void on_openCamera_clicked();
@@ -114,8 +118,15 @@ private slots:
     void onIpChangeTimeout();                        // 等待超时
     void updateTableDevice(const QString& sn);
     void onCheckDeviceAlive();   // 周期检查设备在线/离线
+    void on_action_openCamera_triggered();
 
-    void on_action_triggered();
+    void on_action_closeCamera_triggered();
+
+    void on_action_grap_triggered();
+
+    void on_action_startRecord_triggered();
+
+    void on_action_stopRecord_triggered();
 
 protected:
     void closeEvent(QCloseEvent* event) override;

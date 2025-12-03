@@ -27,84 +27,6 @@
      <string>TextLabel</string>
     </property>
    </widget>
-   <widget class="QGroupBox" name="groupBox">
-    <property name="geometry">
-     <rect>
-      <x>570</x>
-      <y>30</y>
-      <width>161</width>
-      <height>281</height>
-     </rect>
-    </property>
-    <property name="title">
-     <string>相机控制</string>
-    </property>
-    <widget class="QPushButton" name="openCamera">
-     <property name="geometry">
-      <rect>
-       <x>10</x>
-       <y>30</y>
-       <width>141</width>
-       <height>41</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>打开相机</string>
-     </property>
-    </widget>
-    <widget class="QPushButton" name="closeCamera">
-     <property name="geometry">
-      <rect>
-       <x>10</x>
-       <y>80</y>
-       <width>141</width>
-       <height>41</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>关闭相机</string>
-     </property>
-    </widget>
-    <widget class="QPushButton" name="grapOneFrame">
-     <property name="geometry">
-      <rect>
-       <x>10</x>
-       <y>130</y>
-       <width>141</width>
-       <height>41</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>单帧截图</string>
-     </property>
-    </widget>
-    <widget class="QPushButton" name="startRecord">
-     <property name="geometry">
-      <rect>
-       <x>10</x>
-       <y>180</y>
-       <width>141</width>
-       <height>41</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>开始录像</string>
-     </property>
-    </widget>
-    <widget class="QPushButton" name="stopRecord">
-     <property name="geometry">
-      <rect>
-       <x>10</x>
-       <y>230</y>
-       <width>141</width>
-       <height>41</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>停止录像</string>
-     </property>
-    </widget>
-   </widget>
    <widget class="QTextEdit" name="messageBox">
     <property name="geometry">
      <rect>
@@ -130,11 +52,24 @@
     <widget class="QWidget" name="panelDeviceList" native="true">
      <layout class="QHBoxLayout" name="horizontalLayout">
       <item>
-       <widget class="QTableWidget" name="deviceList"/>
+       <widget class="QTableWidget" name="deviceList">
+        <property name="maximumSize">
+         <size>
+          <width>16777215</width>
+          <height>200</height>
+         </size>
+        </property>
+       </widget>
       </item>
      </layout>
     </widget>
     <widget class="QWidget" name="panelDeviceInfo" native="true">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>200</height>
+      </size>
+     </property>
      <layout class="QHBoxLayout" name="horizontalLayout_2">
       <item>
        <widget class="QGroupBox" name="groupDeviceInfo">
@@ -180,6 +115,19 @@
           <string>TextLabel</string>
          </property>
         </widget>
+        <widget class="QLabel" name="lblCamLastSeen">
+         <property name="geometry">
+          <rect>
+           <x>20</x>
+           <y>120</y>
+           <width>291</width>
+           <height>16</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>TextLabel</string>
+         </property>
+        </widget>
        </widget>
       </item>
      </layout>
@@ -207,15 +155,67 @@
    <attribute name="toolBarBreak">
     <bool>false</bool>
    </attribute>
-   <addaction name="action"/>
+   <addaction name="action_openCamera"/>
+   <addaction name="action_closeCamera"/>
+   <addaction name="action_grap"/>
+   <addaction name="action_startRecord"/>
+   <addaction name="action_stopRecord"/>
   </widget>
-  <action name="action">
+  <action name="action_openCamera">
    <property name="icon">
     <iconset resource="icons.qrc">
-     <normaloff>:/new/prefix1/release/icons/current/camera-open.svg</normaloff>:/new/prefix1/release/icons/current/camera-open.svg</iconset>
+     <normaloff>:/new/prefix1/release/icons/UI/开始.png</normaloff>:/new/prefix1/release/icons/UI/开始.png</iconset>
    </property>
    <property name="text">
     <string>开启抓流</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_closeCamera">
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/new/prefix1/release/icons/UI/停止.png</normaloff>:/new/prefix1/release/icons/UI/停止.png</iconset>
+   </property>
+   <property name="text">
+    <string>关闭相机</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_grap">
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/new/prefix1/release/icons/UI/抓拍.png</normaloff>:/new/prefix1/release/icons/UI/抓拍.png</iconset>
+   </property>
+   <property name="text">
+    <string>单帧抓拍</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_startRecord">
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/new/prefix1/release/icons/UI/录制-02 (1).png</normaloff>:/new/prefix1/release/icons/UI/录制-02 (1).png</iconset>
+   </property>
+   <property name="text">
+    <string>开始录像</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::NoRole</enum>
+   </property>
+  </action>
+  <action name="action_stopRecord">
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/new/prefix1/release/icons/UI/停止录制语音.png</normaloff>:/new/prefix1/release/icons/UI/停止录制语音.png</iconset>
+   </property>
+   <property name="text">
+    <string>停止录像</string>
    </property>
    <property name="menuRole">
     <enum>QAction::NoRole</enum>
