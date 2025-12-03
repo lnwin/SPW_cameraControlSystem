@@ -220,7 +220,7 @@
   <action name="action_openCamera">
    <property name="icon">
     <iconset resource="icons.qrc">
-     <normaloff>:/new/prefix1/release/icons/UI/开始.png</normaloff>:/new/prefix1/release/icons/UI/开始.png</iconset>
+     <normaloff>:/new/prefix1/release/icons/UI/start.png</normaloff>:/new/prefix1/release/icons/UI/start.png</iconset>
    </property>
    <property name="text">
     <string>开启抓流</string>
@@ -232,7 +232,7 @@
   <action name="action_closeCamera">
    <property name="icon">
     <iconset resource="icons.qrc">
-     <normaloff>:/new/prefix1/release/icons/UI/停止.png</normaloff>:/new/prefix1/release/icons/UI/停止.png</iconset>
+     <normaloff>:/new/prefix1/release/icons/UI/stop.png</normaloff>:/new/prefix1/release/icons/UI/stop.png</iconset>
    </property>
    <property name="text">
     <string>关闭相机</string>
@@ -244,7 +244,7 @@
   <action name="action_grap">
    <property name="icon">
     <iconset resource="icons.qrc">
-     <normaloff>:/new/prefix1/release/icons/UI/抓拍.png</normaloff>:/new/prefix1/release/icons/UI/抓拍.png</iconset>
+     <normaloff>:/new/prefix1/release/icons/UI/grap.png</normaloff>:/new/prefix1/release/icons/UI/grap.png</iconset>
    </property>
    <property name="text">
     <string>单帧抓拍</string>
@@ -256,7 +256,7 @@
   <action name="action_startRecord">
    <property name="icon">
     <iconset resource="icons.qrc">
-     <normaloff>:/new/prefix1/release/icons/UI/录制-02 (1).png</normaloff>:/new/prefix1/release/icons/UI/录制-02 (1).png</iconset>
+     <normaloff>:/new/prefix1/release/icons/UI/record.png</normaloff>:/new/prefix1/release/icons/UI/record.png</iconset>
    </property>
    <property name="text">
     <string>开始录像</string>
@@ -268,7 +268,7 @@
   <action name="action_stopRecord">
    <property name="icon">
     <iconset resource="icons.qrc">
-     <normaloff>:/new/prefix1/release/icons/UI/停止录制语音.png</normaloff>:/new/prefix1/release/icons/UI/停止录制语音.png</iconset>
+     <normaloff>:/new/prefix1/release/icons/UI/stopRecord.png</normaloff>:/new/prefix1/release/icons/UI/stopRecord.png</iconset>
    </property>
    <property name="text">
     <string>停止录像</string>
@@ -280,7 +280,7 @@
   <action name="action">
    <property name="icon">
     <iconset resource="icons.qrc">
-     <normaloff>:/new/prefix1/release/icons/UI/设置.png</normaloff>:/new/prefix1/release/icons/UI/设置.png</iconset>
+     <normaloff>:/new/prefix1/release/icons/UI/setting.png</normaloff>:/new/prefix1/release/icons/UI/setting.png</iconset>
    </property>
    <property name="text">
     <string>系统设置</string>

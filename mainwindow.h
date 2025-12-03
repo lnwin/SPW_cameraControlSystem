@@ -20,6 +20,7 @@
 #include <QHash>            // ★ 新增：path 状态表用到
 #include <QPainter>
 #include <opencv2/opencv.hpp>
+#include <TitleBar.h>
 class RtspViewerQt;
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -106,6 +107,9 @@ private:
     QIcon iconOnline_;
     QIcon iconOffline_;
     bool isRecording_ = false;
+
+    void titleForm();
+
 private slots:
     void onFrame(const QImage& img);
 

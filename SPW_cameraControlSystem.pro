@@ -15,15 +15,18 @@ SOURCES += \
     mainwindow.cpp \
     restipclient.cpp \
     rtspviewerqt.cpp \
+    titlebar.cpp \
     udpserver.cpp
 
 HEADERS += \
     mainwindow.h \
     restipclient.h \
     rtspviewerqt.h \
+    titlebar.h \
     udpserver.h
 FORMS += \
-    mainwindow.ui
+    mainwindow.ui \
+    titlebar.ui
 
 TRANSLATIONS += \
     SPW_cameraControlSystem_zh_CN.ts

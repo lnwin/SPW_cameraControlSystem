@@ -30,8 +30,9 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
-    ui->setupUi(this);
-
+    setWindowFlags(Qt::FramelessWindowHint | Qt::WindowSystemMenuHint);
+    ui->setupUi(this);   
+    titleForm();
     // 允许 label 被压缩，不以 pixmap 大小作为最小尺寸
     ui->label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     ui->label->setMinimumSize(0, 0);
@@ -1007,3 +1008,18 @@ void MainWindow::on_action_triggered()
 
 }
 
+void MainWindow::titleForm()
+{
+    // 创建自定义标题栏
+    TitleBar *title = new TitleBar(this);
+
+    // 把它放到 QMainWindow 的“菜单栏区域”，会自动在所有 toolbar 上面
+    setMenuWidget(title);
+
+    // 按钮信号 -> 窗口行为
+    connect(title, &TitleBar::minimizeRequested, this, &MainWindow::showMinimized);
+    connect(title, &TitleBar::maximizeRequested, [this](){
+        isMaximized() ? showNormal() : showMaximized();
+    });
+    connect(title, &TitleBar::closeRequested, this, &MainWindow::close);
+}

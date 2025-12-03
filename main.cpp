@@ -3,6 +3,68 @@
 #include <QApplication>
 #include <QFile>
 #include <QTextStream>
+#include <QApplication>
+#include "mainwindow.h"
+
+static void applySimpleDarkBlueTheme(QApplication &app)
+{
+    QPalette pal = app.palette();
+
+    // 整体背景色（窗口）
+    pal.setColor(QPalette::Window,      QColor("#0b1120"));
+    pal.setColor(QPalette::Base,        QColor("#020617"));
+    pal.setColor(QPalette::AlternateBase, QColor("#020617"));
+
+    // 文字颜色
+    pal.setColor(QPalette::WindowText,  Qt::white);
+    pal.setColor(QPalette::Text,        Qt::white);
+    pal.setColor(QPalette::ButtonText,  Qt::white);
+
+    // 按钮/高亮
+    pal.setColor(QPalette::Button,      QColor("#111827"));
+    pal.setColor(QPalette::Highlight,   QColor("#2563eb"));
+    pal.setColor(QPalette::HighlightedText, Qt::white);
+
+    app.setPalette(pal);
+
+    // ★★★ 在这里追加 QSS ★★★
+    const char *qss = R"(
+        /* TableView 表头颜色 */
+        QHeaderView::section {
+            background-color: #1a2335;   /* 深蓝 */
+            color: #ffffff;
+            padding: 4px;
+            border: none;
+        }
+        QTableCornerButton::section {
+            background-color: #1a2335;
+            border: none;
+        }
+
+        /* 弹窗背景 */
+        QDialog, QMessageBox {
+            background-color: #0b1120;
+            color: #ffffff;
+        }
+
+        /* 按钮统一风格 */
+        QPushButton {
+            background-color: #111827;
+            color: #ffffff;
+            border-radius: 4px;
+            padding: 4px 10px;
+        }
+        QPushButton:hover {
+            background-color: #1f2937;
+        }
+        QPushButton:pressed {
+            background-color: #020617;
+        }
+    )";
+
+    app.setStyleSheet(qss);
+}
+
 
 static void initGstEnv() {
     const char* GST_ROOT = "E:\\ThirdParty\\Gstreamer\\1.0\\msvc_x86_64";
@@ -19,6 +81,7 @@ int main(int argc, char *argv[]) {
    // installFileLogger();       // <<< 先装日志
     initGstEnv();              // <<< 再设环境
     QApplication a(argc, argv);
+    applySimpleDarkBlueTheme(a);   // ★ 一句话启用主题
     MainWindow w; w.show();
     return a.exec();
 }

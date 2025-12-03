@@ -37,11 +37,11 @@
         <file>release/icons/current/system-calibrate.svg</file>
         <file>release/icons/current/TH Tech1.png</file>
         <file>release/icons/current/TH Tech2.png</file>
-        <file>release/icons/UI/开始.png</file>
-        <file>release/icons/UI/录制-02 (1).png</file>
-        <file>release/icons/UI/设置.png</file>
-        <file>release/icons/UI/停止.png</file>
-        <file>release/icons/UI/停止录制语音.png</file>
-        <file>release/icons/UI/抓拍.png</file>
+        <file>release/icons/UI/start.png</file>
+        <file>release/icons/UI/record.png</file>
+        <file>release/icons/UI/stop.png</file>
+        <file>release/icons/UI/stopRecord.png</file>
+        <file>release/icons/UI/grap.png</file>
+        <file>release/icons/UI/setting.png</file>
     </qresource>
 </RCC>
