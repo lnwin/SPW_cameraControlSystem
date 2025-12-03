@@ -124,6 +124,8 @@ private slots:
 
     void on_action_stopRecord_triggered();
 
+    void on_action_triggered();
+
 protected:
     void closeEvent(QCloseEvent* event) override;
 };

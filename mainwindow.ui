@@ -17,7 +17,11 @@
    </size>
   </property>
   <property name="windowTitle">
-   <string>MainWindow</string>
+   <string>TurbidCam-舟山渊视科技</string>
+  </property>
+  <property name="windowIcon">
+   <iconset resource="icons.qrc">
+    <normaloff>:/new/prefix1/release/icons/current/Slogo.png</normaloff>:/new/prefix1/release/icons/current/Slogo.png</iconset>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout_5">
@@ -206,6 +210,7 @@
    <attribute name="toolBarBreak">
     <bool>false</bool>
    </attribute>
+   <addaction name="action"/>
    <addaction name="action_openCamera"/>
    <addaction name="action_closeCamera"/>
    <addaction name="action_grap"/>
@@ -267,6 +272,18 @@
    </property>
    <property name="text">
     <string>停止录像</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::NoRole</enum>
+   </property>
+  </action>
+  <action name="action">
+   <property name="icon">
+    <iconset resource="icons.qrc">
+     <normaloff>:/new/prefix1/release/icons/UI/设置.png</normaloff>:/new/prefix1/release/icons/UI/设置.png</iconset>
+   </property>
+   <property name="text">
+    <string>系统设置</string>
    </property>
    <property name="menuRole">
     <enum>QAction::NoRole</enum>

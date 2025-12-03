@@ -1001,3 +1001,9 @@ void MainWindow::on_action_stopRecord_triggered()
      isRecording_ = false;
 }
 
+
+void MainWindow::on_action_triggered()
+{
+
+}
+
