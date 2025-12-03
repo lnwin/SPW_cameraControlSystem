@@ -21,6 +21,7 @@
 #include <QPainter>
 #include <opencv2/opencv.hpp>
 #include <TitleBar.h>
+#include <systemsetting.h>
 class RtspViewerQt;
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -57,7 +58,7 @@ public:
 private:
     Ui::MainWindow *ui;
     RtspViewerQt* viewer_ = nullptr;
-
+    systemsetting*mysystemsetting;
     // ---- MediaMTX 管理 ----
     QProcess* mtxProc_ = nullptr;
     void startMediaMTX();

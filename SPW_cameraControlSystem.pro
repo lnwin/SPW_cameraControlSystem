@@ -15,6 +15,7 @@ SOURCES += \
     mainwindow.cpp \
     restipclient.cpp \
     rtspviewerqt.cpp \
+    systemsetting.cpp \
     titlebar.cpp \
     udpserver.cpp
 
@@ -22,10 +23,12 @@ HEADERS += \
     mainwindow.h \
     restipclient.h \
     rtspviewerqt.h \
+    systemsetting.h \
     titlebar.h \
     udpserver.h
 FORMS += \
     mainwindow.ui \
+    systemsetting.ui \
     titlebar.ui
 
 TRANSLATIONS += \

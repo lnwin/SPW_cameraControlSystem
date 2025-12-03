@@ -128,6 +128,7 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowSystemMenuHint);
+    mysystemsetting=new systemsetting();
     ui->setupUi(this);   
     titleForm();
     // 允许 label 被压缩，不以 pixmap 大小作为最小尺寸
@@ -1114,7 +1115,7 @@ void MainWindow::on_action_stopRecord_triggered()
 
 void MainWindow::on_action_triggered()
 {
-
+    mysystemsetting->show();
 }
 
 void MainWindow::titleForm()
