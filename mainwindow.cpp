@@ -877,26 +877,28 @@ void MainWindow::changeCameraIpForSn(const QString& sn)
     if (curIp.isEmpty())
         curIp = "192.168.0.100";   // 找不到就给个默认值，防止为空
 
-    // 弹出输入 IP 的对话框（默认值为当前 IP）
-    bool ok = false;
-    QString newIp = QInputDialog::getText(
-        this,
-        tr("修改相机 IP"),
-        tr("设备 SN: %1\n当前 IP: %2\n\n请输入新的 IP：").arg(trimmedSn, curIp),
-        QLineEdit::Normal,
-        curIp,
-        &ok
-        );
+    // ==== 自己构造 QInputDialog，强制输入框字体为黑色 ====
+    QInputDialog dlg(this);
+    dlg.setWindowTitle(tr("修改相机 IP"));
+    dlg.setLabelText(tr("设备 SN: %1\n当前 IP: %2\n\n请输入新的 IP：")
+                         .arg(trimmedSn, curIp));
+    dlg.setTextValue(curIp);
 
-    if (!ok) {
+    // 把输入框字体颜色改成黑色
+    if (QLineEdit* edit = dlg.findChild<QLineEdit*>()) {
+        edit->setStyleSheet("color: #000000;");  // 纯黑
+    }
+
+    if (dlg.exec() != QDialog::Accepted) {
         // 用户按了“取消”
         return;
     }
 
-    newIp = newIp.trimmed();
+    QString newIp = dlg.textValue().trimmed();
 
     // IP 格式简单校验
-    QRegularExpression re(R"(^((25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(25[0-5]|2[0-4]\d|1?\d?\d)$)");
+    static const QRegularExpression re(
+        R"(^((25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(25[0-5]|2[0-4]\d|1?\d?\d)$)");
     if (!re.match(newIp).hasMatch()) {
         QMessageBox::warning(this, tr("错误"), tr("IP 地址格式不正确，请重新输入。"));
         return;
@@ -941,6 +943,7 @@ void MainWindow::changeCameraIpForSn(const QString& sn)
     if (ipChangeTimer_)
         ipChangeTimer_->start(15000);
 }
+
 void MainWindow::onMediaMtxLogLine(const QString& s)
 {
     // 只关心两类日志：

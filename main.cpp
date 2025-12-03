@@ -29,6 +29,13 @@ static void applySimpleDarkBlueTheme(QApplication &app)
 
     // ★★★ 在这里追加 QSS ★★★
     const char *qss = R"(
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 10px;
+            padding: 2px 4px;
+            color: #ffffff;              /* ★ 标题白色 */
+            font-weight: bold;           /* 可选：标题加粗 */
+        }
         /* TableView 表头颜色 */
         QHeaderView::section {
             background-color: #1a2335;   /* 深蓝 */
