@@ -35,6 +35,9 @@ protected:
 private:
     QString url_;
     std::atomic<bool> stopFlag_{false};
+    // 固定输出分辨率：1080p
+
+
 };
 
 #endif // RTSP_VIEWER_QT_H

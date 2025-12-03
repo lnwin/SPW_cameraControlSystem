@@ -19,7 +19,7 @@
 #include <QPushButton>
 #include <QHash>            // ★ 新增：path 状态表用到
 #include <QPainter>
-
+#include <opencv2/opencv.hpp>
 class RtspViewerQt;
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }

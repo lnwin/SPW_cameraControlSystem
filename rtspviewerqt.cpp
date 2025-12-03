@@ -118,8 +118,9 @@ void RtspViewerQt::run()
     AVFrame* frame = av_frame_alloc();
     AVPacket* pkt  = av_packet_alloc();
 
-    const int outW_fixed = 1224;
-    const int outH_fixed = 1024;
+    // 解码线程里、创建 sws 之前：
+    int outW_fixed  = 1920;
+    int outH_fixed  = 1080;
 
     auto recreateSwsIfNeeded = [&](int srcW, int srcH, AVPixelFormat srcFmt)->bool{
         static int cachedSrcW=-1, cachedSrcH=-1; static AVPixelFormat cachedSrcFmt=AV_PIX_FMT_NONE;

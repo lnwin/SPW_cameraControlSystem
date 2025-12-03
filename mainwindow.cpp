@@ -32,6 +32,9 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
+    // 允许 label 被压缩，不以 pixmap 大小作为最小尺寸
+    ui->label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
+    ui->label->setMinimumSize(0, 0);
     // ====== 上下分割条样式 ======
     ui->deviceSplitter->setHandleWidth(3);
     ui->deviceSplitter->setStyleSheet(
@@ -199,11 +202,13 @@ MainWindow::~MainWindow()
 
 void MainWindow::onFrame(const QImage& img)
 {
+
     if (!ui->label) return;
 
     QPixmap pm = QPixmap::fromImage(img).scaled(
         ui->label->size(),
-        Qt::KeepAspectRatio,
+       // Qt::KeepAspectRatio,
+        Qt::IgnoreAspectRatio,        //不保持比例
         Qt::SmoothTransformation);
     ui->label->setPixmap(pm);
 
@@ -940,9 +945,6 @@ void MainWindow::clearDeviceInfoPanel()
 
 void MainWindow::on_action_openCamera_triggered()
 {
-    qInfo() << "[UI] on_openCamera_clicked, curSelectedSn_=" << curSelectedSn_
-            << " viewer_=" << viewer_;
-
     if (viewer_) {
         // 已经有 viewer 在跑了，防止重复点击
         return;
