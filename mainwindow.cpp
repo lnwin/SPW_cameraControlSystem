@@ -301,62 +301,7 @@ void MainWindow::stopMediaMTX()
     mtxProc_ = nullptr;
 }
 
-void MainWindow::on_openCamera_clicked()
-{
-    qInfo() << "[UI] on_openCamera_clicked, curSelectedSn_=" << curSelectedSn_
-            << " viewer_=" << viewer_;
 
-    if (viewer_) {
-        // 已经有 viewer 在跑了，防止重复点击
-        return;
-    }
-    if (curSelectedSn_.isEmpty()) {
-        QMessageBox::warning(this, tr("提示"), tr("请先在列表中选择一台相机。"));
-        return;
-    }
-
-    // RTSP path 就用 SN
-    curPath_ = curSelectedSn_;
-
-    const QString url = QString("rtsp://%1:%2/%3")
-                            .arg(curBindIp_)
-                            .arg(curRtspPort_)
-                            .arg(curPath_);
-
-    qInfo().noquote() << "[RTSP] start viewer url =" << url;
-
-    viewer_ = new RtspViewerQt(this);
-    previewActive_ = false;
-
-    connect(viewer_, &RtspViewerQt::frameReady,
-            this, &MainWindow::onFrame);
-
-    viewer_->setUrl(url);
-    viewer_->start();
-
-    // 创建 viewer 后，按钮状态交给统一逻辑
-    updateCameraButtons();
-}
-
-
-
-
-
-
-void MainWindow::on_closeCamera_clicked()
-{
-    doStopViewer();
-}
-
-
-
-void MainWindow::on_changeCameraIP_clicked()
-{
-    // 现在没有 cameraIPCombox，就直接用当前选中的 SN
-    QString sn = curSelectedSn_.trimmed();
-
-    changeCameraIpForSn(sn);
-}
 
 
 
@@ -422,11 +367,6 @@ void MainWindow::updateSystemIP()
 }
 
 
-
-void MainWindow::on_changeSystemIP_clicked()
-{
-
-}
 
 void MainWindow::onSnUpdatedForIpChange(const QString& sn)
 {
@@ -945,6 +885,8 @@ void MainWindow::onMediaMtxLogLine(const QString& s)
 }
 void MainWindow::updateDeviceInfoPanel(const DeviceInfo* dev, bool online)
 {
+
+
     // 1) 当前主机 IP（始终显示）
     if (ui->lblHostIp) {
         ui->lblHostIp->setText("当前主机IP：" +
@@ -956,15 +898,8 @@ void MainWindow::updateDeviceInfoPanel(const DeviceInfo* dev, bool online)
         if (ui->lblCamIp)
             ui->lblCamIp->setText("当前相机IP：--");
 
-        if (ui->lblCamStatus) {
-            ui->lblCamStatus->setText("设备状态：未选择");
-            QPalette pal = ui->lblCamStatus->palette();
-            pal.setColor(QPalette::WindowText, QColor(128, 128, 128));
-            ui->lblCamStatus->setPalette(pal);
-        }
-
         if (ui->lblCamLastSeen)
-            ui->lblCamLastSeen->setText("该相机本次上线时间：--");
+            ui->lblCamLastSeen->setText("相机上线时间：--");
 
         return;
     }
@@ -972,15 +907,6 @@ void MainWindow::updateDeviceInfoPanel(const DeviceInfo* dev, bool online)
     // 3) 有选中设备：显示相机 IP 和状态
     if (ui->lblCamIp)
         ui->lblCamIp->setText("当前相机IP：" + dev->ip.toString());
-
-    if (ui->lblCamStatus) {
-        ui->lblCamStatus->setText("设备状态：" +
-                                  (online ? tr("在线") : tr("离线")));
-        QPalette pal = ui->lblCamStatus->palette();
-        pal.setColor(QPalette::WindowText,
-                     online ? QColor(0, 170, 0) : QColor(200, 0, 0));
-        ui->lblCamStatus->setPalette(pal);
-    }
 
     // 4) 该相机“本次上线开始时间”：来自 camOnlineSinceMs_
     if (ui->lblCamLastSeen) {
@@ -1003,6 +929,7 @@ void MainWindow::updateDeviceInfoPanel(const DeviceInfo* dev, bool online)
         ui->lblCamLastSeen->setText(tsText);
     }
 }
+
 
 
 void MainWindow::clearDeviceInfoPanel()

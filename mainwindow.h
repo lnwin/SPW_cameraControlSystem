@@ -108,12 +108,8 @@ private:
     bool isRecording_ = false;
 private slots:
     void onFrame(const QImage& img);
-    void on_openCamera_clicked();
-    void on_closeCamera_clicked();
-    void on_changeCameraIP_clicked();
 
     void updateSystemIP();
-    void on_changeSystemIP_clicked();
     void onSnUpdatedForIpChange(const QString& sn);  // 监听 SN 更新，判断是否已经用新 IP 上线
     void onIpChangeTimeout();                        // 等待超时
     void updateTableDevice(const QString& sn);
