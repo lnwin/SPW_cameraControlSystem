@@ -7,7 +7,104 @@
 #include <QDebug>
 #include <QRegularExpression>
 Q_OS_WIN
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+#include <QElapsedTimer>
+#include <QThread>
+// 简单封装：启动一个进程并捕获输出
+static bool runAndCapture(const QString& program,
+                          const QStringList& args,
+                          int timeoutMs,
+                          QString* outStd = nullptr,
+                          int* outExitCode = nullptr)
+{
+    QProcess p;
+    p.start(program, args);
+    if (!p.waitForFinished(timeoutMs)) {
+        p.kill();
+        p.waitForFinished();
+        return false;
+    }
+    if (outStd) {
+        *outStd = QString::fromLocal8Bit(p.readAllStandardOutput())
+                  + QString::fromLocal8Bit(p.readAllStandardError());
+    }
+    if (outExitCode) {
+        *outExitCode = p.exitCode();
+    }
+    return true;
+}
 
+// 查询一次系统里是否有 mediamtx.exe
+static bool isMediaMtxRunningOnce()
+{
+#ifdef Q_OS_WIN
+    QString out;
+    int exitCode = 0;
+    // tasklist /FI "IMAGENAME eq mediamtx.exe"
+    if (!runAndCapture("tasklist",
+                       {"/FI", "IMAGENAME eq mediamtx.exe"},
+                       3000,
+                       &out,
+                       &exitCode)) {
+        return false;
+    }
+    if (exitCode != 0) {
+        return false;
+    }
+    return out.contains("mediamtx.exe", Qt::CaseInsensitive);
+#else
+    return false;
+#endif
+}
+
+// 阻塞式杀掉所有 mediamtx.exe，直到不在运行或超时
+static bool killMediaMtxBlocking(int timeoutMs = 5000)
+{
+#ifdef Q_OS_WIN
+    QElapsedTimer timer;
+    timer.start();
+
+    bool everFound = false;
+
+    while (isMediaMtxRunningOnce()) {
+        everFound = true;
+        qInfo().noquote() << "[MediaMTX] found running mediamtx.exe, try kill...";
+
+        // taskkill /F /IM mediamtx.exe
+        int exitCode = QProcess::execute("taskkill",
+                                         {"/F", "/IM", "mediamtx.exe"});
+        qInfo().noquote()
+            << "[MediaMTX] taskkill exitCode=" << exitCode;
+
+        // 再检查一次，如果已经没了就 OK
+        if (!isMediaMtxRunningOnce()) {
+            qInfo().noquote() << "[MediaMTX] all mediamtx.exe killed.";
+            return true;
+        }
+
+        if (timer.elapsed() > timeoutMs) {
+            qWarning().noquote()
+                << "[MediaMTX] kill timeout, mediamtx.exe still running!";
+            return false;
+        }
+
+        QThread::msleep(200);
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    }
+
+    if (everFound) {
+        qInfo().noquote() << "[MediaMTX] mediamtx.exe not found after kill check.";
+    } else {
+        qInfo().noquote() << "[MediaMTX] no existing mediamtx.exe running.";
+    }
+    return true;
+#else
+    // 非 Windows 平台暂不处理，直接返回 true
+    return true;
+#endif
+}
 // 过滤：排除 127.0.0.1 / 169.254.x.x / 0.0.0.0
 static bool isUsableIPv4(const QHostAddress& ip) {
     if (ip.protocol() != QAbstractSocket::IPv4Protocol) return false;
@@ -222,7 +319,15 @@ void MainWindow::onFrame(const QImage& img)
 
 void MainWindow::startMediaMTX()
 {
+    // 如果我们自己已经有一个 QProcess 在跑，就不用再启动
     if (mtxProc_) return;
+
+    // ★ 先杀掉系统里所有已有的 mediamtx.exe，直到都退出或超时
+    if (!killMediaMtxBlocking(5000)) {
+        qWarning().noquote()
+            << "[MediaMTX] abort start: existing mediamtx.exe cannot be terminated.";
+        return;
+    }
 
     const QString appDir = QCoreApplication::applicationDirPath();
     const QString mtxDir = QDir(appDir).filePath("mediamtx");
@@ -252,7 +357,7 @@ void MainWindow::startMediaMTX()
             const auto s = QString::fromLocal8Bit(line).trimmed();
             if (!s.isEmpty()) {
                 qInfo().noquote() << "[MediaMTX]" << s;
-                onMediaMtxLogLine(s);   // ★ 关键：在这里顺手解析有没有 publisher
+                onMediaMtxLogLine(s);   // ★ 这里顺手解析有没有 publisher
             }
         }
     });
@@ -289,6 +394,7 @@ void MainWindow::startMediaMTX()
                       << (QFileInfo::exists(mtxCfg) ? QString(" \"%1\"").arg(mtxCfg)
                                                     : " (no explicit yml; using default search)");
 }
+
 
 
 
