@@ -25,7 +25,7 @@ public:
 signals:
     // 送 UI 的帧（固定 1224x1024，RGB888）
     void frameReady(const QImage& img);
-
+    void frameDecoded(const QImage& img, qint64 ptsMs);
     // 关键日志
     void logLine(const QString& line);
 

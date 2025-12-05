@@ -17,7 +17,8 @@ SOURCES += \
     rtspviewerqt.cpp \
     systemsetting.cpp \
     titlebar.cpp \
-    udpserver.cpp
+    udpserver.cpp \
+    videorecorder.cpp
 
 HEADERS += \
     mainwindow.h \
@@ -25,7 +26,8 @@ HEADERS += \
     rtspviewerqt.h \
     systemsetting.h \
     titlebar.h \
-    udpserver.h
+    udpserver.h \
+    videorecorder.h
 FORMS += \
     mainwindow.ui \
     systemsetting.ui \
