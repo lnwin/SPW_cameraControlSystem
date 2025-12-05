@@ -1,11 +1,12 @@
-// videorecorder.h
-
 #pragma once
 
 #include <QObject>
 #include <QImage>
 #include <QMutex>
-#include <myStruct.h>
+#include <QString>
+
+#include <myStruct.h>   // 里面定义了 myRecordOptions
+
 class VideoRecorder : public QObject
 {
     Q_OBJECT
@@ -29,7 +30,7 @@ public:
 
         VideoOptions()
             : container(VideoContainer::MP4),
-            fps(22),               // ✅ 你的 22fps
+            fps(22),               // 你的 22fps
             bitrateKbps(8000),     // 默认 8Mbps
             enableAudio(false)
         {}
@@ -41,14 +42,19 @@ public:
 public slots:
     // ==== 1) 路径配置 ====
 
-    // 由外部类通过信号设置视频根目录，例如: "D:/TurbidCam/video"
+    // 由外部类通过信号设置视频/截图根目录
+    // 例如:
+    //   myRecordOptions opt;
+    //   opt.recordPath  = "D:/TurbidCam/video";
+    //   opt.capturePath = "D:/TurbidCam/snapshot";
+    //   emit recordOptionsChanged(opt);
     void receiveRecordOptions(myRecordOptions myOptions);
 
     // ==== 2) 录制控制 ====
 
     // 根据当前时间自动生成路径:
     //   <videoRootDir>/<YYYY-MM-DD>/<YYYY-MM-DD_hh-mm-ss>.(mp4/avi)
-    void startRecording(const VideoOptions& opt = VideoOptions());
+    void startRecording();
 
     // 停止录制：后面会加 flush 编码器和写尾
     void stopRecording();
@@ -62,7 +68,7 @@ public slots:
     //   - 否则挂起，等下一帧 onFrame 时保存
     // 真正落地路径：
     //   <snapshotRootDir>/<YYYY-MM-DD>/<YYYY-MM-DD_hh-mm-ss_zzz>.(png/jpg/bmp)
-    void requestSnapshot(ImageFormat fmt = ImageFormat::PNG);
+    void requestSnapshot();
 
     // ==== 4) 帧输入 ====
 
@@ -96,8 +102,11 @@ private:
     mutable QMutex mutex_;
 
     // 路径配置
-    QString videoRootDir_;
-    QString snapshotRootDir_;
+    QString videoRootDir_;    // 视频保存根目录
+    QString snapshotRootDir_; // 截图保存根目录
+
+    int myCaptureType = 0;    // 来自 myRecordOptions.capturTpye
+    int myRecordType  = 0;    // 来自 myRecordOptions.recordTpye
 
     // 录制状态
     bool recording_ = false;

@@ -29,6 +29,22 @@ static void applySimpleDarkBlueTheme(QApplication &app)
 
     // ★★★ 在这里追加 QSS ★★★
     const char *qss = R"(
+
+        /* 下拉列表项的文字颜色 */
+        QComboBox QAbstractItemView {
+            color: #000000;             /* 黑色字体 */
+            background-color: #ffffff;  /* 白色背景（可选） */
+        }
+        QComboBox {
+            color: #000000;             /* 黑色字体 */
+            background-color: #ffffff;  /* 白色背景（可选） */
+        }
+
+        /* 当前选中项 */
+        QComboBox QAbstractItemView::item:selected {
+            background-color: #d1d5db;  /* 深一点的灰 */
+            color: #000000;
+        }
         QGroupBox::title {
             subcontrol-origin: margin;
             left: 10px;

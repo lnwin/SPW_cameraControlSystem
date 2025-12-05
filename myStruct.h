@@ -12,8 +12,8 @@ struct myRecordOptions {
 
     QString capturePath;
     QString recordPath;
-    int  capturTpye;
-    int  recordTpye;
+    int  capturType;
+    int  recordType;
 
 };
 

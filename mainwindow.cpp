@@ -129,6 +129,10 @@ MainWindow::MainWindow(QWidget *parent)
 {
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowSystemMenuHint);
     mysystemsetting=new systemsetting();
+    myVideoRecorder=new VideoRecorder;
+    recThread_ = new QThread(this);
+    myVideoRecorder->moveToThread(recThread_);
+    recThread_->start();
     ui->setupUi(this);   
     titleForm();
     // 允许 label 被压缩，不以 pixmap 大小作为最小尺寸
@@ -163,6 +167,15 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(ui->deviceList, &QTableWidget::itemSelectionChanged,
             this, &MainWindow::onTableSelectionChanged);
+    connect(mysystemsetting, &systemsetting::sendRecordOptions,myVideoRecorder, &VideoRecorder::receiveRecordOptions);
+
+
+    connect(this, &MainWindow::startRecord,myVideoRecorder, &VideoRecorder::startRecording);
+    connect(this, &MainWindow::onceCapture,myVideoRecorder, &VideoRecorder::requestSnapshot);
+    connect(this, &MainWindow::stopRecord,myVideoRecorder, &VideoRecorder::stopRecording);
+
+
+
     // ====== 状态小圆点图标（在线 / 离线） ======
     auto makeDotIcon = [](const QColor& fill, const QColor& border) -> QIcon {
         const int size = 12;
@@ -1098,17 +1111,21 @@ void MainWindow::on_action_closeCamera_triggered()
 void MainWindow::on_action_grap_triggered()
 {
 
+    emit onceCapture();
+
 }
 
 
 void MainWindow::on_action_startRecord_triggered()
 {
+     emit startRecord();
      isRecording_ = true;
 }
 
 
 void MainWindow::on_action_stopRecord_triggered()
 {
+     emit stopRecord();
      isRecording_ = false;
 }
 

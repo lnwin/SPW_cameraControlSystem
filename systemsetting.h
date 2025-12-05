@@ -4,6 +4,7 @@
 #include <QWidget>
 #include<QAbstractButton>
 #include <myStruct.h>
+#include <QFileDialog>
 namespace Ui {
 class systemsetting;
 }
@@ -17,9 +18,6 @@ public:
     ~systemsetting();
 
 private slots:
-    void on_comboBox_captureType_currentIndexChanged(int index);
-
-    void on_comboBox_recordType_currentIndexChanged(int index);
 
     void on_selectcapturePath_clicked();
 
@@ -28,12 +26,12 @@ private slots:
     void on_buttonBox_clicked(QAbstractButton *button);
 signals:
 
-    void sendRecordOptions(recordOptions);
+    void sendRecordOptions(myRecordOptions);
 
 
 private:
     Ui::systemsetting *ui;
-    recordOptions myrecordOptions;
+    myRecordOptions myrecordOptions;
 };
 
 #endif // SYSTEMSETTING_H

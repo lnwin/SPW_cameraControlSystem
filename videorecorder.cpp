@@ -1,6 +1,4 @@
-// videorecorder.cpp
-
-#include <videorecorder.h>
+#include "videorecorder.h"
 
 #include <QDate>
 #include <QTime>
@@ -8,6 +6,9 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QDebug>
+#include <QMutexLocker>
+
+// ========== 构造 / 析构 ==========
 
 VideoRecorder::VideoRecorder(QObject* parent)
     : QObject(parent)
@@ -21,21 +22,33 @@ VideoRecorder::~VideoRecorder()
 }
 
 // ========== 路径配置 ==========
-void VideoRecorder::receiveRecordOptions(myRecordOptions myOptions )
+
+void VideoRecorder::receiveRecordOptions(myRecordOptions myOptions)
 {
+    // 跟其他函数一样加锁，保证线程安全
+    QMutexLocker lk(&mutex_);
 
     // 路径配置
-     videoRootDir_=myOptions.recordPath;
-     snapshotRootDir_=myOptions.capturePath;
+    videoRootDir_    = myOptions.recordPath;
+    snapshotRootDir_ = myOptions.capturePath;
 
-};
+    // 预留：后续可以根据 myRecordType/myCaptureType 决定编码参数 / 图片格式
+    myCaptureType    = myOptions.capturType;
+    myRecordType     = myOptions.recordType;
+
+    qDebug() << "[VideoRecorder] receiveRecordOptions:"
+             << "videoRootDir =" << videoRootDir_
+             << "snapshotRootDir =" << snapshotRootDir_
+             << "captureType =" << myCaptureType
+             << "recordType =" << myRecordType;
+}
 
 // ========== 录制控制 ==========
 
-void VideoRecorder::startRecording(const VideoOptions& opt)
+void VideoRecorder::startRecording()
 {
     QMutexLocker lk(&mutex_);
-
+    const VideoOptions opt;
     if (videoRootDir_.isEmpty()) {
         emit errorOccurred(QStringLiteral("视频根目录未设置"));
         return;
@@ -46,7 +59,13 @@ void VideoRecorder::startRecording(const VideoOptions& opt)
         return;
     }
 
-    QString filePath = makeVideoFilePathLocked(opt);
+    // 这里可以根据 myRecordType 修改编码参数（如果你有需要）：
+    // VideoOptions realOpt = opt;
+    // switch (myRecordType) { ... }
+    // 目前先直接用 opt
+    const VideoOptions& realOpt = opt;
+
+    QString filePath = makeVideoFilePathLocked(realOpt);
     if (filePath.isEmpty()) {
         emit errorOccurred(QStringLiteral("生成视频文件路径失败"));
         return;
@@ -58,8 +77,8 @@ void VideoRecorder::startRecording(const VideoOptions& opt)
 
     // 先只把路径/状态记住，方便你调试路径逻辑
     currentRecordingPath_ = filePath;
-    currentOptions_ = opt;
-    recording_ = true;
+    currentOptions_       = realOpt;
+    recording_            = true;
 
     emit recordingStarted(filePath);
 }
@@ -88,10 +107,11 @@ bool VideoRecorder::isRecording() const
 
 // ========== 截图 ==========
 
-void VideoRecorder::requestSnapshot(ImageFormat fmt)
+void VideoRecorder::requestSnapshot()
 {
     QMutexLocker lk(&mutex_);
 
+    ImageFormat fmt;
     // 如果已经有最近一帧，直接保存
     if (!lastFrame_.isNull()) {
         QString path = makeSnapshotFilePathLocked(fmt);
@@ -112,7 +132,7 @@ void VideoRecorder::requestSnapshot(ImageFormat fmt)
     }
 
     // 没有 lastFrame_，就挂起请求，等下一帧 onFrame 来时再保存
-    pendingSnapshot_ = true;
+    pendingSnapshot_    = true;
     pendingSnapshotFmt_ = fmt;
 }
 
@@ -164,8 +184,8 @@ QString VideoRecorder::makeVideoFilePathLocked(const VideoOptions& opt) const
         return QString();
 
     // 日期到天的子目录：YYYY-MM-DD
-    const QDate today = QDate::currentDate();
-    const QString dateStr = today.toString("yyyy-MM-dd");
+    const QDate today      = QDate::currentDate();
+    const QString dateStr  = today.toString("yyyy-MM-dd");
 
     QDir root(videoRootDir_);
     if (!root.exists()) {
@@ -184,9 +204,9 @@ QString VideoRecorder::makeVideoFilePathLocked(const VideoOptions& opt) const
     }
 
     // 文件名：YYYY-MM-DD_hh-mm-ss.ext
-    const QDateTime now = QDateTime::currentDateTime();
-    const QString prefix = now.toString("yyyy-MM-dd_hh-mm-ss");
-    const QString ext = containerToExtension(opt.container);
+    const QDateTime now   = QDateTime::currentDateTime();
+    const QString prefix  = now.toString("yyyy-MM-dd_hh-mm-ss");
+    const QString ext     = containerToExtension(opt.container);
 
     const QString fileName = prefix + "." + ext;
     return dateDir.filePath(fileName);
@@ -198,8 +218,8 @@ QString VideoRecorder::makeSnapshotFilePathLocked(ImageFormat fmt) const
         return QString();
 
     // 日期到天的子目录：YYYY-MM-DD
-    const QDate today = QDate::currentDate();
-    const QString dateStr = today.toString("yyyy-MM-dd");
+    const QDate today      = QDate::currentDate();
+    const QString dateStr  = today.toString("yyyy-MM-dd");
 
     QDir root(snapshotRootDir_);
     if (!root.exists()) {
@@ -218,12 +238,14 @@ QString VideoRecorder::makeSnapshotFilePathLocked(ImageFormat fmt) const
     }
 
     // 文件名：YYYY-MM-DD_hh-mm-ss_zzz.ext
-    const QDateTime now = QDateTime::currentDateTime();
-    const QString prefix = now.toString("yyyy-MM-dd_hh-mm-ss_zzz");
+    const QDateTime now   = QDateTime::currentDateTime();
+    const QString prefix  = now.toString("yyyy-MM-dd_hh-mm-ss_zzz");
 
     const char* fmtStr = imageFormatToQtString(fmt);
+    Q_UNUSED(fmtStr);
+
     QString ext = "png";
-    if (fmt == ImageFormat::JPG) ext = "jpg";
+    if (fmt == ImageFormat::JPG)      ext = "jpg";
     else if (fmt == ImageFormat::BMP) ext = "bmp";
 
     const QString fileName = prefix + "." + ext;

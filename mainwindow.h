@@ -22,6 +22,7 @@
 #include <opencv2/opencv.hpp>
 #include <TitleBar.h>
 #include <systemsetting.h>
+#include <videorecorder.h>
 class RtspViewerQt;
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -59,6 +60,8 @@ private:
     Ui::MainWindow *ui;
     RtspViewerQt* viewer_ = nullptr;
     systemsetting*mysystemsetting;
+    VideoRecorder*myVideoRecorder;
+    QThread *recThread_ = nullptr;
     // ---- MediaMTX 管理 ----
     QProcess* mtxProc_ = nullptr;
     void startMediaMTX();
@@ -133,6 +136,15 @@ private slots:
 
 protected:
     void closeEvent(QCloseEvent* event) override;
+
+signals:
+    void startRecord();
+    void onceCapture();
+    void stopRecord();
+
+
+
+
 };
 
 #endif // MAINWINDOW_H
