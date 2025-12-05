@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>400</width>
-    <height>128</height>
+    <height>200</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -48,7 +48,7 @@
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>60</y>
+     <y>90</y>
      <width>81</width>
      <height>21</height>
     </rect>
@@ -62,7 +62,7 @@
     <rect>
      <x>100</x>
      <y>20</y>
-     <width>241</width>
+     <width>181</width>
      <height>23</height>
     </rect>
    </property>
@@ -71,8 +71,8 @@
    <property name="geometry">
     <rect>
      <x>100</x>
-     <y>60</y>
-     <width>241</width>
+     <y>90</y>
+     <width>181</width>
      <height>23</height>
     </rect>
    </property>
@@ -94,7 +94,7 @@
    <property name="geometry">
     <rect>
      <x>350</x>
-     <y>60</y>
+     <y>90</y>
      <width>41</width>
      <height>23</height>
     </rect>
@@ -106,14 +106,85 @@
   <widget class="QDialogButtonBox" name="buttonBox">
    <property name="geometry">
     <rect>
-     <x>235</x>
-     <y>90</y>
+     <x>230</x>
+     <y>160</y>
      <width>161</width>
      <height>31</height>
     </rect>
    </property>
    <property name="standardButtons">
     <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_3">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>60</y>
+     <width>81</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>抓图数据类型</string>
+   </property>
+  </widget>
+  <widget class="QComboBox" name="comboBox_captureType">
+   <property name="geometry">
+    <rect>
+     <x>100</x>
+     <y>60</y>
+     <width>72</width>
+     <height>23</height>
+    </rect>
+   </property>
+   <item>
+    <property name="text">
+     <string>png</string>
+    </property>
+   </item>
+   <item>
+    <property name="text">
+     <string>jpg</string>
+    </property>
+   </item>
+   <item>
+    <property name="text">
+     <string>bmp</string>
+    </property>
+   </item>
+  </widget>
+  <widget class="QComboBox" name="comboBox_recordType">
+   <property name="geometry">
+    <rect>
+     <x>100</x>
+     <y>130</y>
+     <width>72</width>
+     <height>23</height>
+    </rect>
+   </property>
+   <item>
+    <property name="text">
+     <string>mp4</string>
+    </property>
+   </item>
+   <item>
+    <property name="text">
+     <string>avi</string>
+    </property>
+   </item>
+  </widget>
+  <widget class="QLabel" name="label_4">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>130</y>
+     <width>81</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>录像数据类型</string>
    </property>
   </widget>
  </widget>

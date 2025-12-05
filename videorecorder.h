@@ -5,7 +5,7 @@
 #include <QObject>
 #include <QImage>
 #include <QMutex>
-
+#include <myStruct.h>
 class VideoRecorder : public QObject
 {
     Q_OBJECT
@@ -22,10 +22,17 @@ public:
     };
 
     struct VideoOptions {
-        VideoContainer container = VideoContainer::MP4;
-        int fps = 22;             // ✅ 按你要求固定 22
-        int bitrateKbps = 8000;   // 默认 8Mbps，可调
-        bool enableAudio = false; // 预留，将来要音频再说
+        VideoContainer container;
+        int fps;
+        int bitrateKbps;
+        bool enableAudio;
+
+        VideoOptions()
+            : container(VideoContainer::MP4),
+            fps(22),               // ✅ 你的 22fps
+            bitrateKbps(8000),     // 默认 8Mbps
+            enableAudio(false)
+        {}
     };
 
     explicit VideoRecorder(QObject* parent = nullptr);
@@ -35,10 +42,7 @@ public slots:
     // ==== 1) 路径配置 ====
 
     // 由外部类通过信号设置视频根目录，例如: "D:/TurbidCam/video"
-    void setVideoRootDir(const QString& dir);
-
-    // 由外部类通过信号设置截图根目录，例如: "D:/TurbidCam/snapshot"
-    void setSnapshotRootDir(const QString& dir);
+    void receiveRecordOptions(myRecordOptions myOptions);
 
     // ==== 2) 录制控制 ====
 

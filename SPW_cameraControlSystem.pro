@@ -22,6 +22,7 @@ SOURCES += \
 
 HEADERS += \
     mainwindow.h \
+    myStruct.h \
     restipclient.h \
     rtspviewerqt.h \
     systemsetting.h \

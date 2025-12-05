@@ -1,6 +1,6 @@
 // videorecorder.cpp
 
-#include "videorecorder.h"
+#include <videorecorder.h>
 
 #include <QDate>
 #include <QTime>
@@ -21,18 +21,14 @@ VideoRecorder::~VideoRecorder()
 }
 
 // ========== 路径配置 ==========
-
-void VideoRecorder::setVideoRootDir(const QString& dir)
+void VideoRecorder::receiveRecordOptions(myRecordOptions myOptions )
 {
-    QMutexLocker lk(&mutex_);
-    videoRootDir_ = dir.trimmed();
-}
 
-void VideoRecorder::setSnapshotRootDir(const QString& dir)
-{
-    QMutexLocker lk(&mutex_);
-    snapshotRootDir_ = dir.trimmed();
-}
+    // 路径配置
+     videoRootDir_=myOptions.recordPath;
+     snapshotRootDir_=myOptions.capturePath;
+
+};
 
 // ========== 录制控制 ==========
 
