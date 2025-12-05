@@ -134,6 +134,8 @@ private slots:
 
     void on_action_triggered();
 
+    void getMSG(const QString& sn);
+
 protected:
     void closeEvent(QCloseEvent* event) override;
 
@@ -141,8 +143,7 @@ signals:
     void startRecord();
     void onceCapture();
     void stopRecord();
-
-
+    void sendFrame2Record(const QImage& img);
 
 
 };

@@ -173,7 +173,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(this, &MainWindow::startRecord,myVideoRecorder, &VideoRecorder::startRecording);
     connect(this, &MainWindow::onceCapture,myVideoRecorder, &VideoRecorder::requestSnapshot);
     connect(this, &MainWindow::stopRecord,myVideoRecorder, &VideoRecorder::stopRecording);
-
+    connect(myVideoRecorder, &VideoRecorder::sendMSG2ui,this, &MainWindow::getMSG);
 
 
     // ====== 状态小圆点图标（在线 / 离线） ======
@@ -329,7 +329,12 @@ void MainWindow::onFrame(const QImage& img)
         updateCameraButtons();   // 第一次收到图像时，刷新一次按钮状态
     }
 }
+void MainWindow::getMSG(const QString& sn)
+{
+    QString timeStr = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss");
 
+    ui->messageBox->append(QString("[%1] %2").arg(timeStr, sn));
+};
 
 void MainWindow::startMediaMTX()
 {
@@ -471,7 +476,7 @@ QStringList MainWindow::probeWiredIPv4s()
 
     // 没找到时兜底：给出常见私网段提示（可选）
     if (out.isEmpty()) {
-        ui->messageBox->append("[IP] 未发现可用的有线 IPv4 地址");
+        ui->textEdit->append("[IP] 未发现可用的有线 IPv4 地址");
     }
     return out;
 }

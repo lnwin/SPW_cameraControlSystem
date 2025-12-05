@@ -50,12 +50,12 @@ void VideoRecorder::startRecording()
     QMutexLocker lk(&mutex_);
     const VideoOptions opt;
     if (videoRootDir_.isEmpty()) {
-        emit errorOccurred(QStringLiteral("视频根目录未设置"));
+        emit sendMSG2ui(QStringLiteral("视频根目录未设置"));
         return;
     }
     if (recording_) {
         // 已经在录制，先停掉再开新文件，或者直接报错
-        emit errorOccurred(QStringLiteral("当前已在录制中"));
+        emit sendMSG2ui(QStringLiteral("当前已在录制中"));
         return;
     }
 
@@ -67,7 +67,7 @@ void VideoRecorder::startRecording()
 
     QString filePath = makeVideoFilePathLocked(realOpt);
     if (filePath.isEmpty()) {
-        emit errorOccurred(QStringLiteral("生成视频文件路径失败"));
+        emit sendMSG2ui(QStringLiteral("生成视频文件路径失败"));
         return;
     }
 
@@ -116,14 +116,14 @@ void VideoRecorder::requestSnapshot()
     if (!lastFrame_.isNull()) {
         QString path = makeSnapshotFilePathLocked(fmt);
         if (path.isEmpty()) {
-            emit errorOccurred(QStringLiteral("生成截图文件路径失败"));
+            emit sendMSG2ui(QStringLiteral("生成截图文件路径失败"));
             return;
         }
 
         const char* fmtStr = imageFormatToQtString(fmt);
         bool ok = lastFrame_.save(path, fmtStr);
         if (!ok) {
-            emit errorOccurred(QStringLiteral("保存截图失败: ") + path);
+            emit sendMSG2ui(QStringLiteral("保存截图失败: ") + path);
             return;
         }
 
@@ -138,13 +138,13 @@ void VideoRecorder::requestSnapshot()
 
 // ========== 帧输入 ==========
 
-void VideoRecorder::onFrame(const QImage& frame, qint64 ptsMs)
+void VideoRecorder::myonFrame(const QImage& frame)
 {
     QMutexLocker lk(&mutex_);
 
-    // 更新最近一帧缓存
+    // 如果你还想要一个时间戳，就自己取“当前时间”
     lastFrame_ = frame;
-    lastPtsMs_ = ptsMs;
+    lastPtsMs_ = QDateTime::currentMSecsSinceEpoch();
 
     // 1) 先处理挂起的截图
     if (pendingSnapshot_) {
@@ -156,12 +156,12 @@ void VideoRecorder::onFrame(const QImage& frame, qint64 ptsMs)
                 const char* fmtStr = imageFormatToQtString(pendingSnapshotFmt_);
                 bool ok = lastFrame_.save(path, fmtStr);
                 if (!ok) {
-                    emit errorOccurred(QStringLiteral("保存截图失败: ") + path);
+                    emit sendMSG2ui(QStringLiteral("保存截图失败: ") + path);
                 } else {
                     emit snapshotSaved(path);
                 }
             } else {
-                emit errorOccurred(QStringLiteral("生成截图文件路径失败"));
+                emit sendMSG2ui(QStringLiteral("生成截图文件路径失败"));
             }
         }
     }
@@ -169,10 +169,10 @@ void VideoRecorder::onFrame(const QImage& frame, qint64 ptsMs)
     // 2) 如果正在录制，这里后面会把 frame 放入队列交给 FFmpeg 编码
     if (recording_) {
         // TODO:
-        //   - 将 frame/ptsMs 入队
-        //   - 在 VideoRecorder 所在线程的工作循环里 pop 帧 -> sws_scale -> avcodec_send_frame
+        //   - 将 frame/lastPtsMs_ 入队
+        //   - 在线程工作循环里 pop -> sws_scale -> avcodec_send_frame
         // 暂时先打印日志占位：
-        // qDebug() << "[VideoRecorder] onFrame for recording, ptsMs =" << ptsMs;
+        // qDebug() << "[VideoRecorder] myonFrame for recording, ptsMs =" << lastPtsMs_;
     }
 }
 

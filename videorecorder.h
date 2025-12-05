@@ -4,7 +4,7 @@
 #include <QImage>
 #include <QMutex>
 #include <QString>
-
+#include <QDateTime>
 #include <myStruct.h>   // 里面定义了 myRecordOptions
 
 class VideoRecorder : public QObject
@@ -75,14 +75,13 @@ public slots:
     // 供 RtspViewerQt 的 frameDecoded 信号连接：
     //   connect(viewer, &RtspViewerQt::frameDecoded,
     //           recorder, &VideoRecorder::onFrame);
-    void onFrame(const QImage& frame, qint64 ptsMs);
+    void myonFrame(const QImage& frame);
 
 signals:
     void recordingStarted(const QString& filePath);
     void recordingStopped(const QString& filePath);
     void snapshotSaved(const QString& filePath);
-    void errorOccurred(const QString& message);
-
+    void sendMSG2ui(const QString&);
 private:
     // 生成视频完整路径：
     //   <videoRootDir_>/<YYYY-MM-DD>/<YYYY-MM-DD_hh-mm-ss>.<ext>
