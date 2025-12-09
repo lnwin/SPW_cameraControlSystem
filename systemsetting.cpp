@@ -51,8 +51,10 @@ void systemsetting::on_buttonBox_clicked(QAbstractButton *button)
 {
     myrecordOptions.capturePath=ui->capturePath->text();
     myrecordOptions.recordPath=ui->recordPath->text();
-    myrecordOptions.capturType=ui->comboBox_captureType->currentIndex();
-    myrecordOptions.recordType=ui->comboBox_captureType->currentIndex();
+
+   // myrecordOptions.capturType=ui->comboBox_captureType->currentIndex();
+  //  myrecordOptions.recordType=ui->comboBox_captureType->currentIndex();
+
     emit sendRecordOptions(myrecordOptions);
 
 }

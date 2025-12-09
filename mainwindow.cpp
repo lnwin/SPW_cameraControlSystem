@@ -170,7 +170,12 @@ MainWindow::MainWindow(QWidget *parent)
     connect(mysystemsetting, &systemsetting::sendRecordOptions,myVideoRecorder, &VideoRecorder::receiveRecordOptions);
 
 
+    connect(this, &MainWindow::sendFrame2Capture,myVideoRecorder, &VideoRecorder::receiveFrame2Save);
+    connect(this, &MainWindow::sendFrame2Record,myVideoRecorder, &VideoRecorder::receiveFrame2Record);
 
+    connect(this, &MainWindow::startRecord, myVideoRecorder, &VideoRecorder::startRecording);
+
+    connect(this, &MainWindow::stopRecord,  myVideoRecorder, &VideoRecorder::stopRecording);
     connect(myVideoRecorder, &VideoRecorder::sendMSG2ui,this, &MainWindow::getMSG);
 
 
@@ -335,6 +340,7 @@ void MainWindow::onFrame(const QImage& img)
     if(iscapturing_)
     {
         emit sendFrame2Capture(img);
+        qDebug()<<" emit sendFrame2Capture(img);";
         iscapturing_=false;
 
     }
@@ -1129,8 +1135,8 @@ void MainWindow::on_action_closeCamera_triggered()
 void MainWindow::on_action_grap_triggered()
 {
 
-
     iscapturing_ = true;
+    qDebug()<<"on_action_grap_triggered";
 
 }
 
@@ -1141,6 +1147,7 @@ void MainWindow::on_action_startRecord_triggered()
      isRecording_ = true;
      ui->action_startRecord->setEnabled(false);
      ui->action_stopRecord->setEnabled(true);
+      emit startRecord();     // ✅ 不带参数
 }
 
 
@@ -1150,6 +1157,7 @@ void MainWindow::on_action_stopRecord_triggered()
      isRecording_ = false;
     ui->action_startRecord->setEnabled(true);
     ui->action_stopRecord->setEnabled(false);
+     emit stopRecord();      // ✅ 不带参数
 }
 
 

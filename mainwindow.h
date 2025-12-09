@@ -143,8 +143,8 @@ protected:
 signals:    
     void sendFrame2Record(const QImage& img);
     void sendFrame2Capture(const QImage& img);
-
-
+    void startRecord();
+    void stopRecord();
 };
 
 #endif // MAINWINDOW_H

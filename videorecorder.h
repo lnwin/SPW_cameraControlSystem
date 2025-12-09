@@ -6,6 +6,13 @@
 #include <QString>
 #include <QDateTime>
 #include <myStruct.h>   // 里面定义了 myRecordOptions
+// FFmpeg 前向声明，避免在头文件里包含一堆 C 头
+struct AVFormatContext;
+struct AVCodecContext;
+struct AVStream;
+struct SwsContext;
+struct AVFrame;
+struct AVPacket;
 
 class VideoRecorder : public QObject
 {
@@ -36,6 +43,8 @@ public slots:
     void receiveFrame2Save(const QImage& img);
     void receiveFrame2Record(const QImage& img);
 
+    void startRecording();   // ✅ 无参数
+    void stopRecording();    // ✅ 无参数
 signals:
     void recordingStarted(const QString& filePath);
     void recordingStopped(const QString& filePath);
@@ -60,8 +69,8 @@ private:
     mutable QMutex mutex_;
 
     // 路径配置
-    QString videoRootDir_;    // 视频保存根目录
-    QString snapshotRootDir_; // 截图保存根目录
+    QString videoRootDir_="D:/SP_camera_record";    // 视频保存根目录
+    QString snapshotRootDir_="D:/SP_camera_capture"; // 截图保存根目录
 
     ImageFormat myCaptureType = ImageFormat::PNG;    // 来自 myRecordOptions.capturTpye
     VideoContainer myRecordType  = VideoContainer::MP4;    // 来自 myRecordOptions.recordTpye
@@ -79,9 +88,22 @@ private:
     bool pendingSnapshot_ = false;
     ImageFormat pendingSnapshotFmt_ = ImageFormat::PNG;
 
-    // TODO: 下面会加 FFmpeg 成员和帧队列
-    // e.g. AVFormatContext* ofmt_ = nullptr;
-    //      AVCodecContext*  vcc_  = nullptr;
-    //      SwsContext*      sws_  = nullptr;
-    //      int              frameIndex_ = 0;
+    // ========== FFmpeg 相关 ==========
+    bool encoderOpened_ = false;
+
+    AVFormatContext *fmtCtx_   = nullptr;
+    AVCodecContext  *codecCtx_ = nullptr;
+    AVStream        *videoStream_ = nullptr;
+    SwsContext      *swsCtx_   = nullptr;
+    AVFrame         *frame_    = nullptr;
+    AVPacket        *pkt_      = nullptr;
+
+    int     encWidth_  = 0;
+    int     encHeight_ = 0;
+    double  encFps_    = 22.0;
+    qint64  frameIndex_ = 0;
+
+    bool openEncoderLockedForImage(const QImage &img);
+    bool encodeImageLocked(const QImage &img);
+    void closeEncoderLocked();
 };
