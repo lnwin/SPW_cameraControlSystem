@@ -110,7 +110,8 @@ private:
     QHash<QString, qint64> camOnlineSinceMs_;   // key: SN, value: 本次上线开始时间(ms)
     QIcon iconOnline_;
     QIcon iconOffline_;
-    bool isRecording_ = false;
+    bool  isRecording_ = false;
+    bool  iscapturing_ = false;
 
     void titleForm();
 
@@ -139,11 +140,9 @@ private slots:
 protected:
     void closeEvent(QCloseEvent* event) override;
 
-signals:
-    void startRecord();
-    void onceCapture();
-    void stopRecord();
+signals:    
     void sendFrame2Record(const QImage& img);
+    void sendFrame2Capture(const QImage& img);
 
 
 };

@@ -17,7 +17,16 @@ struct myRecordOptions {
 
 };
 
+enum class VideoContainer {
+    MP4,
+    AVI
+};
 
+enum class ImageFormat {
+    PNG,
+    JPG,
+    BMP
+};
 
 
 

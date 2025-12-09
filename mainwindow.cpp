@@ -170,9 +170,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(mysystemsetting, &systemsetting::sendRecordOptions,myVideoRecorder, &VideoRecorder::receiveRecordOptions);
 
 
-    connect(this, &MainWindow::startRecord,myVideoRecorder, &VideoRecorder::startRecording);
-    connect(this, &MainWindow::onceCapture,myVideoRecorder, &VideoRecorder::requestSnapshot);
-    connect(this, &MainWindow::stopRecord,myVideoRecorder, &VideoRecorder::stopRecording);
+
     connect(myVideoRecorder, &VideoRecorder::sendMSG2ui,this, &MainWindow::getMSG);
 
 
@@ -328,6 +326,20 @@ void MainWindow::onFrame(const QImage& img)
         previewActive_ = true;
         updateCameraButtons();   // 第一次收到图像时，刷新一次按钮状态
     }
+
+    if( isRecording_ )
+    {
+        emit sendFrame2Record(img);
+    }
+
+    if(iscapturing_)
+    {
+        emit sendFrame2Capture(img);
+        iscapturing_=false;
+
+    }
+
+
 }
 void MainWindow::getMSG(const QString& sn)
 {
@@ -476,7 +488,8 @@ QStringList MainWindow::probeWiredIPv4s()
 
     // 没找到时兜底：给出常见私网段提示（可选）
     if (out.isEmpty()) {
-        ui->textEdit->append("[IP] 未发现可用的有线 IPv4 地址");
+        //
+        //ui->textEdit->append("[IP] 未发现可用的有线 IPv4 地址");
     }
     return out;
 }
@@ -773,7 +786,7 @@ void MainWindow::updateCameraButtons()
         if (actClose)    actClose->setEnabled(en);
         if (actGrab)     actGrab->setEnabled(en);
         if (actStartRec) actStartRec->setEnabled(en);
-        if (actStopRec)  actStopRec->setEnabled(en);
+        //if (actStopRec)  actStopRec->setEnabled(!en);
     };
 
     // 默认：全部禁用
@@ -1116,22 +1129,27 @@ void MainWindow::on_action_closeCamera_triggered()
 void MainWindow::on_action_grap_triggered()
 {
 
-    emit onceCapture();
+
+    iscapturing_ = true;
 
 }
 
 
 void MainWindow::on_action_startRecord_triggered()
 {
-     emit startRecord();
+
      isRecording_ = true;
+     ui->action_startRecord->setEnabled(false);
+     ui->action_stopRecord->setEnabled(true);
 }
 
 
 void MainWindow::on_action_stopRecord_triggered()
 {
-     emit stopRecord();
+
      isRecording_ = false;
+    ui->action_startRecord->setEnabled(true);
+    ui->action_stopRecord->setEnabled(false);
 }
 
 
