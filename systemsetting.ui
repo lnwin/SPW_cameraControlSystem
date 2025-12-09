@@ -36,7 +36,7 @@
     <rect>
      <x>10</x>
      <y>20</y>
-     <width>81</width>
+     <width>111</width>
      <height>21</height>
     </rect>
    </property>
@@ -49,7 +49,7 @@
     <rect>
      <x>10</x>
      <y>90</y>
-     <width>81</width>
+     <width>111</width>
      <height>21</height>
     </rect>
    </property>
@@ -60,21 +60,27 @@
   <widget class="QLineEdit" name="capturePath">
    <property name="geometry">
     <rect>
-     <x>100</x>
+     <x>130</x>
      <y>20</y>
      <width>181</width>
      <height>23</height>
     </rect>
    </property>
+   <property name="text">
+    <string>D:/SP_camera_capture</string>
+   </property>
   </widget>
   <widget class="QLineEdit" name="recordPath">
    <property name="geometry">
     <rect>
-     <x>100</x>
+     <x>130</x>
      <y>90</y>
      <width>181</width>
      <height>23</height>
     </rect>
+   </property>
+   <property name="text">
+    <string>D:/SP_camera_record</string>
    </property>
   </widget>
   <widget class="QPushButton" name="selectcapturePath">
@@ -121,7 +127,7 @@
     <rect>
      <x>10</x>
      <y>60</y>
-     <width>81</width>
+     <width>111</width>
      <height>21</height>
     </rect>
    </property>
@@ -132,7 +138,7 @@
   <widget class="QComboBox" name="comboBox_captureType">
    <property name="geometry">
     <rect>
-     <x>100</x>
+     <x>130</x>
      <y>60</y>
      <width>72</width>
      <height>23</height>
@@ -157,7 +163,7 @@
   <widget class="QComboBox" name="comboBox_recordType">
    <property name="geometry">
     <rect>
-     <x>100</x>
+     <x>130</x>
      <y>130</y>
      <width>72</width>
      <height>23</height>
@@ -179,7 +185,7 @@
     <rect>
      <x>10</x>
      <y>130</y>
-     <width>81</width>
+     <width>101</width>
      <height>21</height>
     </rect>
    </property>

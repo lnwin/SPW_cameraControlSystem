@@ -1,6 +1,7 @@
 #ifndef MYSTRUCT_H
 #define MYSTRUCT_H
 #include <QString>
+#include <QMetaType>
 
 #define mp4 101
 #define avi 102
@@ -26,7 +27,7 @@ struct myRecordOptions {
 
 };
 
-
+Q_DECLARE_METATYPE(myRecordOptions)
 
 
 

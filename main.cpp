@@ -104,6 +104,7 @@ int main(int argc, char *argv[]) {
    // installFileLogger();       // <<< 先装日志
     initGstEnv();              // <<< 再设环境
     QApplication a(argc, argv);
+     qRegisterMetaType<myRecordOptions>("myRecordOptions");
     applySimpleDarkBlueTheme(a);   // ★ 一句话启用主题
     MainWindow w; w.show();
     return a.exec();
