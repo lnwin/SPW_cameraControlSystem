@@ -62,6 +62,8 @@ private:
     systemsetting*mysystemsetting;
     VideoRecorder*myVideoRecorder;
     QThread *recThread_ = nullptr;
+    QLabel* recIndicator_   = nullptr;   // 🔴 录制指示灯
+    QTimer* recBlinkTimer_  = nullptr;   // 闪烁计时器
     // ---- MediaMTX 管理 ----
     QProcess* mtxProc_ = nullptr;
     void startMediaMTX();

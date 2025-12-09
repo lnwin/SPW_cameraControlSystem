@@ -138,6 +138,30 @@ MainWindow::MainWindow(QWidget *parent)
     // 允许 label 被压缩，不以 pixmap 大小作为最小尺寸
     ui->label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     ui->label->setMinimumSize(0, 0);
+
+    // ====== 录制指示灯：叠在预览 label 左上角 ======
+    recIndicator_ = new QLabel(ui->label);      // 作为 label 的子控件
+    recIndicator_->setFixedSize(32, 32);
+    recIndicator_->move(8, 8);                  // 距离左上角 8 像素
+    recIndicator_->setStyleSheet(
+        "background-color: red;"
+        "border-radius: 8px;"                   // ★ 半径 = 宽高的一半 -> 正圆
+        "border: 1px solid white;"
+        );
+    recIndicator_->hide();
+    recIndicator_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+
+    recBlinkTimer_ = new QTimer(this);
+    recBlinkTimer_->setInterval(500);           // 500ms 闪烁
+    connect(recBlinkTimer_, &QTimer::timeout, this, [this](){
+        if (!recIndicator_) return;
+        if (!isRecording_) {
+            recIndicator_->hide();
+            return;
+        }
+        recIndicator_->setVisible(!recIndicator_->isVisible());
+    });
+
     // ====== 上下分割条样式 ======
     ui->deviceSplitter->setHandleWidth(3);
     ui->deviceSplitter->setStyleSheet(
@@ -1143,22 +1167,32 @@ void MainWindow::on_action_grap_triggered()
 
 void MainWindow::on_action_startRecord_triggered()
 {
+    if (isRecording_) return;
 
-     isRecording_ = true;
-     ui->action_startRecord->setEnabled(false);
-     ui->action_stopRecord->setEnabled(true);
-      emit startRecord();     // ✅ 不带参数
+    isRecording_ = true;
+    ui->action_startRecord->setEnabled(false);
+    ui->action_stopRecord->setEnabled(true);
+
+    if (recIndicator_) recIndicator_->show();
+    if (recBlinkTimer_) recBlinkTimer_->start();
+
+    emit startRecord();
 }
-
 
 void MainWindow::on_action_stopRecord_triggered()
 {
+    if (!isRecording_) return;
 
-     isRecording_ = false;
+    isRecording_ = false;
     ui->action_startRecord->setEnabled(true);
     ui->action_stopRecord->setEnabled(false);
-     emit stopRecord();      // ✅ 不带参数
+
+    emit stopRecord();
+
+    if (recBlinkTimer_) recBlinkTimer_->stop();
+    if (recIndicator_)  recIndicator_->hide();
 }
+
 
 
 void MainWindow::on_action_triggered()
