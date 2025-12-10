@@ -12,6 +12,71 @@ Q_OS_WIN
 #endif
 #include <QElapsedTimer>
 #include <QThread>
+#include <QDialog>
+#include <QSpinBox>
+#include <QDoubleSpinBox>
+#include <QFormLayout>
+#include <QVBoxLayout>
+#include <QDialogButtonBox>
+#include <QLabel>
+// ==== 仅用于设置曝光 / 增益的对话框（不改 IP） ====
+class CameraParamDialog : public QDialog
+{
+public:
+    explicit CameraParamDialog(const QString& sn, QWidget* parent = nullptr)
+        : QDialog(parent)
+    {
+        setWindowTitle(tr("相机参数配置 - %1").arg(sn));
+        this->setStyleSheet(
+            "QLabel {"
+            "    color: #ffffff;"
+            "}"
+            "QSpinBox, QDoubleSpinBox {"
+            "    color: #000000;"
+            "    background: #ffffff;"
+            "}"
+            );
+        // 曝光：单位 us，0 ~ 40000
+        expSpinUs_ = new QSpinBox(this);
+        expSpinUs_->setRange(0, 40000);
+        expSpinUs_->setSingleStep(100);
+       // expSpinUs_->setSuffix(" us");
+        expSpinUs_->setValue(10000);   // 默认 10000us = 10ms，可按需改
+
+        // 增益：单位 dB，0 ~ 48
+        gainSpinDb_ = new QDoubleSpinBox(this);
+        gainSpinDb_->setRange(0.0, 48.0);
+        gainSpinDb_->setDecimals(1);
+        gainSpinDb_->setSingleStep(0.5);
+       // gainSpinDb_->setSuffix(" dB");
+        gainSpinDb_->setValue(6.0);    // 默认 6dB，可按需改
+
+        auto *form = new QFormLayout;
+        form->addRow(tr("曝光时间："), expSpinUs_);
+        form->addRow(tr("增益："),     gainSpinDb_);
+
+        auto *mainLayout = new QVBoxLayout;
+        mainLayout->addLayout(form);
+
+        auto *buttons = new QDialogButtonBox(
+            QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+        connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+        mainLayout->addWidget(buttons);
+        setLayout(mainLayout);
+    }
+
+    int exposureUs() const    { return expSpinUs_->value(); }
+    double gainDb() const     { return gainSpinDb_->value(); }
+
+private:
+    QSpinBox*       expSpinUs_  = nullptr;
+    QDoubleSpinBox* gainSpinDb_ = nullptr;
+};
+
+
+
 // 简单封装：启动一个进程并捕获输出
 static bool runAndCapture(const QString& program,
                           const QStringList& args,
@@ -176,14 +241,17 @@ MainWindow::MainWindow(QWidget *parent)
     ui->deviceSplitter->setStretchFactor(1, 2);
 
     // ====== 设备列表：QTableWidget，3 列 ======
-    ui->deviceList->setColumnCount(3);
+    // ====== 设备列表：QTableWidget，4 列 ======
+    ui->deviceList->setColumnCount(4);
     ui->deviceList->setHorizontalHeaderLabels(
-        { "设备名称", "设备状态", "功能" });
+        { "设备名称", "设备状态", "修改IP", "配置" });
 
     auto* header = ui->deviceList->horizontalHeader();
     header->setSectionResizeMode(0, QHeaderView::Stretch);          // 名称：拉伸
     header->setSectionResizeMode(1, QHeaderView::ResizeToContents); // 状态
-    header->setSectionResizeMode(2, QHeaderView::ResizeToContents); // 按钮
+    header->setSectionResizeMode(2, QHeaderView::ResizeToContents); // 修改IP按钮
+    header->setSectionResizeMode(3, QHeaderView::ResizeToContents); // 配置按钮
+
 
     ui->deviceList->setSelectionBehavior(QAbstractItemView::SelectRows);
     ui->deviceList->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -650,14 +718,24 @@ void MainWindow::updateTableDevice(const QString& sn)
     stItem->setForeground(Qt::black);  // 字体颜色，用黑色即可
     // 不再 setBackground()，避免被选中状态覆盖
 
-    // 第 2 列：功能按钮（修改 IP）
+    // 第 2 列：修改 IP 按钮
     if (!ui->deviceList->cellWidget(row, 2)) {
-        auto* btn = new QPushButton(QStringLiteral("修改IP"), ui->deviceList);
-        connect(btn, &QPushButton::clicked, this, [this, sn] {
+        auto* btnIp = new QPushButton(QStringLiteral("修改IP"), ui->deviceList);
+        connect(btnIp, &QPushButton::clicked, this, [this, sn] {
             changeCameraIpForSn(sn);
         });
-        ui->deviceList->setCellWidget(row, 2, btn);
+        ui->deviceList->setCellWidget(row, 2, btnIp);
     }
+
+    // 第 3 列：配置（曝光/增益）按钮
+    if (!ui->deviceList->cellWidget(row, 3)) {
+        auto* btnCfg = new QPushButton(QStringLiteral("配置"), ui->deviceList);
+        connect(btnCfg, &QPushButton::clicked, this, [this, sn] {
+            configCameraForSn(sn);
+        });
+        ui->deviceList->setCellWidget(row, 3, btnCfg);
+    }
+
 
     updateCameraButtons();
 }
@@ -1004,6 +1082,57 @@ void MainWindow::changeCameraIpForSn(const QString& sn)
     // 启动超时计时（例如 15 秒）
     if (ipChangeTimer_)
         ipChangeTimer_->start(15000);
+}
+void MainWindow::configCameraForSn(const QString& sn)
+{
+    const QString trimmedSn = sn.trimmed();
+    if (trimmedSn.isEmpty()) {
+        QMessageBox::warning(this, tr("提示"), tr("请先选择一个设备 ID (SN)。"));
+        return;
+    }
+
+    // 确保这个 SN 当前是已知设备（有 IP）
+    if (!mgr_) {
+        QMessageBox::warning(this, tr("提示"), tr("设备管理器未启动。"));
+        return;
+    }
+
+    DeviceInfo dev;
+    if (!mgr_->getDevice(trimmedSn, dev)) {
+        QMessageBox::warning(this, tr("提示"),
+                             tr("未找到设备 [%1]，请确认设备在线。").arg(trimmedSn));
+        return;
+    }
+
+    // 弹出参数对话框
+    CameraParamDialog dlg(trimmedSn, this);
+    if (dlg.exec() != QDialog::Accepted) {
+        return; // 用户取消
+    }
+
+    const int    exposureUs = dlg.exposureUs();  // 0~40000 us
+    const double gainDb     = dlg.gainDb();      // 0~48 dB
+
+    // 通过 UdpDeviceManager 发送 CMD_SET_CAMERA
+    const qint64 n = mgr_->sendSetCameraParams(trimmedSn, exposureUs, gainDb);
+
+    qDebug() << "[UI] sendSetCameraParams ret=" << n
+             << "SN=" << trimmedSn
+             << "expUs=" << exposureUs
+             << "gainDb=" << gainDb;
+
+    if (n <= 0) {
+        QMessageBox::warning(this, tr("提示"),
+                             tr("发送曝光/增益设置命令失败（ret=%1）。").arg(n));
+        return;
+    }
+
+    // 可选：打印到 messageBox
+    QString msg = tr("已发送配置命令：SN=%1 曝光=%2 us 增益=%3 dB")
+                      .arg(trimmedSn)
+                      .arg(exposureUs)
+                      .arg(gainDb, 0, 'f', 1);
+    getMSG(msg);
 }
 
 void MainWindow::onMediaMtxLogLine(const QString& s)

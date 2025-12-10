@@ -40,6 +40,8 @@ public:
     quint16 defaultCmdPort() const { return defaultCmdPort_; }
 
     qint64 sendSetIp(const QString& sn, const QString& ip, int mask, const QString& iface = QString());
+    // 发送相机曝光/增益设置命令到指定 SN 的下位机
+    qint64 sendSetCameraParams(const QString& sn,int exposureUs, double gainDb);
 
 
 signals:

@@ -296,6 +296,43 @@ qint64 UdpDeviceManager::sendSetIp(const QString& sn, const QString& ip, int mas
     return n;
 }
 
+qint64 UdpDeviceManager::sendSetCameraParams(const QString& sn,
+                                             int exposureUs,
+                                             double gainDb)
+{
+    // 1) 构造命令 payload
+    QByteArray payload = "CMD_SET_CAMERA sn=" + sn.toUtf8()
+                         + " exposure_us=" + QByteArray::number(exposureUs)
+                         + " gain_db=" + QByteArray::number(gainDb, 'f', 2);
+
+    // 2) 像 CMD_SET_IP 一样：查 SN → IP，然后通过发现口单播到 listenPort_(7777)
+    DeviceInfo dev;
+    if (!getDevice(sn, dev)) {
+        emit logLine(QString("[UDP-Mgr] set-camera fail: SN '%1' not found in devices_").arg(sn));
+        return -1;
+    }
+
+    if (!sock_) {
+        emit logLine("[UDP-Mgr] set-camera fail: DISC socket not started");
+        return -2;
+    }
+
+    const QHostAddress dstIp   = dev.ip;
+    const quint16      dstPort = listenPort_;   // 和 CMD_SET_IP 一样，发到 7777
+
+    const qint64 n = sock_->writeDatagram(payload, dstIp, dstPort);
+
+    emit logLine(QString("[UDP-Mgr] CMD_SET_CAMERA SN=%1 exposure_us=%2 gain_db=%3 bytes=%4 -> %5:%6")
+                     .arg(sn)
+                     .arg(exposureUs)
+                     .arg(gainDb, 0, 'f', 2)
+                     .arg(static_cast<qlonglong>(n))
+                     .arg(dstIp.toString())
+                     .arg(dstPort));
+
+    return n;
+}
+
 
 
 

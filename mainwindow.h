@@ -138,7 +138,7 @@ private slots:
     void on_action_triggered();
 
     void getMSG(const QString& sn);
-
+     void configCameraForSn(const QString& sn);   // ★ 新增
 protected:
     void closeEvent(QCloseEvent* event) override;
 

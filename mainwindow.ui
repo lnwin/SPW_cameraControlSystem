@@ -33,7 +33,7 @@
          <widget class="QSplitter" name="deviceSplitter">
           <property name="minimumSize">
            <size>
-            <width>315</width>
+            <width>350</width>
             <height>0</height>
            </size>
           </property>
@@ -49,7 +49,7 @@
           <widget class="QWidget" name="panelDeviceList" native="true">
            <property name="maximumSize">
             <size>
-             <width>315</width>
+             <width>350</width>
              <height>16777215</height>
             </size>
            </property>
