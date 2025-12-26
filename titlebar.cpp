@@ -16,7 +16,7 @@ TitleBar::TitleBar(QWidget *parent)
 
 
 
-    m_titleLabel = new QLabel("TurbidCamera - 舟山渊视科技");
+    m_titleLabel = new QLabel("TurbidCamera - 浑水相机控制系统V1.0");
     m_titleLabel->setStyleSheet("color: white; font-size:14px; padding-left:30px;");
     QPushButton *btnMin = new QPushButton("-");
     QPushButton *btnMax = new QPushButton("□");

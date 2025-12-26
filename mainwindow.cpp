@@ -38,23 +38,16 @@ public:
             "}"
             );
 
-        // 曝光：单位 us，0 ~ 40000
-        expSpinUs_ = new QSpinBox(this);
-        expSpinUs_->setRange(0, 40000);
-        expSpinUs_->setSingleStep(100);
-        // 初始值：用上一次的值，没有则默认 40000
-        expSpinUs_->setValue(s_lastExpUs_);
 
         // 增益：单位 dB，0 ~ 40
         gainSpinDb_ = new QDoubleSpinBox(this);
-        gainSpinDb_->setRange(0.0, 40.0);
+        gainSpinDb_->setRange(0.0, 7.0);
         gainSpinDb_->setDecimals(1);
         gainSpinDb_->setSingleStep(0.5);
         // 初始值：用上一次的值，没有则默认 0
         gainSpinDb_->setValue(s_lastGainDb_);
 
-        auto *form = new QFormLayout;
-        form->addRow(tr("曝光时间："), expSpinUs_);
+        auto *form = new QFormLayout;      
         form->addRow(tr("增益："),     gainSpinDb_);
 
         auto *mainLayout = new QVBoxLayout;
@@ -69,21 +62,14 @@ public:
         setLayout(mainLayout);
     }
 
-    int exposureUs() const
-    {
-        // 再保险一次，强制限制 0~40000
-        int v = expSpinUs_->value();
-        if (v < 0) v = 0;
-        if (v > 40000) v = 40000;
-        return v;
-    }
+
 
     double gainDb() const
     {
         // 再保险一次，强制限制 0~40
         double g = gainSpinDb_->value();
         if (g < 0.0) g = 0.0;
-        if (g > 40.0) g = 40.0;
+        if (g > 7.0) g = 7.0;
         return g;
     }
 
@@ -91,34 +77,30 @@ protected:
     void accept() override
     {
         // 这里统一做一次“超过上限就按上限”的处理，并保存为下次默认值
-        int exp = expSpinUs_->value();
+
         double gain = gainSpinDb_->value();
 
-        if (exp > 40000) exp = 40000;
-        if (exp < 0)     exp = 0;
-        if (gain > 40.0) gain = 40.0;
+
+        if (gain > 7.0) gain = 7.0;
         if (gain < 0.0)  gain = 0.0;
 
-        expSpinUs_->setValue(exp);
+
         gainSpinDb_->setValue(gain);
 
-        // 更新静态“上一次设置值”
-        s_lastExpUs_  = exp;
         s_lastGainDb_ = gain;
 
         QDialog::accept();
     }
 
 private:
-    QSpinBox*       expSpinUs_  = nullptr;
+
     QDoubleSpinBox* gainSpinDb_ = nullptr;
 
     // 记住上一次的设置值（所有实例共享）
-    static int    s_lastExpUs_;
     static double s_lastGainDb_;
 };
-int    CameraParamDialog::s_lastExpUs_  = 40000;  // 初始默认 40000us
-double CameraParamDialog::s_lastGainDb_ = 0.0;    // 初始默认 0dB
+
+double CameraParamDialog::s_lastGainDb_ = 5.0;    // 初始默认 0dB
 
 
 // 简单封装：启动一个进程并捕获输出
@@ -1154,16 +1136,11 @@ void MainWindow::configCameraForSn(const QString& sn)
         return; // 用户取消
     }
 
-    const int    exposureUs = dlg.exposureUs();  // 0~40000 us，内部已经做过限制
+
     const double gainDb     = dlg.gainDb();      // 0~40 dB，内部已经做过限制
 
     // 通过 UdpDeviceManager 发送 CMD_SET_CAMERA
-    const qint64 n = mgr_->sendSetCameraParams(trimmedSn, exposureUs, gainDb);
-
-    qDebug() << "[UI] sendSetCameraParams ret=" << n
-             << "SN=" << trimmedSn
-             << "expUs=" << exposureUs
-             << "gainDb=" << gainDb;
+    const qint64 n = mgr_->sendSetCameraParams(trimmedSn, 0, gainDb);
 
     if (n <= 0) {
         QMessageBox::warning(this, tr("提示"),
@@ -1172,9 +1149,8 @@ void MainWindow::configCameraForSn(const QString& sn)
     }
 
     // 可选：打印到 messageBox
-    QString msg = tr("已发送配置命令：SN=%1 曝光=%2 us 增益=%3 dB")
-                      .arg(trimmedSn)
-                      .arg(exposureUs)
+    QString msg = tr("已发送配置命令：SN=%1 增益=%2 dB")
+                      .arg(trimmedSn)                    
                       .arg(gainDb, 0, 'f', 1);
     getMSG(msg);
 }
