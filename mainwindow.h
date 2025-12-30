@@ -29,27 +29,15 @@
 #include "TitleBar.h"
 #include "systemsetting.h"
 #include "videorecorder.h"
-
+#include <QThread>
+#include "colortuneworker.h"
 // 你工程里应该已有：UdpDeviceManager / DeviceInfo 定义（通常在 udpserver.h 或别处）
 // 若不在 udpserver.h，请把对应头文件 include 过来。
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
-// ====== Color tune (FAST cached LUT) ======
-struct LabABFixed {
-    float ga = 1.0f;
-    float gb = 1.0f;
-    float da = 0.0f;
-    float db = 0.0f;
-    float abShiftClamp = 18.0f;
 
-    float chromaGain  = 1.0f;
-    float chromaGamma = 1.0f;
-    float chromaMax   = 130.0f;
-
-    bool  keepL = true;
-};
 class RtspViewerQt;
 
 class MainWindow : public QMainWindow
@@ -82,16 +70,18 @@ private slots:
 
     void getMSG(const QString& sn);
     void configCameraForSn(const QString& sn);
-
+    void onColorTunedFrame(const QImage& img);
 signals:
     void sendFrame2Record(const QImage& img);
     void sendFrame2Capture(const QImage& img);
     void startRecord();
     void stopRecord();
+    void sendFrameToColorTune(const QImage& img);
 
 private:
     Ui::MainWindow *ui = nullptr;
-
+    QThread* colorThread_ = nullptr;
+    ColorTuneWorker* colorWorker_ = nullptr;
     // ===== RTSP viewer =====
     RtspViewerQt* viewer_ = nullptr;
 

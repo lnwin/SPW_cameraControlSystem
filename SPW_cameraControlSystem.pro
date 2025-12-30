@@ -11,6 +11,7 @@ CONFIG += c++17
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
+    colortuneworker.cpp \
     main.cpp \
     mainwindow.cpp \
     restipclient.cpp \
@@ -21,6 +22,7 @@ SOURCES += \
     videorecorder.cpp
 
 HEADERS += \
+    colortuneworker.h \
     mainwindow.h \
     myStruct.h \
     restipclient.h \

@@ -259,6 +259,33 @@ MainWindow::MainWindow(QWidget *parent)
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowSystemMenuHint);
 
     ui->setupUi(this);
+    // ====== ColorTune worker thread ======
+    qRegisterMetaType<QImage>("QImage"); // 保守起见（跨线程传递 QImage）
+
+    colorWorker_ = new ColorTuneWorker();
+    colorThread_ = new QThread(this);
+    colorWorker_->moveToThread(colorThread_);
+    colorThread_->start();
+
+    // 参数下发（和你原来 tuneParams_ 默认值保持一致）
+    colorWorker_->setEnabled(enableColorTune_);
+    colorWorker_->setParams(tuneParams_);
+    colorWorker_->setMeanStride(meanStride_);
+    colorWorker_->setCorrRebuildThr(corrRebuildThr_);
+
+    // 输入帧 -> worker
+    connect(this, &MainWindow::sendFrameToColorTune,
+            colorWorker_, &ColorTuneWorker::onFrameIn,
+            Qt::QueuedConnection);
+
+    // worker 输出 -> UI
+    connect(colorWorker_, &ColorTuneWorker::frameOut,
+            this, &MainWindow::onColorTunedFrame,
+            Qt::QueuedConnection);
+
+    // 清理
+    connect(colorThread_, &QThread::finished, colorWorker_, &QObject::deleteLater);
+
     titleForm();
 
     // label 自适应
@@ -424,6 +451,13 @@ MainWindow::~MainWindow()
         viewer_ = nullptr;
     }
     stopMediaMTX();
+    if (colorThread_) {
+        colorThread_->quit();
+        colorThread_->wait(1000);
+        colorThread_ = nullptr;
+        colorWorker_ = nullptr; // worker 已通过 finished->deleteLater 清理
+    }
+
     delete ui;
 }
 
@@ -454,28 +488,10 @@ void MainWindow::titleForm()
 // -------------------- RTSP frame --------------------
 void MainWindow::onFrame(const QImage& img)
 {
-    if (!ui->label) return;
+    if (!ui || !ui->label) return;
 
-    QImage showImg = enableColorTune_ ? applyColorTuneFast(img) : img;
-
-    QPixmap pm = QPixmap::fromImage(showImg).scaled(
-        ui->label->size(),
-        Qt::IgnoreAspectRatio,
-        Qt::SmoothTransformation);
-
-    ui->label->setPixmap(pm);
-
-    if (!previewActive_) {
-        previewActive_ = true;
-        updateCameraButtons();
-    }
-
-    if (isRecording_) emit sendFrame2Record(showImg);
-
-    if (iscapturing_) {
-        emit sendFrame2Capture(showImg);
-        iscapturing_ = false;
-    }
+    // UI线程只负责把帧送到 worker（极轻）
+    emit sendFrameToColorTune(img);
 }
 
 // -------------------- messages --------------------
@@ -1177,4 +1193,28 @@ QImage MainWindow::applyColorTuneFast(const QImage& in)
     cv::cvtColor(lab_u8, out_bgr, cv::COLOR_Lab2BGR);
 
     return Bgr8ToQImage(out_bgr);
+}
+void MainWindow::onColorTunedFrame(const QImage& showImg)
+{
+    if (!ui || !ui->label) return;
+    if (showImg.isNull()) return;
+
+    QPixmap pm = QPixmap::fromImage(showImg).scaled(
+        ui->label->size(),
+        Qt::IgnoreAspectRatio,
+        Qt::SmoothTransformation);
+
+    ui->label->setPixmap(pm);
+
+    if (!previewActive_) {
+        previewActive_ = true;
+        updateCameraButtons();
+    }
+
+    if (isRecording_) emit sendFrame2Record(showImg);
+
+    if (iscapturing_) {
+        emit sendFrame2Capture(showImg);
+        iscapturing_ = false;
+    }
 }

@@ -1,0 +1,87 @@
+#include "colortuneworker.h"
+
+ColorTuneWorker::ColorTuneWorker(QObject* parent)
+    : QObject(parent)
+{
+}
+
+void ColorTuneWorker::setEnabled(bool en) { enable_ = en; }
+void ColorTuneWorker::setParams(const LabABFixed& p) { tuneParams_ = p; lutValid_ = false; }
+void ColorTuneWorker::setMeanStride(int s) { meanStride_ = s; }
+void ColorTuneWorker::setCorrRebuildThr(float thr) { corrRebuildThr_ = thr; }
+
+void ColorTuneWorker::onFrameIn(const QImage& img)
+{
+    if (img.isNull()) return;
+
+    QElapsedTimer t;
+    t.start();
+
+    if (!enable_) {
+        emit frameOut(img);
+        const qint64 ms = t.elapsed();
+        qDebug().noquote() << QString("[ColorTune] bypass  %1 ms").arg(ms);
+        return;
+    }
+
+    QImage out = applyColorTuneFast_locked(img);
+    emit frameOut(out);
+
+    const qint64 ms = t.elapsed();
+    qDebug().noquote() << QString("[ColorTune] one-frame %1 ms  (w=%2 h=%3)")
+                              .arg(ms).arg(img.width()).arg(img.height());
+}
+
+
+QImage ColorTuneWorker::applyColorTuneFast_locked(const QImage& in)
+{
+    // 1) 输入：尽量零拷贝 wrap
+    QImage rgbIn = in;
+    if (rgbIn.format() != QImage::Format_RGB888) {
+        rgbIn = rgbIn.convertToFormat(QImage::Format_RGB888); // 仅在格式不对时发生拷贝
+    }
+
+    const int w = rgbIn.width();
+    const int h = rgbIn.height();
+
+    cv::Mat rgb_in(h, w, CV_8UC3, (void*)rgbIn.constBits(), rgbIn.bytesPerLine());
+
+    // 2) 复用 lab buffer
+    lab_u8_.create(h, w, CV_8UC3);
+
+    // 3) 颜色转换：RGB -> Lab（少一次 BGR 往返）
+    cv::cvtColor(rgb_in, lab_u8_, cv::COLOR_RGB2Lab);
+
+    // 4) 计算 meanA/meanB
+    float meanA = 128.f, meanB = 128.f;
+    meanAB_stride(lab_u8_, meanStride_, meanA, meanB);
+
+    const float kNeutral  = 0.45f;
+    const float corrClamp = 10.0f;
+    float corrA = (128.0f - meanA) * kNeutral;
+    float corrB = (128.0f - meanB) * kNeutral;
+    corrA = std::clamp(corrA, -corrClamp, corrClamp);
+    corrB = std::clamp(corrB, -corrClamp, corrClamp);
+
+    if (!lutValid_ ||
+        std::fabs(corrA - lastCorrA_) > corrRebuildThr_ ||
+        std::fabs(corrB - lastCorrB_) > corrRebuildThr_)
+    {
+        buildAB_LUT(abLut_, tuneParams_, corrA, corrB);
+        lastCorrA_ = corrA;
+        lastCorrB_ = corrB;
+        lutValid_  = true;
+    }
+
+    // 5) LUT：原地改 AB（效果不变）
+    applyAB_LUT_inplace(lab_u8_, abLut_);
+
+    // 6) 输出：直接创建 QImage，让 cvtColor 写进去（避免 out.copy）
+    QImage out(w, h, QImage::Format_RGB888);
+    cv::Mat rgb_out(h, w, CV_8UC3, (void*)out.bits(), out.bytesPerLine());
+
+    // 7) Lab -> RGB
+    cv::cvtColor(lab_u8_, rgb_out, cv::COLOR_Lab2RGB);
+
+    return out; // out 自己持有内存，无需 copy
+}
