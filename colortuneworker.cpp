@@ -3,6 +3,14 @@
 ColorTuneWorker::ColorTuneWorker(QObject* parent)
     : QObject(parent)
 {
+    // 预热：按 corrA=corrB=0 构建一次 LUT，避免首帧 95ms 尖峰
+    buildAB_LUT(abLut_, tuneParams_, 0.0f, 0.0f);
+    lastCorrA_ = 0.0f;
+    lastCorrB_ = 0.0f;
+    lutValid_  = true;
+    cv::setUseOptimized(true);
+    cv::setNumThreads(std::max(1u, std::thread::hardware_concurrency()));
+
 }
 
 void ColorTuneWorker::setEnabled(bool en) { enable_ = en; }
@@ -14,22 +22,22 @@ void ColorTuneWorker::onFrameIn(const QImage& img)
 {
     if (img.isNull()) return;
 
-    QElapsedTimer t;
-    t.start();
+    // QElapsedTimer t;
+    // t.start();
 
-    if (!enable_) {
-        emit frameOut(img);
-        const qint64 ms = t.elapsed();
-        qDebug().noquote() << QString("[ColorTune] bypass  %1 ms").arg(ms);
-        return;
-    }
+    // if (!enable_) {
+    //     emit frameOut(img);
+    //     const qint64 ms = t.elapsed();
+    //     qDebug().noquote() << QString("[ColorTune] bypass  %1 ms").arg(ms);
+    //     return;
+    // }
 
     QImage out = applyColorTuneFast_locked(img);
     emit frameOut(out);
 
-    const qint64 ms = t.elapsed();
-    qDebug().noquote() << QString("[ColorTune] one-frame %1 ms  (w=%2 h=%3)")
-                              .arg(ms).arg(img.width()).arg(img.height());
+    // const qint64 ms = t.elapsed();
+    // qDebug().noquote() << QString("[ColorTune] one-frame %1 ms  (w=%2 h=%3)")
+    //                           .arg(ms).arg(img.width()).arg(img.height());
 }
 
 

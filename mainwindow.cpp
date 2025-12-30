@@ -36,107 +36,6 @@ static bool isUsableIPv4(const QHostAddress& ip) {
     return true;
 }
 
-// -------------------- QImage <-> cv::Mat --------------------
-static inline cv::Mat QImageToBgr8(const QImage& img)
-{
-    QImage im = img.convertToFormat(QImage::Format_RGB888);
-    cv::Mat rgb(im.height(), im.width(), CV_8UC3, (void*)im.bits(), im.bytesPerLine());
-    cv::Mat bgr;
-    cv::cvtColor(rgb, bgr, cv::COLOR_RGB2BGR);
-    return bgr.clone();
-}
-
-static inline QImage Bgr8ToQImage(const cv::Mat& bgr)
-{
-    cv::Mat rgb;
-    cv::cvtColor(bgr, rgb, cv::COLOR_BGR2RGB);
-    QImage out((const uchar*)rgb.data, rgb.cols, rgb.rows, (int)rgb.step, QImage::Format_RGB888);
-    return out.copy();
-}
-
-// -------------------- meanAB stride --------------------
-static inline void meanAB_stride(const cv::Mat& lab_u8, int stride, float& meanA, float& meanB)
-{
-    const int rows = lab_u8.rows, cols = lab_u8.cols;
-    uint64_t sumA = 0, sumB = 0, cnt = 0;
-    if (stride < 1) stride = 1;
-
-    for (int y = 0; y < rows; y += stride) {
-        const cv::Vec3b* row = lab_u8.ptr<cv::Vec3b>(y);
-        for (int x = 0; x < cols; x += stride) {
-            sumA += row[x][1];
-            sumB += row[x][2];
-            cnt++;
-        }
-    }
-    if (!cnt) { meanA = 128.f; meanB = 128.f; return; }
-    meanA = (float)sumA / (float)cnt;
-    meanB = (float)sumB / (float)cnt;
-}
-
-// -------------------- build / apply LUT --------------------
-static inline void buildAB_LUT(std::vector<uint16_t>& lut,
-                               const LabABFixed& p,
-                               float corrA, float corrB)
-{
-    lut.resize(65536);
-    const float clampShift = p.abShiftClamp;
-    const bool doChroma = (p.chromaGain != 1.0f || p.chromaGamma != 1.0f);
-
-    for (int au=0; au<256; ++au) {
-        for (int bu=0; bu<256; ++bu) {
-            const float a = (float)au;
-            const float b = (float)bu;
-
-            float a0 = (a - 128.0f) + corrA;
-            float b0 = (b - 128.0f) + corrB;
-
-            float a_lin = a0 * p.ga + p.da;
-            float b_lin = b0 * p.gb + p.db;
-
-            if (doChroma) {
-                const float eps = 1e-6f;
-                float r = std::sqrt(a_lin*a_lin + b_lin*b_lin) + eps;
-                float rn = std::min(r / 128.0f, 1.5f);
-                float rn2 = std::pow(std::max(rn, 0.0f), p.chromaGamma) * p.chromaGain;
-                float r2 = rn2 * 128.0f;
-                r2 = std::min(r2, p.chromaMax);
-                float scale = r2 / r;
-                a_lin *= scale;
-                b_lin *= scale;
-            }
-
-            float a2 = a_lin + 128.0f;
-            float b2 = b_lin + 128.0f;
-
-            float da2 = std::clamp(a2 - a, -clampShift, clampShift);
-            float db2 = std::clamp(b2 - b, -clampShift, clampShift);
-            a2 = a + da2;
-            b2 = b + db2;
-
-            int ai = (int)std::lround(std::clamp(a2, 0.f, 255.f));
-            int bi = (int)std::lround(std::clamp(b2, 0.f, 255.f));
-
-            lut[(au<<8) | bu] = (uint16_t)((ai & 255) | ((bi & 255) << 8));
-        }
-    }
-}
-
-static inline void applyAB_LUT_inplace(cv::Mat& lab_u8, const std::vector<uint16_t>& lut)
-{
-    const int rows = lab_u8.rows, cols = lab_u8.cols;
-    for (int y=0; y<rows; ++y) {
-        cv::Vec3b* row = lab_u8.ptr<cv::Vec3b>(y);
-        for (int x=0; x<cols; ++x) {
-            const uint8_t a = row[x][1];
-            const uint8_t b = row[x][2];
-            const uint16_t v = lut[(a<<8) | b];
-            row[x][1] = (uint8_t)(v & 255);
-            row[x][2] = (uint8_t)(v >> 8);
-        }
-    }
-}
-
 // -------------------- Dialog: gain only --------------------
 class CameraParamDialog : public QDialog
 {
@@ -260,32 +159,23 @@ MainWindow::MainWindow(QWidget *parent)
 
     ui->setupUi(this);
     // ====== ColorTune worker thread ======
-    qRegisterMetaType<QImage>("QImage"); // 保守起见（跨线程传递 QImage）
+    // ---------- color tune defaults (先设默认值) ----------
+    enableColorTune_ = true;
+    tuneParams_.ga = 1.00f;
+    tuneParams_.gb = 1.00f;
+    tuneParams_.da = +2.0f;
+    tuneParams_.db = +4.0f;
+    tuneParams_.chromaGain  = 1.45f;
+    tuneParams_.chromaGamma = 0.80f;
+    tuneParams_.chromaMax   = 145.0f;
+    tuneParams_.abShiftClamp = 55.0f;
+    tuneParams_.keepL = true;
 
-    colorWorker_ = new ColorTuneWorker();
-    colorThread_ = new QThread(this);
-    colorWorker_->moveToThread(colorThread_);
-    colorThread_->start();
+    meanStride_ = 4;
+    corrRebuildThr_ = 0.5f;
 
-    // 参数下发（和你原来 tuneParams_ 默认值保持一致）
-    colorWorker_->setEnabled(enableColorTune_);
-    colorWorker_->setParams(tuneParams_);
-    colorWorker_->setMeanStride(meanStride_);
-    colorWorker_->setCorrRebuildThr(corrRebuildThr_);
-
-    // 输入帧 -> worker
-    connect(this, &MainWindow::sendFrameToColorTune,
-            colorWorker_, &ColorTuneWorker::onFrameIn,
-            Qt::QueuedConnection);
-
-    // worker 输出 -> UI
-    connect(colorWorker_, &ColorTuneWorker::frameOut,
-            this, &MainWindow::onColorTunedFrame,
-            Qt::QueuedConnection);
-
-    // 清理
-    connect(colorThread_, &QThread::finished, colorWorker_, &QObject::deleteLater);
-
+    // ---------- start ColorTune thread ----------
+    startColorTuneThread();
     titleForm();
 
     // label 自适应
@@ -412,26 +302,6 @@ MainWindow::MainWindow(QWidget *parent)
     ipChangeTimer_->setSingleShot(true);
     connect(ipChangeTimer_, &QTimer::timeout,
             this, &MainWindow::onIpChangeTimeout);
-
-    // color tune defaults
-    enableColorTune_ = true;
-    tuneParams_.ga = 1.00f;
-    tuneParams_.gb = 1.00f;
-    tuneParams_.da = +2.0f;
-    tuneParams_.db = +4.0f;
-    tuneParams_.chromaGain  = 1.45f;
-    tuneParams_.chromaGamma = 0.80f;
-    tuneParams_.chromaMax   = 145.0f;
-    tuneParams_.abShiftClamp = 55.0f;
-    tuneParams_.keepL = true;
-
-    meanStride_ = 4;
-    corrRebuildThr_ = 0.5f;
-    lutValid_ = false;
-    lastCorrA_ = 1e9f;
-    lastCorrB_ = 1e9f;
-    abLut_.clear();
-
     // system ip + mediamtx
     updateSystemIP();
     startMediaMTX();
@@ -451,14 +321,48 @@ MainWindow::~MainWindow()
         viewer_ = nullptr;
     }
     stopMediaMTX();
-    if (colorThread_) {
-        colorThread_->quit();
-        colorThread_->wait(1000);
-        colorThread_ = nullptr;
-        colorWorker_ = nullptr; // worker 已通过 finished->deleteLater 清理
-    }
+    stopColorTuneThread();   // 用统一封装
 
     delete ui;
+}
+void MainWindow::startColorTuneThread()
+{
+    if (colorThread_) return;
+
+    qRegisterMetaType<QImage>("QImage");
+
+    colorWorker_ = new ColorTuneWorker();
+    colorThread_ = new QThread(this);
+    colorWorker_->moveToThread(colorThread_);
+
+    connect(colorThread_, &QThread::finished, colorWorker_, &QObject::deleteLater);
+
+    connect(this, &MainWindow::sendFrameToColorTune,
+            colorWorker_, &ColorTuneWorker::onFrameIn,
+            Qt::QueuedConnection);
+
+    connect(colorWorker_, &ColorTuneWorker::frameOut,
+            this, &MainWindow::onColorTunedFrame,
+            Qt::QueuedConnection);
+
+    colorThread_->start();
+
+    // 下发当前参数（注意：这里仍在 UI 线程调用 worker 方法，不一定线程安全）
+    // 最稳妥：把这些 setXXX 也做成 slots + QueuedConnection
+    // 但如果你 setXXX 只在启动阶段调用，通常也可接受。
+    colorWorker_->setEnabled(enableColorTune_);
+    colorWorker_->setParams(tuneParams_);
+    colorWorker_->setMeanStride(meanStride_);
+    colorWorker_->setCorrRebuildThr(corrRebuildThr_);
+}
+
+void MainWindow::stopColorTuneThread()
+{
+    if (!colorThread_) return;
+    colorThread_->quit();
+    colorThread_->wait(1000);
+    colorThread_ = nullptr;
+    colorWorker_ = nullptr;
 }
 
 void MainWindow::closeEvent(QCloseEvent* event)
@@ -469,6 +373,7 @@ void MainWindow::closeEvent(QCloseEvent* event)
         viewer_ = nullptr;
     }
     stopMediaMTXBlocking();
+    stopColorTuneThread();
     event->accept();
 }
 
@@ -1156,44 +1061,7 @@ void MainWindow::clearDeviceInfoPanel()
     updateDeviceInfoPanel(nullptr, false);
 }
 
-// -------------------- Color tune --------------------
-QImage MainWindow::applyColorTuneFast(const QImage& in)
-{
-    if (!enableColorTune_) return in;
-    if (in.isNull()) return in;
 
-    cv::Mat bgr = QImageToBgr8(in);
-
-    cv::Mat lab_u8;
-    cv::cvtColor(bgr, lab_u8, cv::COLOR_BGR2Lab);
-
-    float meanA=128.f, meanB=128.f;
-    meanAB_stride(lab_u8, meanStride_, meanA, meanB);
-
-    const float kNeutral  = 0.45f;
-    const float corrClamp = 10.0f;
-    float corrA = (128.0f - meanA) * kNeutral;
-    float corrB = (128.0f - meanB) * kNeutral;
-    corrA = std::clamp(corrA, -corrClamp, corrClamp);
-    corrB = std::clamp(corrB, -corrClamp, corrClamp);
-
-    if (!lutValid_ ||
-        std::fabs(corrA - lastCorrA_) > corrRebuildThr_ ||
-        std::fabs(corrB - lastCorrB_) > corrRebuildThr_)
-    {
-        buildAB_LUT(abLut_, tuneParams_, corrA, corrB);
-        lastCorrA_ = corrA;
-        lastCorrB_ = corrB;
-        lutValid_  = true;
-    }
-
-    applyAB_LUT_inplace(lab_u8, abLut_);
-
-    cv::Mat out_bgr;
-    cv::cvtColor(lab_u8, out_bgr, cv::COLOR_Lab2BGR);
-
-    return Bgr8ToQImage(out_bgr);
-}
 void MainWindow::onColorTunedFrame(const QImage& showImg)
 {
     if (!ui || !ui->label) return;

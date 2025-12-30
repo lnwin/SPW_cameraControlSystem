@@ -182,5 +182,7 @@ private:
     // 复用缓冲，避免每帧分配
     cv::Mat lab_u8_;     // CV_8UC3
     cv::Mat rgb_out_;    // wrap QImage buffer（不持久拥有）
+    // ===== 复用缓冲：避免每帧分配 =====
+
 
 };

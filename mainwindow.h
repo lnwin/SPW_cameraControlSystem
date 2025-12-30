@@ -7,7 +7,6 @@
 #include <QtNetwork/QHostAddress>
 #include <QCloseEvent>
 #include <QProgressDialog>
-#include <QElapsedTimer>
 #include <QMessageBox>
 #include <QTimer>
 #include <QInputDialog>
@@ -18,21 +17,12 @@
 #include <QLabel>
 #include <QThread>
 
-#include <opencv2/opencv.hpp>
-
-#include <vector>
-#include <cstdint>
-#include <cmath>
-
 #include "rtspviewerqt.h"
-#include "udpserver.h"
+#include "udpserver.h"        // UdpDeviceManager / DeviceInfo
 #include "TitleBar.h"
 #include "systemsetting.h"
 #include "videorecorder.h"
-#include <QThread>
-#include "colortuneworker.h"
-// 你工程里应该已有：UdpDeviceManager / DeviceInfo 定义（通常在 udpserver.h 或别处）
-// 若不在 udpserver.h，请把对应头文件 include 过来。
+#include "colortuneworker.h"  // LabABFixed + ColorTuneWorker
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -47,13 +37,12 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
-
-
 protected:
     void closeEvent(QCloseEvent* event) override;
 
 private slots:
-    void onFrame(const QImage& img);
+    void onFrame(const QImage& img);              // RTSP frame from viewer
+    void onColorTunedFrame(const QImage& img);    // processed frame from worker
 
     void updateSystemIP();
     void onSnUpdatedForIpChange(const QString& sn);
@@ -70,73 +59,74 @@ private slots:
 
     void getMSG(const QString& sn);
     void configCameraForSn(const QString& sn);
-    void onColorTunedFrame(const QImage& img);
+
 signals:
     void sendFrame2Record(const QImage& img);
     void sendFrame2Capture(const QImage& img);
     void startRecord();
     void stopRecord();
-    void sendFrameToColorTune(const QImage& img);
+
+    void sendFrameToColorTune(const QImage& img); // UI -> worker
 
 private:
     Ui::MainWindow *ui = nullptr;
-    QThread* colorThread_ = nullptr;
+
+    // ===== ColorTune thread =====
+    QThread*        colorThread_ = nullptr;
     ColorTuneWorker* colorWorker_ = nullptr;
+    void startColorTuneThread();
+    void stopColorTuneThread();
+
     // ===== RTSP viewer =====
     RtspViewerQt* viewer_ = nullptr;
 
     // ===== setting/record =====
     systemsetting* mysystemsetting = nullptr;
     VideoRecorder* myVideoRecorder = nullptr;
-    QThread *recThread_ = nullptr;
+    QThread* recThread_ = nullptr;
 
-    QLabel* recIndicator_   = nullptr;
-    QTimer* recBlinkTimer_  = nullptr;
+    QLabel* recIndicator_ = nullptr;
+    QTimer* recBlinkTimer_ = nullptr;
 
-    // ---- MediaMTX 管理 ----
+    // ---- MediaMTX ----
     QProcess* mtxProc_ = nullptr;
     void startMediaMTX();
     void stopMediaMTX();
     bool stopMediaMTXBlocking(int gracefulMs = 3000, int killMs = 2000);
 
-    // 当前配置
+    // ---- host rtsp ----
     QString curBindIp_ = "192.168.194.77";
     int     curRtspPort_ = 10000;
-    int     curRtpBase_  = 10002;
-    QString curPath_     = "mystream";
-
+    QString curPath_ = "mystream";
     QStringList probeWiredIPv4s();
 
     // ---- device manager ----
     UdpDeviceManager* mgr_ = nullptr;
     void upsertCameraSN(const QString& sn);
 
-    // ---- 改相机 IP 相关 ----
-    QString          pendingIpSn_;
-    QString          pendingIpNew_;
-    bool             ipChangeWaiting_ = false;
+    // ---- IP change ----
+    QString pendingIpSn_;
+    QString pendingIpNew_;
+    bool    ipChangeWaiting_ = false;
     QProgressDialog* ipWaitDlg_ = nullptr;
-    QTimer*          ipChangeTimer_ = nullptr;
-    QTimer*          devAliveTimer_ = nullptr;
-
+    QTimer* ipChangeTimer_ = nullptr;
+    QTimer* devAliveTimer_ = nullptr;
     void finishIpChange(bool ok, const QString& msg);
+    void changeCameraIpForSn(const QString& sn);
 
-    // ---- UI 状态 ----
+    // ---- UI selection ----
     QString curSelectedSn_;
     bool    previewActive_ = false;
-
     void updateCameraButtons();
     void onTableSelectionChanged();
     void doStopViewer();
-    void changeCameraIpForSn(const QString& sn);
 
-    // ---- MediaMTX 推流状态 ----
+    // ---- MediaMTX pushing state ----
     struct PathState {
         bool   hasPublisher = false;
-        qint64 lastPubMs    = 0;
+        qint64 lastPubMs = 0;
     };
     QHash<QString, PathState> pathStates_;
-
     void onMediaMtxLogLine(const QString& line);
 
     // ---- info panel ----
@@ -149,24 +139,17 @@ private:
     QIcon iconOffline_;
 
     // ---- record/capture ----
-    bool  isRecording_ = false;
-    bool  iscapturing_ = false;
+    bool isRecording_ = false;
+    bool iscapturing_ = false;
 
     // ---- title ----
     void titleForm();
 
-    // ====== Color tune members (MUST be members, not globals) ======
-    bool enableColorTune_ = true;
+    // ===== Color tune params (UI holds the current config; worker gets synced) =====
+    bool      enableColorTune_ = true;
     LabABFixed tuneParams_;
-    int   meanStride_ = 4;
-    float corrRebuildThr_ = 0.5f;
-
-    std::vector<uint16_t> abLut_;
-    bool  lutValid_ = false;
-    float lastCorrA_ = 1e9f;
-    float lastCorrB_ = 1e9f;
-
-    QImage applyColorTuneFast(const QImage& in);
+    int       meanStride_ = 4;
+    float     corrRebuildThr_ = 0.5f;
 };
 
 #endif // MAINWINDOW_H
