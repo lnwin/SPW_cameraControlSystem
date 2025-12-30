@@ -23,7 +23,7 @@
 #include "systemsetting.h"
 #include "videorecorder.h"
 #include "colortuneworker.h"  // LabABFixed + ColorTuneWorker
-
+#include "ZoomPanImageView.h"  // 新增
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
@@ -70,7 +70,7 @@ signals:
 
 private:
     Ui::MainWindow *ui = nullptr;
-
+    ZoomPanImageView* view_ = nullptr;
     // ===== ColorTune thread =====
     QThread*        colorThread_ = nullptr;
     ColorTuneWorker* colorWorker_ = nullptr;

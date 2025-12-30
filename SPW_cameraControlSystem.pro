@@ -22,6 +22,7 @@ SOURCES += \
     videorecorder.cpp
 
 HEADERS += \
+    ZoomPanImageView.h \
     colortuneworker.h \
     mainwindow.h \
     myStruct.h \

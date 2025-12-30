@@ -158,6 +158,22 @@ MainWindow::MainWindow(QWidget *parent)
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowSystemMenuHint);
 
     ui->setupUi(this);
+
+    // 用可缩放/拖拽的视图替换原 QLabel
+    if (ui->label) {
+        view_ = new ZoomPanImageView(ui->label->parentWidget());
+        view_->setObjectName(ui->label->objectName());   // 可选：保持对象名
+        view_->setZoomRange(1.0, 3.0);
+
+        // 把布局里的 label 替换掉
+        if (auto* lay = ui->label->parentWidget()->layout()) {
+            lay->replaceWidget(ui->label, view_);
+        }
+        ui->label->hide();
+        ui->label->deleteLater();
+        ui->label = nullptr;
+    }
+
     // ====== ColorTune worker thread ======
     // ---------- color tune defaults (先设默认值) ----------
     enableColorTune_ = true;
@@ -185,7 +201,7 @@ MainWindow::MainWindow(QWidget *parent)
     }
 
     // 录制指示灯
-    recIndicator_ = new QLabel(ui->label);
+    recIndicator_ = new QLabel(view_);
     recIndicator_->setFixedSize(32, 32);
     recIndicator_->move(8, 8);
     recIndicator_->setStyleSheet(
@@ -393,11 +409,10 @@ void MainWindow::titleForm()
 // -------------------- RTSP frame --------------------
 void MainWindow::onFrame(const QImage& img)
 {
-    if (!ui || !ui->label) return;
-
-    // UI线程只负责把帧送到 worker（极轻）
+    if (!view_) return;
     emit sendFrameToColorTune(img);
 }
+
 
 // -------------------- messages --------------------
 void MainWindow::getMSG(const QString& sn)
@@ -1064,15 +1079,10 @@ void MainWindow::clearDeviceInfoPanel()
 
 void MainWindow::onColorTunedFrame(const QImage& showImg)
 {
-    if (!ui || !ui->label) return;
+    if (!view_) return;
     if (showImg.isNull()) return;
 
-    QPixmap pm = QPixmap::fromImage(showImg).scaled(
-        ui->label->size(),
-        Qt::IgnoreAspectRatio,
-        Qt::SmoothTransformation);
-
-    ui->label->setPixmap(pm);
+    view_->setImage(showImg);   // 直接喂原图
 
     if (!previewActive_) {
         previewActive_ = true;
@@ -1086,3 +1096,4 @@ void MainWindow::onColorTunedFrame(const QImage& showImg)
         iscapturing_ = false;
     }
 }
+
