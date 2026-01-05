@@ -5,7 +5,8 @@
 #include <QMutex>
 #include <QString>
 #include <QDateTime>
-#include <myStruct.h>   // 里面定义了 myRecordOptions
+#include <myStruct.h>   // 里面定义了 myRecordOptions / ImageFormat / VideoContainer
+
 // FFmpeg 前向声明，避免在头文件里包含一堆 C 头
 struct AVFormatContext;
 struct AVCodecContext;
@@ -18,8 +19,6 @@ class VideoRecorder : public QObject
 {
     Q_OBJECT
 public:
-
-
     struct VideoOptions {
         VideoContainer container;
         int fps;
@@ -28,8 +27,8 @@ public:
 
         VideoOptions()
             : container(VideoContainer::MP4),
-            fps(22),               // 你的 22fps
-            bitrateKbps(8000),     // 默认 8Mbps
+            fps(22),
+            bitrateKbps(8000),
             enableAudio(false)
         {}
     };
@@ -38,42 +37,35 @@ public:
     ~VideoRecorder() override;
 
 public slots:
-
     void receiveRecordOptions(myRecordOptions myOptions);
     void receiveFrame2Save(const QImage& img);
     void receiveFrame2Record(const QImage& img);
 
     void startRecording();   // ✅ 无参数
     void stopRecording();    // ✅ 无参数
+
 signals:
     void recordingStarted(const QString& filePath);
     void recordingStopped(const QString& filePath);
     void snapshotSaved(const QString& filePath);
     void sendMSG2ui(const QString&);
-private:
-    // 生成视频完整路径：
-    //   <videoRootDir_>/<YYYY-MM-DD>/<YYYY-MM-DD_hh-mm-ss>.<ext>
-    QString makeVideoFilePathLocked(const VideoOptions& opt) const;
 
-    // 生成截图完整路径：
-    //   <snapshotRootDir_>/<YYYY-MM-DD>/<YYYY-MM-DD_hh-mm-ss_zzz>.<ext>
+private:
+    QString makeVideoFilePathLocked(const VideoOptions& opt) const;
     QString makeSnapshotFilePathLocked(ImageFormat fmt) const;
 
-    // ImageFormat -> "PNG"/"JPG"/"BMP"
     static const char* imageFormatToQtString(ImageFormat fmt);
-
-    // VideoContainer -> "mp4"/"avi"
     static QString containerToExtension(VideoContainer c);
 
 private:
     mutable QMutex mutex_;
 
     // 路径配置
-    QString videoRootDir_="D:/SP_camera_record";    // 视频保存根目录
-    QString snapshotRootDir_="D:/SP_camera_capture"; // 截图保存根目录
+    QString videoRootDir_    = "D:/SP_camera_record";
+    QString snapshotRootDir_ = "D:/SP_camera_capture";
 
-    ImageFormat myCaptureType = ImageFormat::PNG;    // 来自 myRecordOptions.capturTpye
-    VideoContainer myRecordType  = VideoContainer::MP4;    // 来自 myRecordOptions.recordTpye
+    ImageFormat    myCaptureType = ImageFormat::PNG;
+    VideoContainer myRecordType  = VideoContainer::MP4;
 
     // 录制状态
     bool recording_ = false;
@@ -82,7 +74,10 @@ private:
 
     // 最近一帧缓存（供截图用）
     QImage lastFrame_;
-    qint64 lastPtsMs_ = 0;
+
+    // 用于“真实时间PTS”的基准与单调控制（解决时长漂移）
+    qint64 recStartUs_ = 0;     // 录制开始的时间（微秒）
+    qint64 lastPtsMs_  = 0;     // 上一次写入的 pts（毫秒），保证单调递增
 
     // 挂起的截图请求
     bool pendingSnapshot_ = false;
@@ -91,12 +86,12 @@ private:
     // ========== FFmpeg 相关 ==========
     bool encoderOpened_ = false;
 
-    AVFormatContext *fmtCtx_   = nullptr;
-    AVCodecContext  *codecCtx_ = nullptr;
+    AVFormatContext *fmtCtx_      = nullptr;
+    AVCodecContext  *codecCtx_    = nullptr;
     AVStream        *videoStream_ = nullptr;
-    SwsContext      *swsCtx_   = nullptr;
-    AVFrame         *frame_    = nullptr;
-    AVPacket        *pkt_      = nullptr;
+    SwsContext      *swsCtx_      = nullptr;
+    AVFrame         *frame_       = nullptr;
+    AVPacket        *pkt_         = nullptr;
 
     int     encWidth_  = 0;
     int     encHeight_ = 0;

@@ -1,17 +1,18 @@
 #include "videorecorder.h"
 
 #include <QDate>
-#include <QTime>
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QDebug>
 #include <QMutexLocker>
+
 extern "C" {
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/avutil.h>
 #include <libavutil/opt.h>
+#include <libavutil/time.h>     // av_gettime_relative
 #include <libswscale/swscale.h>
 }
 
@@ -24,7 +25,10 @@ VideoRecorder::VideoRecorder(QObject* parent)
 
 VideoRecorder::~VideoRecorder()
 {
-
+    QMutexLocker lk(&mutex_);
+    if (encoderOpened_) {
+        closeEncoderLocked();
+    }
 }
 
 // ========== 路径配置 ==========
@@ -36,22 +40,22 @@ void VideoRecorder::receiveRecordOptions(myRecordOptions myOptions)
     videoRootDir_    = myOptions.recordPath;
     snapshotRootDir_ = myOptions.capturePath;
 
-    myCaptureType    = static_cast<ImageFormat>(myOptions.capturType);
-    myRecordType     = static_cast<VideoContainer>(myOptions.recordType);
+    myCaptureType = static_cast<ImageFormat>(myOptions.capturType);
+    myRecordType  = static_cast<VideoContainer>(myOptions.recordType);
 
-    // 同步到 currentOptions_
     currentOptions_.container = myRecordType;
-    // currentOptions_.fps 这里不动，继续用默认 22
-    // 如果以后 myRecordOptions 里也有 fps，再在这里改就行
+    // fps/bitrate 仍用 currentOptions_ 默认（你需要的话可在 myRecordOptions 里补字段再同步）
 
     qDebug() << "[VideoRecorder] receiveRecordOptions:"
              << "videoRootDir =" << videoRootDir_
              << "snapshotRootDir =" << snapshotRootDir_
              << "captureType =" << int(myCaptureType)
              << "recordType =" << int(myRecordType)
-             << "fps =" << currentOptions_.fps;
+             << "fps =" << currentOptions_.fps
+             << "bitrateKbps =" << currentOptions_.bitrateKbps;
 }
 
+// ========== 单帧保存 ==========
 
 void VideoRecorder::receiveFrame2Save(const QImage& img)
 {
@@ -63,77 +67,69 @@ void VideoRecorder::receiveFrame2Save(const QImage& img)
     }
 
     if (snapshotRootDir_.isEmpty()) {
-        qWarning() << "[VideoRecorder] receiveFrame2Save: snapshotRootDir_ is empty.";
-#ifdef QT_DEBUG
-        emit errorOccurred(tr("单帧保存失败：未设置截图根目录"));
-#endif
+        emit sendMSG2ui(QStringLiteral("[VideoRecorder] 单帧保存失败：截图根目录未设置"));
         return;
     }
 
-    // 使用当前配置的截图格式
     ImageFormat fmt = myCaptureType;
-
-    // 生成完整文件路径（内部已经按日期创建子目录）
     QString path = makeSnapshotFilePathLocked(fmt);
     if (path.isEmpty()) {
-        qWarning() << "[VideoRecorder] receiveFrame2Save: makeSnapshotFilePathLocked failed.";
-        emit sendMSG2ui(tr("单帧保存失败：生成文件路径失败"));
+        emit sendMSG2ui(QStringLiteral("[VideoRecorder] 单帧保存失败：生成文件路径失败"));
         return;
     }
 
     const char* fmtStr = imageFormatToQtString(fmt);
     if (!img.save(path, fmtStr)) {
-        qWarning() << "[VideoRecorder] receiveFrame2Save: save image failed:" << path;
-        emit sendMSG2ui(tr("单帧保存失败：%1").arg(path));
+        emit sendMSG2ui(QStringLiteral("[VideoRecorder] 单帧保存失败：%1").arg(path));
         return;
     }
 
-
-    QString msg = QStringLiteral("[VideoRecorder] saved snapshot to %1").arg(path);
-
-    emit sendMSG2ui(msg);
+    emit snapshotSaved(path);
+    emit sendMSG2ui(QStringLiteral("[VideoRecorder] saved snapshot to %1").arg(path));
 }
+
+// ========== 录制帧输入 ==========
+
 void VideoRecorder::receiveFrame2Record(const QImage& img)
 {
     QMutexLocker lk(&mutex_);
 
-    if (!recording_) {
-        return;  // 没在录制，直接丢掉
-    }
+    if (!recording_) return;
+    if (img.isNull()) return;
 
-    if (img.isNull()) {
-        qWarning() << "[VideoRecorder] receiveFrame2Record: empty frame.";
-        return;
-    }
+    // 缓存最近一帧（如果你后面要做“录制中截图”也有用）
+    lastFrame_ = img;
 
-    // 第一次收到帧时，根据图像尺寸初始化 FFmpeg 编码器
     if (!encoderOpened_) {
+        frameIndex_ = 0;
+        lastPtsMs_ = 0;
+        recStartUs_ = 0;
+
         if (!openEncoderLockedForImage(img)) {
             recording_ = false;
             encoderOpened_ = false;
             emit sendMSG2ui(QStringLiteral("[VideoRecorder] 视频录制初始化失败"));
             return;
         }
+
         encoderOpened_ = true;
         emit recordingStarted(currentRecordingPath_);
     }
 
-    // 编码当前帧
     if (!encodeImageLocked(img)) {
         emit sendMSG2ui(QStringLiteral("[VideoRecorder] 视频编码失败"));
     }
 }
 
-// ========== 内部辅助函数：路径生成 ==========
+// ========== 路径生成 ==========
 
 QString VideoRecorder::makeVideoFilePathLocked(const VideoOptions& opt) const
 {
     if (videoRootDir_.isEmpty())
         return QString();
 
-    // 日期到天的子目录：YYYY-MM-DD
-    const QDate today      = QDate::currentDate();
-    const QString dateStr  = today.toString("yyyy-MM-dd");
+    const QDate today = QDate::currentDate();
+    const QString dateStr = today.toString("yyyy-MM-dd");
 
     QDir root(videoRootDir_);
     if (!root.exists()) {
@@ -151,13 +147,11 @@ QString VideoRecorder::makeVideoFilePathLocked(const VideoOptions& opt) const
         }
     }
 
-    // 文件名：YYYY-MM-DD_hh-mm-ss.ext
-    const QDateTime now   = QDateTime::currentDateTime();
-    const QString prefix  = now.toString("yyyy-MM-dd_hh-mm-ss");
-    const QString ext     = containerToExtension(opt.container);
+    const QDateTime now = QDateTime::currentDateTime();
+    const QString prefix = now.toString("yyyy-MM-dd_hh-mm-ss");
+    const QString ext = containerToExtension(opt.container);
 
-    const QString fileName = prefix + "." + ext;
-    return dateDir.filePath(fileName);
+    return dateDir.filePath(prefix + "." + ext);
 }
 
 QString VideoRecorder::makeSnapshotFilePathLocked(ImageFormat fmt) const
@@ -165,9 +159,8 @@ QString VideoRecorder::makeSnapshotFilePathLocked(ImageFormat fmt) const
     if (snapshotRootDir_.isEmpty())
         return QString();
 
-    // 日期到天的子目录：YYYY-MM-DD
-    const QDate today      = QDate::currentDate();
-    const QString dateStr  = today.toString("yyyy-MM-dd");
+    const QDate today = QDate::currentDate();
+    const QString dateStr = today.toString("yyyy-MM-dd");
 
     QDir root(snapshotRootDir_);
     if (!root.exists()) {
@@ -185,22 +178,15 @@ QString VideoRecorder::makeSnapshotFilePathLocked(ImageFormat fmt) const
         }
     }
 
-    // 文件名：YYYY-MM-DD_hh-mm-ss_zzz.ext
-    const QDateTime now   = QDateTime::currentDateTime();
-    const QString prefix  = now.toString("yyyy-MM-dd_hh-mm-ss_zzz");
-
-    const char* fmtStr = imageFormatToQtString(fmt);
-    Q_UNUSED(fmtStr);
+    const QDateTime now = QDateTime::currentDateTime();
+    const QString prefix = now.toString("yyyy-MM-dd_hh-mm-ss_zzz");
 
     QString ext = "png";
-    if (fmt == ImageFormat::JPG)      ext = "jpg";
+    if (fmt == ImageFormat::JPG) ext = "jpg";
     else if (fmt == ImageFormat::BMP) ext = "bmp";
 
-    const QString fileName = prefix + "." + ext;
-    return dateDir.filePath(fileName);
+    return dateDir.filePath(prefix + "." + ext);
 }
-
-// ========== 静态工具函数 ==========
 
 const char* VideoRecorder::imageFormatToQtString(ImageFormat fmt)
 {
@@ -220,6 +206,9 @@ QString VideoRecorder::containerToExtension(VideoContainer c)
     }
     return QStringLiteral("mp4");
 }
+
+// ========== start/stop ==========
+
 void VideoRecorder::startRecording()
 {
     QMutexLocker lk(&mutex_);
@@ -233,35 +222,39 @@ void VideoRecorder::startRecording()
         return;
     }
 
-    // 确保 container 跟 myRecordType 一致
     currentOptions_.container = myRecordType;
-    // currentOptions_.fps 仍然是 22，除非你以后改
+
+    // 强烈建议：为避免 AVI+H264 在 PC 上黑屏/时长异常，默认强制 MP4
+    // 如果你必须支持 AVI，请在 openEncoderLockedForImage() 里用 MPEG4 代替 H264
+    if (currentOptions_.container == VideoContainer::AVI) {
+        emit sendMSG2ui(QStringLiteral("[VideoRecorder] AVI 容器兼容性较差，已自动切换为 MP4"));
+        currentOptions_.container = VideoContainer::MP4;
+    }
 
     recording_ = true;
+    encoderOpened_ = false;
     currentRecordingPath_.clear();
-    // ⚠️ 真正打开 FFmpeg 的逻辑建议放到 receiveFrame2Record 首帧里做，
-    //    因为那时候才能拿到图像宽高
 
-    qDebug() << "[VideoRecorder] startRecording, fps =" << currentOptions_.fps
-             << "container =" << int(currentOptions_.container);
+    emit sendMSG2ui(QStringLiteral("[VideoRecorder] startRecording"));
 }
+
 void VideoRecorder::stopRecording()
 {
     QMutexLocker lk(&mutex_);
 
-    if (!recording_) {
-        return;
-    }
+    if (!recording_) return;
 
-    // flush 编码器，把缓冲里的数据写出来
+    // flush
     if (encoderOpened_ && codecCtx_) {
-        avcodec_send_frame(codecCtx_, nullptr); // 发送空帧表示结束
+        avcodec_send_frame(codecCtx_, nullptr);
+
         while (true) {
             int ret = avcodec_receive_packet(codecCtx_, pkt_);
-            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
-                break;
-            if (ret < 0)
-                break;
+            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
+            if (ret < 0) break;
+
+            // packet duration（毫秒 time_base）
+            pkt_->duration = qMax<int64_t>(1, (int64_t)(1000.0 / encFps_));
 
             av_packet_rescale_ts(pkt_, codecCtx_->time_base, videoStream_->time_base);
             pkt_->stream_index = videoStream_->index;
@@ -271,23 +264,22 @@ void VideoRecorder::stopRecording()
     }
 
     QString finishedPath = currentRecordingPath_;
-
     closeEncoderLocked();
 
     recording_ = false;
     encoderOpened_ = false;
     currentRecordingPath_.clear();
 
-    qDebug() << "[VideoRecorder] stopRecording.";
-
     if (!finishedPath.isEmpty()) {
         emit recordingStopped(finishedPath);
         emit sendMSG2ui(QStringLiteral("[VideoRecorder] 录像已保存到：%1").arg(finishedPath));
     }
 }
+
+// ========== 核心：打开编码器 ==========
+
 bool VideoRecorder::openEncoderLockedForImage(const QImage &img)
 {
-    // 1) FFmpeg 全局初始化一次即可
     static bool ffInited = false;
     if (!ffInited) {
         av_log_set_level(AV_LOG_ERROR);
@@ -299,14 +291,12 @@ bool VideoRecorder::openEncoderLockedForImage(const QImage &img)
     encHeight_ = img.height();
     encFps_    = (currentOptions_.fps > 0) ? currentOptions_.fps : 22.0;
 
-    // 2) 生成输出文件路径
     currentRecordingPath_ = makeVideoFilePathLocked(currentOptions_);
     if (currentRecordingPath_.isEmpty()) {
-        qWarning() << "[VideoRecorder] openEncoderLockedForImage: makeVideoFilePathLocked failed.";
+        qWarning() << "[VideoRecorder] makeVideoFilePathLocked failed.";
         return false;
     }
 
-    // 3) 创建输出上下文（根据后缀自动推容器）
     int ret = avformat_alloc_output_context2(
         &fmtCtx_, nullptr, nullptr,
         currentRecordingPath_.toUtf8().constData()
@@ -316,11 +306,15 @@ bool VideoRecorder::openEncoderLockedForImage(const QImage &img)
         return false;
     }
 
+    // codec：MP4 走 H264
     AVCodecID codecId = AV_CODEC_ID_H264;
-    const AVCodec *codec = avcodec_find_encoder(codecId);
 
+    // 如果你未来要真的支持 AVI，把 startRecording 的强制 MP4 去掉，然后这里用 MPEG4：
+    // if (currentOptions_.container == VideoContainer::AVI) codecId = AV_CODEC_ID_MPEG4;
+
+    const AVCodec *codec = avcodec_find_encoder(codecId);
     if (!codec) {
-        qWarning() << "[VideoRecorder] cannot find H264 encoder.";
+        qWarning() << "[VideoRecorder] cannot find encoder.";
         return false;
     }
 
@@ -340,12 +334,15 @@ bool VideoRecorder::openEncoderLockedForImage(const QImage &img)
     codecCtx_->codec_id = codecId;
     codecCtx_->width    = encWidth_;
     codecCtx_->height   = encHeight_;
-    codecCtx_->time_base = AVRational{1, encFps_ > 0 ? (int)encFps_ : 22};
+    codecCtx_->pix_fmt  = AV_PIX_FMT_YUV420P;
+    codecCtx_->bit_rate = (int64_t)currentOptions_.bitrateKbps * 1000LL;
+
+    // 关键修复：用毫秒 time_base，后续 pts 用真实时间（避免时长漂）
+    codecCtx_->time_base = AVRational{1, 1000}; // 1 tick = 1ms
     codecCtx_->framerate = AVRational{(int)encFps_, 1};
-    codecCtx_->gop_size  = 25;
+
+    codecCtx_->gop_size = 25;
     codecCtx_->max_b_frames = 0;
-    codecCtx_->pix_fmt   = AV_PIX_FMT_YUV420P;
-    codecCtx_->bit_rate  = currentOptions_.bitrateKbps * 1000LL;
 
     if (codecCtx_->codec_id == AV_CODEC_ID_H264) {
         av_opt_set(codecCtx_->priv_data, "preset", "veryfast", 0);
@@ -367,9 +364,13 @@ bool VideoRecorder::openEncoderLockedForImage(const QImage &img)
         qWarning() << "[VideoRecorder] avcodec_parameters_from_context failed, ret =" << ret;
         return false;
     }
-    videoStream_->time_base = codecCtx_->time_base;
 
-    // 4) 分配 frame / packet
+    // stream 时间基/帧率提示（播放器推时长更稳）
+    videoStream_->time_base = codecCtx_->time_base;
+    videoStream_->avg_frame_rate = AVRational{(int)encFps_, 1};
+    videoStream_->r_frame_rate   = AVRational{(int)encFps_, 1};
+
+    // frame / packet
     frame_ = av_frame_alloc();
     pkt_   = av_packet_alloc();
     if (!frame_ || !pkt_) {
@@ -380,22 +381,22 @@ bool VideoRecorder::openEncoderLockedForImage(const QImage &img)
     frame_->format = codecCtx_->pix_fmt;
     frame_->width  = codecCtx_->width;
     frame_->height = codecCtx_->height;
+
     ret = av_frame_get_buffer(frame_, 32);
     if (ret < 0) {
         qWarning() << "[VideoRecorder] av_frame_get_buffer failed, ret =" << ret;
         return false;
     }
 
-    // 5) RGB -> YUV420P 的 sws context
+    // sws：固定按首帧尺寸创建（后续输入若变尺寸，在 encode 里强制缩放）
     swsCtx_ = sws_getContext(encWidth_, encHeight_, AV_PIX_FMT_RGB24,
                              encWidth_, encHeight_, AV_PIX_FMT_YUV420P,
-                             SWS_BICUBIC, nullptr, nullptr, nullptr);
+                             SWS_BILINEAR, nullptr, nullptr, nullptr);
     if (!swsCtx_) {
         qWarning() << "[VideoRecorder] sws_getContext failed.";
         return false;
     }
 
-    // 6) 打开输出文件
     if (!(fmtCtx_->oformat->flags & AVFMT_NOFILE)) {
         ret = avio_open(&fmtCtx_->pb, currentRecordingPath_.toUtf8().constData(), AVIO_FLAG_WRITE);
         if (ret < 0) {
@@ -404,51 +405,91 @@ bool VideoRecorder::openEncoderLockedForImage(const QImage &img)
         }
     }
 
-    // 7) 写文件头
-    ret = avformat_write_header(fmtCtx_, nullptr);
+    // MP4 faststart（可选，增强兼容性）
+    AVDictionary* muxOpts = nullptr;
+    if (currentOptions_.container == VideoContainer::MP4) {
+        av_dict_set(&muxOpts, "movflags", "+faststart", 0);
+    }
+
+    ret = avformat_write_header(fmtCtx_, &muxOpts);
+    av_dict_free(&muxOpts);
+
     if (ret < 0) {
         qWarning() << "[VideoRecorder] avformat_write_header failed, ret =" << ret;
         return false;
     }
 
-    qDebug().noquote() << "[VideoRecorder] start writing to " << currentRecordingPath_;
+    // 初始化真实时间基准
+    recStartUs_ = (qint64)av_gettime_relative();
+    lastPtsMs_ = 0;
+
+    qDebug().noquote() << "[VideoRecorder] start writing to " << currentRecordingPath_
+                       << "enc=" << encWidth_ << "x" << encHeight_
+                       << "fps(meta)=" << encFps_;
     return true;
 }
+
+// ========== 核心：编码一帧 ==========
+
 bool VideoRecorder::encodeImageLocked(const QImage &img)
 {
-    if (!fmtCtx_ || !codecCtx_ || !frame_ || !swsCtx_)
+    if (!fmtCtx_ || !codecCtx_ || !frame_ || !swsCtx_ || !videoStream_)
         return false;
 
-    // 1) 确保是 RGB24
+    // 1) 确保 RGB888
     QImage rgb = img;
-    if (img.format() != QImage::Format_RGB888) {
-        rgb = img.convertToFormat(QImage::Format_RGB888);
+    if (rgb.format() != QImage::Format_RGB888) {
+        rgb = rgb.convertToFormat(QImage::Format_RGB888);
+    }
+
+    // 关键修复1：尺寸不一致强制缩放，避免黑屏/白屏/花屏
+    if (rgb.width() != encWidth_ || rgb.height() != encHeight_) {
+        rgb = rgb.scaled(encWidth_, encHeight_, Qt::IgnoreAspectRatio, Qt::FastTransformation);
+        if (rgb.isNull() || rgb.width() != encWidth_ || rgb.height() != encHeight_) {
+            qWarning() << "[VideoRecorder] scaled failed.";
+            return false;
+        }
+    }
+
+    // 关键修复2：复用 AVFrame 前必须可写（避免偶发黑帧）
+    int ret = av_frame_make_writable(frame_);
+    if (ret < 0) {
+        qWarning() << "[VideoRecorder] av_frame_make_writable failed, ret =" << ret;
+        return false;
     }
 
     const uint8_t *srcData[1] = { rgb.bits() };
     int srcStride[1]          = { rgb.bytesPerLine() };
 
-    // 2) RGB24 -> YUV420P
-    int ret = sws_scale(swsCtx_,
-                        srcData, srcStride,
-                        0, encHeight_,
-                        frame_->data, frame_->linesize);
+    // 2) RGB -> YUV420P
+    ret = sws_scale(swsCtx_,
+                    srcData, srcStride,
+                    0, encHeight_,
+                    frame_->data, frame_->linesize);
     if (ret <= 0) {
         qWarning() << "[VideoRecorder] sws_scale failed, ret =" << ret;
         return false;
     }
 
-    // 3) PTS
-    frame_->pts = frameIndex_++;
+    // 关键修复3：真实时间 PTS（毫秒），解决“10秒显示1分钟”
+    if (recStartUs_ <= 0) recStartUs_ = (qint64)av_gettime_relative();
+    qint64 nowUs = (qint64)av_gettime_relative();
+    qint64 ms = (nowUs - recStartUs_) / 1000;   // 毫秒
 
-    // 4) 编码一帧
+    // 单调递增（避免相等/倒退导致播放器时长计算异常）
+    if (ms <= lastPtsMs_) ms = lastPtsMs_ + 1;
+    lastPtsMs_ = ms;
+
+    frame_->pts = (int64_t)ms;
+
+    // 4) 编码
     ret = avcodec_send_frame(codecCtx_, frame_);
     if (ret < 0) {
         qWarning() << "[VideoRecorder] avcodec_send_frame failed, ret =" << ret;
         return false;
     }
 
-    while (ret >= 0) {
+    while (true) {
         ret = avcodec_receive_packet(codecCtx_, pkt_);
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
             break;
@@ -456,6 +497,9 @@ bool VideoRecorder::encodeImageLocked(const QImage &img)
             qWarning() << "[VideoRecorder] avcodec_receive_packet failed, ret =" << ret;
             return false;
         }
+
+        // 给 packet 补 duration（毫秒 time_base）
+        pkt_->duration = qMax<int64_t>(1, (int64_t)(1000.0 / encFps_));
 
         av_packet_rescale_ts(pkt_, codecCtx_->time_base, videoStream_->time_base);
         pkt_->stream_index = videoStream_->index;
@@ -468,8 +512,12 @@ bool VideoRecorder::encodeImageLocked(const QImage &img)
         }
     }
 
+    frameIndex_++;
     return true;
 }
+
+// ========== 关闭编码器 ==========
+
 void VideoRecorder::closeEncoderLocked()
 {
     if (fmtCtx_) {
@@ -505,5 +553,9 @@ void VideoRecorder::closeEncoderLocked()
     }
 
     videoStream_ = nullptr;
+
+    recStartUs_ = 0;
+    lastPtsMs_ = 0;
+
     qDebug() << "[VideoRecorder] encoder closed.";
 }
