@@ -36,63 +36,63 @@ static bool isUsableIPv4(const QHostAddress& ip) {
     return true;
 }
 
-// -------------------- Dialog: gain only --------------------
-class CameraParamDialog : public QDialog
-{
-public:
-    explicit CameraParamDialog(const QString& sn, QWidget* parent = nullptr)
-        : QDialog(parent)
-    {
-        setWindowTitle(tr("相机参数配置 - %1").arg(sn));
-        setStyleSheet(
-            "QLabel { color: #ffffff; }"
-            "QDoubleSpinBox { color: #000000; background: #ffffff; }"
-            );
+// // -------------------- Dialog: gain only --------------------
+// class CameraParamDialog : public QDialog
+// {
+// public:
+//     explicit CameraParamDialog(const QString& sn, QWidget* parent = nullptr)
+//         : QDialog(parent)
+//     {
+//         setWindowTitle(tr("相机参数配置 - %1").arg(sn));
+//         setStyleSheet(
+//             "QLabel { color: #ffffff; }"
+//             "QDoubleSpinBox { color: #000000; background: #ffffff; }"
+//             );
 
-        gainSpinDb_ = new QDoubleSpinBox(this);
-        gainSpinDb_->setRange(0.0, 47.0);
-        gainSpinDb_->setDecimals(1);
-        gainSpinDb_->setSingleStep(0.5);
-        gainSpinDb_->setValue(s_lastGainDb_);
+//         gainSpinDb_ = new QDoubleSpinBox(this);
+//         gainSpinDb_->setRange(0.0, 47.0);
+//         gainSpinDb_->setDecimals(1);
+//         gainSpinDb_->setSingleStep(0.5);
+//         gainSpinDb_->setValue(s_lastGainDb_);
 
-        auto *form = new QFormLayout;
-        form->addRow(tr("增益："), gainSpinDb_);
+//         auto *form = new QFormLayout;
+//         form->addRow(tr("增益："), gainSpinDb_);
 
-        auto *mainLayout = new QVBoxLayout;
-        mainLayout->addLayout(form);
+//         auto *mainLayout = new QVBoxLayout;
+//         mainLayout->addLayout(form);
 
-        auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-        connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
-        connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-        mainLayout->addWidget(buttons);
+//         auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+//         connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+//         connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+//         mainLayout->addWidget(buttons);
 
-        setLayout(mainLayout);
-    }
+//         setLayout(mainLayout);
+//     }
 
-    double gainDb() const {
-        double g = gainSpinDb_->value();
-        if (g < 0.0) g = 0.0;
-        if (g > 47.0) g = 47.0;
-        return g;
-    }
+//     double gainDb() const {
+//         double g = gainSpinDb_->value();
+//         if (g < 0.0) g = 0.0;
+//         if (g > 47.0) g = 47.0;
+//         return g;
+//     }
 
-protected:
-    void accept() override
-    {
-        double g = gainSpinDb_->value();
-        if (g < 0.0) g = 0.0;
-        if (g > 47.0) g = 47.0;
-        gainSpinDb_->setValue(g);
-        s_lastGainDb_ = g;
-        QDialog::accept();
-    }
+// protected:
+//     void accept() override
+//     {
+//         double g = gainSpinDb_->value();
+//         if (g < 0.0) g = 0.0;
+//         if (g > 47.0) g = 47.0;
+//         gainSpinDb_->setValue(g);
+//         s_lastGainDb_ = g;
+//         QDialog::accept();
+//     }
 
-private:
-    QDoubleSpinBox* gainSpinDb_ = nullptr;
-    static double s_lastGainDb_;
-};
+// private:
+//     QDoubleSpinBox* gainSpinDb_ = nullptr;
+//     static double s_lastGainDb_;
+// };
 
-double CameraParamDialog::s_lastGainDb_ = 5.0;
+// double CameraParamDialog::s_lastGainDb_ = 5.0;
 
 // -------------------- MediaMTX helpers (Windows) --------------------
 static bool runAndCapture(const QString& program,
@@ -250,16 +250,14 @@ MainWindow::MainWindow(QWidget *parent)
         ui->deviceSplitter->setStretchFactor(1, 2);
     }
 
-    // device list
     if (ui->deviceList) {
-        ui->deviceList->setColumnCount(4);
-        ui->deviceList->setHorizontalHeaderLabels({ "设备名称", "设备状态", "修改IP", "配置" });
+        ui->deviceList->setColumnCount(3);
+        ui->deviceList->setHorizontalHeaderLabels({ "设备名称", "设备状态", "修改IP" });
 
         auto* header = ui->deviceList->horizontalHeader();
         header->setSectionResizeMode(0, QHeaderView::Stretch);
         header->setSectionResizeMode(1, QHeaderView::ResizeToContents);
         header->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-        header->setSectionResizeMode(3, QHeaderView::ResizeToContents);
 
         ui->deviceList->setSelectionBehavior(QAbstractItemView::SelectRows);
         ui->deviceList->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -268,6 +266,7 @@ MainWindow::MainWindow(QWidget *parent)
         connect(ui->deviceList, &QTableWidget::itemSelectionChanged,
                 this, &MainWindow::onTableSelectionChanged);
     }
+
 
     // status icons
     auto makeDotIcon = [](const QColor& fill, const QColor& border) -> QIcon {
@@ -634,12 +633,12 @@ void MainWindow::updateTableDevice(const QString& sn)
         ui->deviceList->setCellWidget(row, 2, btnIp);
     }
 
-    // col3: cfg button
-    if (!ui->deviceList->cellWidget(row, 3)) {
-        auto* btnCfg = new QPushButton(QStringLiteral("配置"), ui->deviceList);
-        connect(btnCfg, &QPushButton::clicked, this, [this, sn] { configCameraForSn(sn); });
-        ui->deviceList->setCellWidget(row, 3, btnCfg);
-    }
+    // // col3: cfg button
+    // if (!ui->deviceList->cellWidget(row, 3)) {
+    //     auto* btnCfg = new QPushButton(QStringLiteral("配置"), ui->deviceList);
+    //     connect(btnCfg, &QPushButton::clicked, this, [this, sn] { configCameraForSn(sn); });
+    //     ui->deviceList->setCellWidget(row, 3, btnCfg);
+    // }
 
     updateCameraButtons();
 }
@@ -979,35 +978,35 @@ void MainWindow::finishIpChange(bool ok, const QString& msg)
 // -------------------- config camera --------------------
 void MainWindow::configCameraForSn(const QString& sn)
 {
-    const QString trimmedSn = sn.trimmed();
-    if (trimmedSn.isEmpty()) {
-        QMessageBox::warning(this, tr("提示"), tr("请先选择一个设备 ID (SN)。"));
-        return;
-    }
-    if (!mgr_) {
-        QMessageBox::warning(this, tr("提示"), tr("设备管理器未启动。"));
-        return;
-    }
+    // const QString trimmedSn = sn.trimmed();
+    // if (trimmedSn.isEmpty()) {
+    //     QMessageBox::warning(this, tr("提示"), tr("请先选择一个设备 ID (SN)。"));
+    //     return;
+    // }
+    // if (!mgr_) {
+    //     QMessageBox::warning(this, tr("提示"), tr("设备管理器未启动。"));
+    //     return;
+    // }
 
-    DeviceInfo dev;
-    if (!mgr_->getDevice(trimmedSn, dev)) {
-        QMessageBox::warning(this, tr("提示"),
-                             tr("未找到设备 [%1]，请确认设备在线。").arg(trimmedSn));
-        return;
-    }
+    // DeviceInfo dev;
+    // if (!mgr_->getDevice(trimmedSn, dev)) {
+    //     QMessageBox::warning(this, tr("提示"),
+    //                          tr("未找到设备 [%1]，请确认设备在线。").arg(trimmedSn));
+    //     return;
+    // }
 
-    CameraParamDialog dlg(trimmedSn, this);
-    if (dlg.exec() != QDialog::Accepted) return;
+    // CameraParamDialog dlg(trimmedSn, this);
+    // if (dlg.exec() != QDialog::Accepted) return;
 
-    const double gainDb = dlg.gainDb();
-    const qint64 n = mgr_->sendSetCameraParams(trimmedSn, 0, gainDb);
-    if (n <= 0) {
-        QMessageBox::warning(this, tr("提示"),
-                             tr("发送曝光/增益设置命令失败（ret=%1）。").arg(n));
-        return;
-    }
+    // const double gainDb = dlg.gainDb();
+    // const qint64 n = mgr_->sendSetCameraParams(trimmedSn, 0, gainDb);
+    // if (n <= 0) {
+    //     QMessageBox::warning(this, tr("提示"),
+    //                          tr("发送曝光/增益设置命令失败（ret=%1）。").arg(n));
+    //     return;
+    // }
 
-    getMSG(tr("已发送配置命令：SN=%1 增益=%2 dB").arg(trimmedSn).arg(gainDb, 0, 'f', 1));
+    // getMSG(tr("已发送配置命令：SN=%1 增益=%2 dB").arg(trimmedSn).arg(gainDb, 0, 'f', 1));
 }
 
 // -------------------- parse mediamtx logs --------------------
