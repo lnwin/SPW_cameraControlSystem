@@ -60,17 +60,16 @@ RECONNECT:
     AVDictionary* inOpts = nullptr;
 
     av_dict_set(&inOpts, "rtsp_transport", "udp", 0);
-    av_dict_set(&inOpts, "max_delay", "250000", 0);
+    av_dict_set(&inOpts, "max_delay", "400000", 0);          // 400ms：更能吸收百兆抖动
+    av_dict_set(&inOpts, "reorder_queue_size", "64", 0);     // 关键：给一点重排序空间（UDP 很有用）
+
+    av_dict_set(&inOpts, "buffer_size", "8388608", 0);       // 8MB
+    av_dict_set(&inOpts, "recv_buffer_size", "8388608", 0);  // 8MB
+    av_dict_set(&inOpts, "fifo_size", "16000000", 0);        // 16MB
     av_dict_set(&inOpts, "fflags", "+discardcorrupt", 0);
     av_dict_set(&inOpts, "flags", "low_delay", 0);
-    av_dict_set(&inOpts, "reorder_queue_size", "0", 0);
+    av_dict_set(&inOpts, "pkt_size", "1200", 0);
 
-    av_dict_set(&inOpts, "probesize", "200000", 0);
-    av_dict_set(&inOpts, "analyzeduration", "200000", 0);
-
-    av_dict_set(&inOpts, "buffer_size", "4194304", 0);
-    av_dict_set(&inOpts, "recv_buffer_size", "4194304", 0);
-    av_dict_set(&inOpts, "fifo_size", "8000000", 0);
     av_dict_set(&inOpts, "overrun_nonfatal", "1", 0);
 
     av_dict_set(&inOpts, "use_wallclock_as_timestamps", "1", 0);
@@ -115,14 +114,27 @@ RECONNECT:
 #ifdef AV_CODEC_FLAG2_FAST
     cc->flags2 |= AV_CODEC_FLAG2_FAST;
 #endif
-    cc->thread_count = 1;
+
+    // ===================== 解码线程：不要锁死 1 =====================
+    // 经验：用 (CPU核心数 - 1)，至少 2 线程；避免把 UI/其它线程饿死
+    const int tc = std::max(2, QThread::idealThreadCount() - 1);
+    cc->thread_count = tc;
+
     cc->pkt_timebase = vs->time_base;
 
     AVDictionary* decOpts = nullptr;
     av_dict_set(&decOpts, "flags", "low_delay", 0);
-    av_dict_set(&decOpts, "threads", "1", 0);
+    av_dict_set(&decOpts, "thread_type", "slice", 0);
+    const QByteArray tcStr = QByteArray::number(tc);
+    av_dict_set(&decOpts, "threads", tcStr.constData(), 0);
+
+
     r = avcodec_open2(cc, dec, &decOpts);
     av_dict_free(&decOpts);
+
+    emit logLine(QString("[RTSP] decoder threads=%1").arg(tc));
+
+
     if (r < 0){
         emit logLine(QString("[RTSP] avcodec_open2: %1").arg(err2str_q(r)));
         avcodec_free_context(&cc);
@@ -152,7 +164,7 @@ RECONNECT:
             if (sws) sws_freeContext(sws);
             sws = sws_getContext(srcW, srcH, srcFmt,
                                  outW, outH, AV_PIX_FMT_RGB24,
-                                 SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);
+                                 SWS_POINT, nullptr, nullptr, nullptr);
             cachedSrcW=srcW; cachedSrcH=srcH; cachedSrcFmt=srcFmt;
             cachedOutW=outW; cachedOutH=outH;
 
