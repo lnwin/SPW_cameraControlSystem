@@ -151,7 +151,8 @@ private:
     int       meanStride_ = 4;
     float     corrRebuildThr_ = 0.5f;
 
-    qint64 lastFrameMs_ = 0;
+    QHash<QString, int> offlineStrikes_; // 连续离线计数（按 SN）
+    qint64 lastFrameMs_ = 0;             // 最近一次“真正显示/收到帧(out)”的时间戳(ms)
 };
 
 #endif // MAINWINDOW_H

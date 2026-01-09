@@ -405,10 +405,9 @@ void MainWindow::titleForm()
     connect(title, &TitleBar::closeRequested, this, &MainWindow::close);
 }
 
-// -------------------- RTSP frame --------------------
+// -------------------- RTSP frame (FULL REPLACE) --------------------
 void MainWindow::onFrame(const QImage& img)
 {
-    lastFrameMs_ = QDateTime::currentMSecsSinceEpoch();
     if (!view_) return;
     emit sendFrameToColorTune(img);
 }
@@ -645,15 +644,17 @@ void MainWindow::updateTableDevice(const QString& sn)
 }
 
 // -------------------- alive check (IMPLEMENTED) --------------------
+// -------------------- alive check (FULL REPLACE) --------------------
 void MainWindow::onCheckDeviceAlive()
 {
     if (!ui || !ui->deviceList || !mgr_) return;
 
     const qint64 now       = QDateTime::currentMSecsSinceEpoch();
-    const qint64 offlineMs = 10000;
+    const qint64 offlineMs = 10000; // UDP 心跳离线阈值：10s
 
     const int rows = ui->deviceList->rowCount();
     for (int r = 0; r < rows; ++r) {
+
         QTableWidgetItem* nameItem = ui->deviceList->item(r, 0);
         if (!nameItem) continue;
 
@@ -664,6 +665,7 @@ void MainWindow::onCheckDeviceAlive()
         const bool exists = mgr_->getDevice(sn, dev);
         const bool online = exists && (now - dev.lastSeenMs <= offlineMs);
 
+        // ---------- 更新表格状态列 ----------
         QTableWidgetItem* stItem = ui->deviceList->item(r, 1);
         if (!stItem) {
             stItem = new QTableWidgetItem;
@@ -684,45 +686,51 @@ void MainWindow::onCheckDeviceAlive()
             stItem->setForeground(Qt::gray);
         }
 
-        if (online && oldStatus == QStringLiteral("离线")) camOnlineSinceMs_[sn] = now;
+        // ---------- 记录“本次上线时间” ----------
+        if (online && oldStatus == QStringLiteral("离线")) {
+            camOnlineSinceMs_[sn] = now;
+        }
 
+        // ---------- 只对当前选中设备做“硬离线”判定 ----------
         if (!curSelectedSn_.isEmpty() && sn == curSelectedSn_) {
+
+            // 面板更新仍保留
             if (exists) updateDeviceInfoPanel(&dev, online);
             else clearDeviceInfoPanel();
 
-            // MainWindow.h 增加
-            QHash<QString, int> offlineStrikes_; // 连续离线计数
-            qint64 lastFrameMs_ = 0;             // 最近出帧时间
+            // 预览口径：以“真正显示出来的帧”为准（lastFrameMs_ 在 onColorTunedFrame 更新）
+            const bool streamRecentlyAlive =
+                (lastFrameMs_ > 0 && (now - lastFrameMs_) <= 2500); // 2.5s 内还有帧
 
-            // MainWindow::onCheckDeviceAlive() 里，替换“离线停预览”那段为：
-            if (!curSelectedSn_.isEmpty() && sn == curSelectedSn_) {
+            // 连续离线计数：仅统计 UDP 离线
+            if (!online) offlineStrikes_[sn] = offlineStrikes_.value(sn, 0) + 1;
+            else offlineStrikes_[sn] = 0;
 
-                // 预览口径：以出帧为准
-                const qint64 nowMs = now;
-                const bool streamRecentlyAlive = (lastFrameMs_ > 0 && (nowMs - lastFrameMs_) <= 2500); // 2.5s 内还出帧
+            // hardOffline：UDP 离线持续 + RTSP 也不出帧
+            const bool hardOffline =
+                (!online) && (!streamRecentlyAlive) && (offlineStrikes_[sn] >= 3); // 连续 3 次(≈6s)
 
-                if (!online) {
-                    offlineStrikes_[sn] += 1;
-                } else {
-                    offlineStrikes_[sn] = 0;
-                }
-
-                // 只有：UDP 离线持续 + RTSP 也不出帧，才认为“预览必须停”
-                const bool hardOffline = (!online) && (!streamRecentlyAlive) && (offlineStrikes_[sn] >= 3); // 连续 3 次(≈6s)
+            if (hardOffline && viewer_) {
+                // 防止 timer 下一次又弹：先清零再停
+                offlineStrikes_[sn] = 0;
 
                 if (hardOffline && viewer_) {
-                    // 不建议用 QMessageBox 卡 UI 线程；至少用一次性提示
-                    QMessageBox::information(this, tr("提示"),
-                                             tr("设备 [%1] 网络中断（心跳离线且视频无数据），预览已自动停止。").arg(sn));
-                    doStopViewer();
                     offlineStrikes_[sn] = 0;
+
+                    // 先停预览（非阻塞 stop）
+                    doStopViewer();
+
+                    // 再非阻塞提示：open() 不会卡死 UI 事件循环
+                    auto* box = new QMessageBox(QMessageBox::Information,
+                                                tr("提示"),
+                                                tr("设备 [%1] 网络中断（心跳离线且视频无数据），预览已自动停止。").arg(sn),
+                                                QMessageBox::Ok,
+                                                this);
+                    box->setAttribute(Qt::WA_DeleteOnClose, true);
+                    box->open();  // 非阻塞
                 }
 
-                // 面板更新仍可保留
-                if (exists) updateDeviceInfoPanel(&dev, online);
-                else clearDeviceInfoPanel();
             }
-
         }
     }
 
@@ -762,17 +770,29 @@ void MainWindow::onTableSelectionChanged()
     updateCameraButtons();
 }
 
-// -------------------- stop viewer --------------------
+// -------------------- stop viewer (FULL REPLACE, NON-BLOCKING) --------------------
 void MainWindow::doStopViewer()
 {
     if (!viewer_) return;
-    viewer_->stop();
-    viewer_->wait(1500);
-    viewer_->deleteLater();
+
+    // 先取出来，避免 viewer_ 在后续逻辑里被误用
+    RtspViewerQt* v = viewer_;
     viewer_ = nullptr;
     previewActive_ = false;
+
+    // 关键：不要 wait()，只发 stop，然后等线程自己结束
+    // 假设 RtspViewerQt 继承自 QThread 或内部有 finished 信号
+    // 如果它是 QThread 子类，一般有 finished()
+    connect(v, &QThread::finished, this, [this, v]() {
+        v->deleteLater();
+        updateCameraButtons();
+    });
+
+    v->stop();     // 触发退出
+    // 不要 v->wait(...)
     updateCameraButtons();
 }
+
 
 // -------------------- update buttons (IMPLEMENTED) --------------------
 void MainWindow::updateCameraButtons()
