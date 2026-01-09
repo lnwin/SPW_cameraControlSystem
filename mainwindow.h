@@ -41,8 +41,8 @@ protected:
     void closeEvent(QCloseEvent* event) override;
 
 private slots:
-    void onFrame(const QImage& img);              // RTSP frame from viewer
-    void onColorTunedFrame(const QImage& img);    // processed frame from worker
+    void onFrame(QSharedPointer<QImage> img);              // RTSP frame from viewer
+    void onColorTunedFrame(QSharedPointer<QImage> img);    // processed frame from worker
 
     void updateSystemIP();
     void onSnUpdatedForIpChange(const QString& sn);
@@ -66,7 +66,7 @@ signals:
     void startRecord();
     void stopRecord();
 
-    void sendFrameToColorTune(const QImage& img); // UI -> worker
+    void sendFrameToColorTune(QSharedPointer<QImage> img); // UI -> worker
 
 private:
     Ui::MainWindow *ui = nullptr;

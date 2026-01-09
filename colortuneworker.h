@@ -37,11 +37,22 @@ public:
 
 public slots:
     // 输入帧：UI线程发过来（QueuedConnection）
-    void onFrameIn(const QImage& img);
+    void onFrameIn(QSharedPointer<QImage> img);
 
 signals:
     // 输出帧：发回 UI 线程（QueuedConnection）
-    void frameOut(const QImage& img);
+    void frameOut(QSharedPointer<QImage> img);
+private:
+    bool force1080_ = true;
+    int  outW_ = 1920;
+    int  outH_ = 1080;
+
+    QSharedPointer<QImage> upBuf_[3];
+    int upIdx_ = 0;
+    int upBufW_ = -1;
+    int upBufH_ = -1;
+
+    void ensureUpBuffersLocked(int w, int h);
 
 private:
     // ====== 你原来的 helper，整体搬进来 ======

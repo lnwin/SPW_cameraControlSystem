@@ -18,27 +18,62 @@ void ColorTuneWorker::setParams(const LabABFixed& p) { tuneParams_ = p; lutValid
 void ColorTuneWorker::setMeanStride(int s) { meanStride_ = s; }
 void ColorTuneWorker::setCorrRebuildThr(float thr) { corrRebuildThr_ = thr; }
 
-void ColorTuneWorker::onFrameIn(const QImage& img)
+void ColorTuneWorker::onFrameIn(QSharedPointer<QImage> img)
 {
-    if (img.isNull()) return;
+    if (img.isNull() || img->isNull()) return;
 
-    // QElapsedTimer t;
-    // t.start();
+    // bypass：仍然可以选择直接输出，但如果你“保存/显示必须1080”，那 bypass 也应升到1080
+    if (!enable_) {
+        if (force1080_) {
+            ensureUpBuffersLocked(outW_, outH_);
+            QSharedPointer<QImage> dstImg = upBuf_[upIdx_];
+            upIdx_ = (upIdx_ + 1) % 3;
 
-    // if (!enable_) {
-    //     emit frameOut(img);
-    //     const qint64 ms = t.elapsed();
-    //     qDebug().noquote() << QString("[ColorTune] bypass  %1 ms").arg(ms);
-    //     return;
-    // }
+            const QImage& in = *img;
+            QImage rgbIn = in;
+            if (rgbIn.format() != QImage::Format_RGB888)
+                rgbIn = rgbIn.convertToFormat(QImage::Format_RGB888);
 
-    QImage out = applyColorTuneFast_locked(img);
-    emit frameOut(out);
+            cv::Mat src(rgbIn.height(), rgbIn.width(), CV_8UC3,
+                        (void*)rgbIn.constBits(), rgbIn.bytesPerLine());
+            cv::Mat dst(outH_, outW_, CV_8UC3, (void*)dstImg->bits(), dstImg->bytesPerLine());
 
-    // const qint64 ms = t.elapsed();
-    // qDebug().noquote() << QString("[ColorTune] one-frame %1 ms  (w=%2 h=%3)")
-    //                           .arg(ms).arg(img.width()).arg(img.height());
+            cv::resize(src, dst, cv::Size(outW_, outH_), 0, 0, cv::INTER_LINEAR);
+
+            emit frameOut(dstImg);
+        } else {
+            emit frameOut(img);
+        }
+        return;
+    }
+
+    // 1) 先在“源分辨率”做 ColorTune（你已有优化版）
+    QImage tuned = applyColorTuneFast_locked(*img);
+
+    // 2) 再在 worker 内“最后一步”放大到 1920x1080（只做一次）
+    if (force1080_) {
+        ensureUpBuffersLocked(outW_, outH_);
+        QSharedPointer<QImage> dstImg = upBuf_[upIdx_];
+        upIdx_ = (upIdx_ + 1) % 3;
+
+        // tuned 必须是 RGB888（你的 applyColorTuneFast_locked 输出就是 RGB888）
+        if (tuned.format() != QImage::Format_RGB888)
+            tuned = tuned.convertToFormat(QImage::Format_RGB888);
+
+        cv::Mat src(tuned.height(), tuned.width(), CV_8UC3, (void*)tuned.bits(), tuned.bytesPerLine());
+        cv::Mat dst(outH_, outW_, CV_8UC3, (void*)dstImg->bits(), dstImg->bytesPerLine());
+
+        cv::resize(src, dst, cv::Size(outW_, outH_), 0, 0, cv::INTER_LINEAR);
+
+        // ★零拷贝：直接把三缓冲的 shared_ptr 发给 UI/录制
+        emit frameOut(dstImg);
+        return;
+    }
+
+    // 不强制1080时：仍然共享指针输出，避免 copy
+    emit frameOut(QSharedPointer<QImage>::create(std::move(tuned)));
 }
+
 
 
 QImage ColorTuneWorker::applyColorTuneFast_locked(const QImage& in)
@@ -92,4 +127,16 @@ QImage ColorTuneWorker::applyColorTuneFast_locked(const QImage& in)
     cv::cvtColor(lab_u8_, rgb_out, cv::COLOR_Lab2RGB);
 
     return out; // out 自己持有内存，无需 copy
+}
+void ColorTuneWorker::ensureUpBuffersLocked(int w, int h)
+{
+    if (w == upBufW_ && h == upBufH_
+        && upBuf_[0] && upBuf_[1] && upBuf_[2]) return;
+
+    upBufW_ = w;
+    upBufH_ = h;
+    for (int i = 0; i < 3; ++i) {
+        upBuf_[i] = QSharedPointer<QImage>::create(upBufW_, upBufH_, QImage::Format_RGB888);
+    }
+    upIdx_ = 0;
 }

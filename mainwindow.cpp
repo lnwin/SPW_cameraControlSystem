@@ -156,6 +156,7 @@ MainWindow::MainWindow(QWidget *parent)
     , ui(new Ui::MainWindow)
 {
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowSystemMenuHint);
+    qRegisterMetaType<QSharedPointer<QImage>>("QSharedPointer<QImage>");
 
     ui->setupUi(this);
 
@@ -406,11 +407,15 @@ void MainWindow::titleForm()
 }
 
 // -------------------- RTSP frame (FULL REPLACE) --------------------
-void MainWindow::onFrame(const QImage& img)
+// -------------------- RTSP frame (FULL REPLACE) --------------------
+void MainWindow::onFrame(QSharedPointer<QImage> img)
 {
     if (!view_) return;
+    if (img.isNull() || img->isNull()) return;
+
     emit sendFrameToColorTune(img);
 }
+
 
 
 // -------------------- messages --------------------
@@ -1123,23 +1128,23 @@ void MainWindow::clearDeviceInfoPanel()
 }
 
 
-void MainWindow::onColorTunedFrame(const QImage& showImg)
+void MainWindow::onColorTunedFrame(QSharedPointer<QImage> img)
 {
     lastFrameMs_ = QDateTime::currentMSecsSinceEpoch();
     if (!view_) return;
-    if (showImg.isNull()) return;
+    if (img.isNull() || img->isNull()) return;
 
-    view_->setImage(showImg);   // 直接喂原图
+    view_->setImage(*img);   // 直接解引用给 view（不 copy）
 
     if (!previewActive_) {
         previewActive_ = true;
         updateCameraButtons();
     }
 
-    if (isRecording_) emit sendFrame2Record(showImg);
+    if (isRecording_) emit sendFrame2Record(*img);
 
     if (iscapturing_) {
-        emit sendFrame2Capture(showImg);
+        emit sendFrame2Capture(*img);
         iscapturing_ = false;
     }
 }

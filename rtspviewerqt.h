@@ -5,6 +5,9 @@
 #include <QImage>
 #include <QString>
 #include <atomic>
+#include <QSharedPointer>
+
+
 
 // 依赖：FFmpeg & OpenCV（仅用于色彩转换和 letterbox 可选）
 // 你项目里已在 pro/cmake 里配置好了这些库的包含和链接
@@ -24,11 +27,11 @@ public:
 
 signals:
     // 送 UI 的帧（固定 1224x1024，RGB888）
-    void frameReady(const QImage& img);
+   // void frameReady(const QImage& img);
     void frameDecoded(const QImage& img, qint64 ptsMs);
     // 关键日志
     void logLine(const QString& line);
-
+    void frameReady(QSharedPointer<QImage> img);
 protected:
     void run() override;
 
