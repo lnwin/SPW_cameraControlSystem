@@ -150,6 +150,8 @@ private:
     LabABFixed tuneParams_;
     int       meanStride_ = 4;
     float     corrRebuildThr_ = 0.5f;
+
+    qint64 lastFrameMs_ = 0;
 };
 
 #endif // MAINWINDOW_H

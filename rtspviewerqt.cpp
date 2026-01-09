@@ -55,7 +55,7 @@ void RtspViewerQt::run()
     av_dict_set(&inOpts, "rtsp_transport", "udp", 0);
     av_dict_set(&inOpts, "fflags", "+nobuffer+discardcorrupt", 0);
     av_dict_set(&inOpts, "flags", "low_delay", 0);
-    av_dict_set(&inOpts, "max_delay", "0", 0);
+    av_dict_set(&inOpts, "max_delay", "20000", 0);
     av_dict_set(&inOpts, "probesize", "32", 0);
     av_dict_set(&inOpts, "analyzeduration", "0", 0);
     av_dict_set(&inOpts, "fpsprobesize", "0", 0);

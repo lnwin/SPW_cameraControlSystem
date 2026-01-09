@@ -408,6 +408,7 @@ void MainWindow::titleForm()
 // -------------------- RTSP frame --------------------
 void MainWindow::onFrame(const QImage& img)
 {
+    lastFrameMs_ = QDateTime::currentMSecsSinceEpoch();
     if (!view_) return;
     emit sendFrameToColorTune(img);
 }
@@ -689,13 +690,39 @@ void MainWindow::onCheckDeviceAlive()
             if (exists) updateDeviceInfoPanel(&dev, online);
             else clearDeviceInfoPanel();
 
-            if (oldStatus == QStringLiteral("在线") &&
-                newStatus == QStringLiteral("离线") &&
-                viewer_) {
-                QMessageBox::information(this, tr("提示"),
-                                         tr("设备 [%1] 网络中断，预览已自动停止。").arg(sn));
-                doStopViewer();
+            // MainWindow.h 增加
+            QHash<QString, int> offlineStrikes_; // 连续离线计数
+            qint64 lastFrameMs_ = 0;             // 最近出帧时间
+
+            // MainWindow::onCheckDeviceAlive() 里，替换“离线停预览”那段为：
+            if (!curSelectedSn_.isEmpty() && sn == curSelectedSn_) {
+
+                // 预览口径：以出帧为准
+                const qint64 nowMs = now;
+                const bool streamRecentlyAlive = (lastFrameMs_ > 0 && (nowMs - lastFrameMs_) <= 2500); // 2.5s 内还出帧
+
+                if (!online) {
+                    offlineStrikes_[sn] += 1;
+                } else {
+                    offlineStrikes_[sn] = 0;
+                }
+
+                // 只有：UDP 离线持续 + RTSP 也不出帧，才认为“预览必须停”
+                const bool hardOffline = (!online) && (!streamRecentlyAlive) && (offlineStrikes_[sn] >= 3); // 连续 3 次(≈6s)
+
+                if (hardOffline && viewer_) {
+                    // 不建议用 QMessageBox 卡 UI 线程；至少用一次性提示
+                    QMessageBox::information(this, tr("提示"),
+                                             tr("设备 [%1] 网络中断（心跳离线且视频无数据），预览已自动停止。").arg(sn));
+                    doStopViewer();
+                    offlineStrikes_[sn] = 0;
+                }
+
+                // 面板更新仍可保留
+                if (exists) updateDeviceInfoPanel(&dev, online);
+                else clearDeviceInfoPanel();
             }
+
         }
     }
 
@@ -1078,6 +1105,7 @@ void MainWindow::clearDeviceInfoPanel()
 
 void MainWindow::onColorTunedFrame(const QImage& showImg)
 {
+    lastFrameMs_ = QDateTime::currentMSecsSinceEpoch();
     if (!view_) return;
     if (showImg.isNull()) return;
 
