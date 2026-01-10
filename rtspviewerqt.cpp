@@ -135,10 +135,8 @@ void RtspViewerQt::stop()
 
 static QString build_hw_d3d11_pipeline(const QString& url, int latency)
 {
-    // D3D11 decode -> D3D11 memory -> MUST download to system memory for appsink
-    // Add videoconvert after download to ensure BGRx on CPU.
     return QString(
-               "rtspsrc location=%1 protocols=tcp latency=%2 timeout=5000000 drop-on-latency=false "
+               "rtspsrc location=%1 protocols=udp latency=%2 buffer-mode=none timeout=5000000 drop-on-latency=true "
                "! rtph264depay ! h264parse "
                "! d3d11h264dec "
                "! d3d11convert "
@@ -149,13 +147,11 @@ static QString build_hw_d3d11_pipeline(const QString& url, int latency)
                ).arg(url).arg(latency);
 }
 
+
 static QString build_sw_pipeline_explicit(const QString& url, int latency)
 {
-    // Explicit software decode chain to avoid decodebin delayed-link/not-linked issues
-    // Prefer avdec_h264; if not available, you can switch to "openh264dec" if installed.
-    // Drop only AFTER decode
     return QString(
-               "rtspsrc location=%1 protocols=tcp latency=%2 timeout=5000000 drop-on-latency=false "
+               "rtspsrc location=%1 protocols=udp latency=%2 buffer-mode=none timeout=5000000 drop-on-latency=true "
                "! rtph264depay ! h264parse "
                "! avdec_h264 "
                "! videoconvert "
@@ -164,6 +160,7 @@ static QString build_sw_pipeline_explicit(const QString& url, int latency)
                "! appsink name=sink drop=true max-buffers=1 sync=false"
                ).arg(url).arg(latency);
 }
+
 
 static bool wait_playing_or_fail(GstElement* pipeline, int timeout_ms, QString& errOut)
 {
