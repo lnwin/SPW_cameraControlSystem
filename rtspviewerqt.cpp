@@ -1,10 +1,12 @@
 // rtspviewerqt.cpp  (FULL REPLACEABLE FILE)
-// Windows/Qt + GStreamer RTSP client (TCP) low-latency, avoid green & avoid Qt queue buildup.
+// Windows/Qt + GStreamer RTSP client (TCP) low-latency, good quality, stable reconnect.
 //
-// Fixes:
-// 1) Green/odd colors: request BGRx and render as QImage::Format_RGB32 (alpha forced to 255).
-// 2) "卡的要死": coalesce frames inside worker thread to prevent GUI queued-signal backlog.
-// 3) Print negotiated caps to verify real output format/stride.
+// Key fixes:
+// - HW decode path (D3D11) MUST include d3d11download before appsink, otherwise not-linked.
+// - Avoid decodebin dynamic pad linking issues by using explicit rtph264depay ! h264parse ! decoder.
+// - Drop only AFTER decode (appsink drop + post-decode leaky) to keep quality.
+// - Coalesce frames in worker thread + emit at 22Hz to prevent Qt backlog.
+// - Safer stop to avoid "QThread destroyed while still running".
 
 #include "rtspviewerqt.h"
 
@@ -40,6 +42,17 @@ static QString capsToString(GstCaps* caps)
     QString out = qstr(s);
     if (s) g_free(s);
     return out;
+}
+
+// Check if an element factory exists (plugin installed)
+static bool hasFactory(const char* name)
+{
+    GstElementFactory* f = gst_element_factory_find(name);
+    if (f) {
+        gst_object_unref(f);
+        return true;
+    }
+    return false;
 }
 
 // bus：打印日志；遇到 ERROR/EOS 触发重连
@@ -106,7 +119,7 @@ RtspViewerQt::RtspViewerQt(QObject* parent)
 RtspViewerQt::~RtspViewerQt()
 {
     stop();
-    wait(1000);
+    wait(1500);
 }
 
 void RtspViewerQt::setUrl(const QString& url)
@@ -117,6 +130,52 @@ void RtspViewerQt::setUrl(const QString& url)
 void RtspViewerQt::stop()
 {
     stopFlag_.store(true, std::memory_order_release);
+    requestInterruption(); // ensure Qt thread interruption flag
+}
+
+static QString build_hw_d3d11_pipeline(const QString& url, int latency)
+{
+    // D3D11 decode -> D3D11 memory -> MUST download to system memory for appsink
+    // Add videoconvert after download to ensure BGRx on CPU.
+    return QString(
+               "rtspsrc location=%1 protocols=tcp latency=%2 timeout=5000000 drop-on-latency=false "
+               "! rtph264depay ! h264parse "
+               "! d3d11h264dec "
+               "! d3d11convert "
+               "! d3d11download "
+               "! videoconvert "
+               "! video/x-raw,format=BGRx "
+               "! appsink name=sink drop=true max-buffers=1 sync=false"
+               ).arg(url).arg(latency);
+}
+
+static QString build_sw_pipeline_explicit(const QString& url, int latency)
+{
+    // Explicit software decode chain to avoid decodebin delayed-link/not-linked issues
+    // Prefer avdec_h264; if not available, you can switch to "openh264dec" if installed.
+    // Drop only AFTER decode
+    return QString(
+               "rtspsrc location=%1 protocols=tcp latency=%2 timeout=5000000 drop-on-latency=false "
+               "! rtph264depay ! h264parse "
+               "! avdec_h264 "
+               "! videoconvert "
+               "! queue leaky=downstream max-size-buffers=1 max-size-time=0 max-size-bytes=0 "
+               "! video/x-raw,format=BGRx "
+               "! appsink name=sink drop=true max-buffers=1 sync=false"
+               ).arg(url).arg(latency);
+}
+
+static bool wait_playing_or_fail(GstElement* pipeline, int timeout_ms, QString& errOut)
+{
+    // Wait for state change, return false if failure is reported
+    GstState state = GST_STATE_NULL, pending = GST_STATE_NULL;
+    GstStateChangeReturn r = gst_element_get_state(pipeline, &state, &pending, timeout_ms * GST_MSECOND);
+    if (r == GST_STATE_CHANGE_FAILURE) {
+        errOut = "[GST] state change failure";
+        return false;
+    }
+    // It's ok if async; we will still receive bus errors if not-linked
+    return true;
 }
 
 void RtspViewerQt::run()
@@ -129,33 +188,59 @@ void RtspViewerQt::run()
     stopFlag_.store(false, std::memory_order_release);
 
 RECONNECT:
-    if (stopFlag_.load(std::memory_order_acquire)) return;
+    if (stopFlag_.load(std::memory_order_acquire) || isInterruptionRequested()) return;
 
-    // 建议：TCP latency 先 60~120ms；太小更容易“抖/花”，太大延迟显著上升
     const int latency = std::max(0, latencyMs_);
+    const int targetHz = 22;
+    const int minEmitIntervalMs = (targetHz > 0 ? (1000 / targetHz) : 0);
 
-    const QString pipeStr = QString(
-                                "rtspsrc name=src location=%1 protocols=tcp latency=%2 timeout=5000000 drop-on-latency=false "
-                                // 解码前：不要 leaky，避免丢压缩包导致宏块
-                                "src. ! queue max-size-buffers=0 max-size-time=0 max-size-bytes=0 "
-                                "! decodebin "
-                                "! videoconvert "
-                                // 解码后：可以 leaky，只丢“已解码帧”，不会把图像打花
-                                "! queue leaky=downstream max-size-buffers=1 max-size-time=0 max-size-bytes=0 "
-                                "! video/x-raw,format=BGRx "
-                                "! appsink name=sink drop=true max-buffers=1 sync=false"
-                                ).arg(url_).arg(latency);
+    const bool haveD3D11 =
+        hasFactory("rtph264depay") &&
+        hasFactory("h264parse") &&
+        hasFactory("d3d11h264dec") &&
+        hasFactory("d3d11convert") &&
+        hasFactory("d3d11download") &&
+        hasFactory("videoconvert");
 
+    const bool haveSW =
+        hasFactory("rtph264depay") &&
+        hasFactory("h264parse") &&
+        hasFactory("avdec_h264") &&
+        hasFactory("videoconvert");
+
+    QString pipeStr;
+    QString decoderTag;
+
+    // Try HW first, fallback to SW
+    if (haveD3D11) {
+        pipeStr = build_hw_d3d11_pipeline(url_, latency);
+        decoderTag = "d3d11(h264)+download";
+    } else if (haveSW) {
+        pipeStr = build_sw_pipeline_explicit(url_, latency);
+        decoderTag = "avdec_h264";
+    } else {
+        // last resort: your old decodebin chain (may be unstable on some installs)
+        pipeStr = QString(
+                      "rtspsrc name=src location=%1 protocols=tcp latency=%2 timeout=5000000 drop-on-latency=false "
+                      "src. ! queue max-size-buffers=0 max-size-time=0 max-size-bytes=0 "
+                      "! decodebin "
+                      "! videoconvert "
+                      "! queue leaky=downstream max-size-buffers=1 max-size-time=0 max-size-bytes=0 "
+                      "! video/x-raw,format=BGRx "
+                      "! appsink name=sink drop=true max-buffers=1 sync=false"
+                      ).arg(url_).arg(latency);
+        decoderTag = "decodebin(fallback)";
+    }
 
     emit logLine(QString("[GST] pipeline: %1").arg(pipeStr));
-    emit logLine("[GST] started (tcp)");
+    emit logLine(QString("[GST] started (tcp) | decoder=%1 | latency=%2ms").arg(decoderTag).arg(latency));
 
     GError* err = nullptr;
     GstElement* pipeline = gst_parse_launch(pipeStr.toUtf8().constData(), &err);
     if (!pipeline) {
         emit logLine(QString("[GST] parse_launch failed: %1").arg(err ? qstr(err->message) : "unknown"));
         if (err) g_error_free(err);
-        QThread::msleep(300);
+        QThread::msleep(200);
         goto RECONNECT;
     }
     if (err) g_error_free(err);
@@ -164,7 +249,7 @@ RECONNECT:
     if (!sinkElem) {
         emit logLine("[GST] appsink not found");
         gst_object_unref(pipeline);
-        QThread::msleep(300);
+        QThread::msleep(200);
         goto RECONNECT;
     }
 
@@ -173,7 +258,7 @@ RECONNECT:
     gst_app_sink_set_drop(appsink, TRUE);
     gst_app_sink_set_max_buffers(appsink, 1);
 
-    // 强制 caps
+    // Force caps to BGRx
     {
         GstCaps* caps = gst_caps_new_simple("video/x-raw",
                                             "format", G_TYPE_STRING, "BGRx",
@@ -184,45 +269,48 @@ RECONNECT:
 
     gst_element_set_state(pipeline, GST_STATE_PLAYING);
 
+    QString stateErr;
+    wait_playing_or_fail(pipeline, 800, stateErr); // don't block too long
+
     bool needReconnect = false;
     int no_sample_cnt = 0;
 
-    // 为了防止 Qt queued signal 积压：线程内只保留“最新帧”
     QSharedPointer<QImage> latest;
     QElapsedTimer emitTimer;
     emitTimer.start();
 
-    // === GUI 显示限频（防止 Qt queued signal 堆积导致卡顿）===
-    const int targetHz = 22;                 // 你之前明确提到只需要 22Hz
-    const int minEmitIntervalMs = 1000 / targetHz;
+    // PERF
+    QElapsedTimer tPerf;
+    tPerf.start();
+    qint64 nFrames = 0;
+    qint64 pullNsAcc = 0;
+    qint64 copyNsAcc = 0;
 
-    // 降低 bus pump 频率，减少循环开销
     int busPumpTick = 0;
+    static bool printedCaps = false;
+    printedCaps = false;
 
-    while (!stopFlag_.load(std::memory_order_acquire)) {
+    while (!stopFlag_.load(std::memory_order_acquire) && !isInterruptionRequested()) {
 
-        if ((busPumpTick++ & 7) == 0) { // 每 8 次循环 pump 一次
+        if ((busPumpTick++ & 7) == 0) {
             pump_bus(pipeline, [&](const QString& s){ emit logLine(s); }, &needReconnect);
             if (needReconnect) break;
         }
 
-        // 10ms 超时：低延迟拉取
+        QElapsedTimer tPull; tPull.start();
         GstSample* sample = gst_app_sink_try_pull_sample(appsink, 10 * GST_MSECOND);
+        pullNsAcc += tPull.nsecsElapsed();
 
         if (!sample) {
-            if (++no_sample_cnt > 800) { // ~8s 兜底
+            if (++no_sample_cnt > 800) { // ~8s
                 emit logLine("[GST] no samples too long, reconnect...");
                 break;
             }
-            // 即便没新 sample，也允许把 latest 按限频发出去（避免 GUI “饿死”）
         } else {
             no_sample_cnt = 0;
 
             GstCaps* caps = gst_sample_get_caps(sample);
-            if (!caps) {
-                gst_sample_unref(sample);
-                continue;
-            }
+            if (!caps) { gst_sample_unref(sample); continue; }
 
             GstVideoInfo vinfo;
             if (!gst_video_info_from_caps(&vinfo, caps)) {
@@ -235,8 +323,6 @@ RECONNECT:
             const int h = (int)GST_VIDEO_INFO_HEIGHT(&vinfo);
             const int srcStride = (int)GST_VIDEO_INFO_PLANE_STRIDE(&vinfo, 0);
 
-            // 打印一次 negotiated caps（排查“到底输出啥格式”）
-            static bool printedCaps = false;
             if (!printedCaps) {
                 printedCaps = true;
                 emit logLine(QString("[GST] negotiated caps: %1").arg(capsToString(caps)));
@@ -247,23 +333,26 @@ RECONNECT:
             GstMapInfo map;
             if (buffer && gst_buffer_map(buffer, &map, GST_MAP_READ)) {
 
-                // BGRx -> QImage::Format_RGB32 (内存布局匹配：little-endian 下为 B,G,R,x)
+                QElapsedTimer tCopy; tCopy.start();
+
                 QSharedPointer<QImage> img = QSharedPointer<QImage>::create(w, h, QImage::Format_RGB32);
                 const int dstStride = img->bytesPerLine();
 
                 const uchar* src = reinterpret_cast<const uchar*>(map.data);
                 uchar* dst0 = img->bits();
 
-                // 只拷贝 w*4，避免 stride 对齐差异带来的“行尾垃圾”
                 const int rowBytes = w * 4;
                 for (int y = 0; y < h; ++y) {
                     memcpy(dst0 + y * dstStride, src + y * srcStride, rowBytes);
                 }
 
+                copyNsAcc += tCopy.nsecsElapsed();
+
                 gst_buffer_unmap(buffer, &map);
 
-                // 更新“最新帧”
                 latest = img;
+                ++nFrames;
+
             } else {
                 emit logLine("[GST] buffer_map failed");
             }
@@ -271,18 +360,32 @@ RECONNECT:
             gst_sample_unref(sample);
         }
 
-        // 触发重连？
-        if ((busPumpTick & 15) == 0) { // 再补一次
+        if ((busPumpTick & 15) == 0) {
             pump_bus(pipeline, [&](const QString& s){ emit logLine(s); }, &needReconnect);
             if (needReconnect) break;
         }
 
-        // 限频发给 GUI（避免 queued signal 堆积导致卡顿）
         if (latest) {
             if (minEmitIntervalMs <= 0 || emitTimer.elapsed() >= minEmitIntervalMs) {
                 emitTimer.restart();
                 emit frameReady(latest);
             }
+        }
+
+        if (nFrames > 0 && (nFrames % 120 == 0 || tPerf.elapsed() > 2000)) {
+            const double sec = std::max(0.001, tPerf.elapsed() / 1000.0);
+            const double fps = nFrames / sec;
+            const double pullMs = (pullNsAcc / 1e6) / std::max<qint64>(1, nFrames);
+            const double copyMs = (copyNsAcc / 1e6) / std::max<qint64>(1, nFrames);
+            emit logLine(QString("[PERF] fps=%1 pull=%2ms copy=%3ms decoder=%4")
+                             .arg(fps, 0, 'f', 1)
+                             .arg(pullMs, 0, 'f', 3)
+                             .arg(copyMs, 0, 'f', 3)
+                             .arg(decoderTag));
+            tPerf.restart();
+            nFrames = 0;
+            pullNsAcc = 0;
+            copyNsAcc = 0;
         }
     }
 
@@ -291,8 +394,8 @@ RECONNECT:
     gst_object_unref(pipeline);
     emit logLine("[GST] stopped");
 
-    if (!stopFlag_.load(std::memory_order_acquire)) {
-        QThread::msleep(300);
+    if (!stopFlag_.load(std::memory_order_acquire) && !isInterruptionRequested()) {
+        QThread::msleep(200);
         goto RECONNECT;
     }
 }
