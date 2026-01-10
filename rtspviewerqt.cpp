@@ -1,12 +1,12 @@
 // rtspviewerqt.cpp  (FULL REPLACEABLE FILE)
-// Windows/Qt + GStreamer RTSP client (TCP) low-latency, good quality, stable reconnect.
+// Windows/Qt + GStreamer RTSP client (UDP only) low-latency, good quality, stable reconnect.
 //
-// Key fixes:
-// - HW decode path (D3D11) MUST include d3d11download before appsink, otherwise not-linked.
-// - Avoid decodebin dynamic pad linking issues by using explicit rtph264depay ! h264parse ! decoder.
-// - Drop only AFTER decode (appsink drop + post-decode leaky) to keep quality.
-// - Coalesce frames in worker thread + emit at 22Hz to prevent Qt backlog.
-// - Safer stop to avoid "QThread destroyed while still running".
+// Design goals (UDP only):
+// - Smooth perception: avoid "stop-go" by NOT dropping at rtspsrc; drop only AFTER decode.
+// - Stable: explicit depay/parse/decoder chain; no decodebin pad-linking surprises.
+// - Low-latency but not jittery: recommend latencyMs_ >= 150~250 for WAN/ROV tether; can tune.
+// - Prevent Qt backlog: appsink drop + post-decode leaky queue + emit at ~22Hz.
+// - Safe stop/reconnect.
 
 #include "rtspviewerqt.h"
 
@@ -130,48 +130,67 @@ void RtspViewerQt::setUrl(const QString& url)
 void RtspViewerQt::stop()
 {
     stopFlag_.store(true, std::memory_order_release);
-    requestInterruption(); // ensure Qt thread interruption flag
+    requestInterruption();
 }
 
-static QString build_hw_d3d11_pipeline(const QString& url, int latency)
+// -------------------------- Pipeline Builders (UDP only) --------------------------
+//
+// Key policy:
+// - rtspsrc: protocols=udp, buffer-mode=auto, drop-on-latency=false
+// - decode after depay/parse
+// - leaky queue AFTER decode (and after d3d11download) to always keep latest frame
+// - appsink drop=true max-buffers=1 sync=false
+
+static QString build_hw_d3d11_pipeline_udp(const QString& url, int latency)
 {
     return QString(
-               "rtspsrc location=%1 protocols=udp latency=%2 buffer-mode=none timeout=5000000 drop-on-latency=true "
+               "rtspsrc location=%1 protocols=udp latency=%2 buffer-mode=auto timeout=5000000 drop-on-latency=false "
                "! rtph264depay ! h264parse "
                "! d3d11h264dec "
                "! d3d11convert "
                "! d3d11download "
+               "! queue leaky=downstream max-size-buffers=1 max-size-time=0 max-size-bytes=0 "
                "! videoconvert "
                "! video/x-raw,format=BGRx "
                "! appsink name=sink drop=true max-buffers=1 sync=false"
                ).arg(url).arg(latency);
 }
 
-
-static QString build_sw_pipeline_explicit(const QString& url, int latency)
+static QString build_sw_pipeline_udp(const QString& url, int latency)
 {
     return QString(
-               "rtspsrc location=%1 protocols=udp latency=%2 buffer-mode=none timeout=5000000 drop-on-latency=true "
+               "rtspsrc location=%1 protocols=udp latency=%2 buffer-mode=auto timeout=5000000 drop-on-latency=false "
                "! rtph264depay ! h264parse "
                "! avdec_h264 "
-               "! videoconvert "
                "! queue leaky=downstream max-size-buffers=1 max-size-time=0 max-size-bytes=0 "
+               "! videoconvert "
                "! video/x-raw,format=BGRx "
                "! appsink name=sink drop=true max-buffers=1 sync=false"
                ).arg(url).arg(latency);
 }
 
+// last resort (still UDP): decodebin, with leaky queue after decode
+static QString build_fallback_decodebin_udp(const QString& url, int latency)
+{
+    return QString(
+               "rtspsrc name=src location=%1 protocols=udp latency=%2 buffer-mode=auto timeout=5000000 drop-on-latency=false "
+               "src. ! queue max-size-buffers=0 max-size-time=0 max-size-bytes=0 "
+               "! decodebin "
+               "! queue leaky=downstream max-size-buffers=1 max-size-time=0 max-size-bytes=0 "
+               "! videoconvert "
+               "! video/x-raw,format=BGRx "
+               "! appsink name=sink drop=true max-buffers=1 sync=false"
+               ).arg(url).arg(latency);
+}
 
 static bool wait_playing_or_fail(GstElement* pipeline, int timeout_ms, QString& errOut)
 {
-    // Wait for state change, return false if failure is reported
     GstState state = GST_STATE_NULL, pending = GST_STATE_NULL;
     GstStateChangeReturn r = gst_element_get_state(pipeline, &state, &pending, timeout_ms * GST_MSECOND);
     if (r == GST_STATE_CHANGE_FAILURE) {
         errOut = "[GST] state change failure";
         return false;
     }
-    // It's ok if async; we will still receive bus errors if not-linked
     return true;
 }
 
@@ -187,7 +206,11 @@ void RtspViewerQt::run()
 RECONNECT:
     if (stopFlag_.load(std::memory_order_acquire) || isInterruptionRequested()) return;
 
+    // Recommendation: for UDP smoothness, latency 150~250ms is often better than 50ms.
+    // You can tune latencyMs_ in your UI/config. Here we just clamp to >=0.
     const int latency = std::max(0, latencyMs_);
+
+    // Output pacing (Qt UI smoothness). 22Hz matches your stream rate.
     const int targetHz = 22;
     const int minEmitIntervalMs = (targetHz > 0 ? (1000 / targetHz) : 0);
 
@@ -208,29 +231,20 @@ RECONNECT:
     QString pipeStr;
     QString decoderTag;
 
-    // Try HW first, fallback to SW
+    // Try HW first, fallback to SW, then decodebin
     if (haveD3D11) {
-        pipeStr = build_hw_d3d11_pipeline(url_, latency);
+        pipeStr = build_hw_d3d11_pipeline_udp(url_, latency);
         decoderTag = "d3d11(h264)+download";
     } else if (haveSW) {
-        pipeStr = build_sw_pipeline_explicit(url_, latency);
+        pipeStr = build_sw_pipeline_udp(url_, latency);
         decoderTag = "avdec_h264";
     } else {
-        // last resort: your old decodebin chain (may be unstable on some installs)
-        pipeStr = QString(
-                      "rtspsrc name=src location=%1 protocols=tcp latency=%2 timeout=5000000 drop-on-latency=false "
-                      "src. ! queue max-size-buffers=0 max-size-time=0 max-size-bytes=0 "
-                      "! decodebin "
-                      "! videoconvert "
-                      "! queue leaky=downstream max-size-buffers=1 max-size-time=0 max-size-bytes=0 "
-                      "! video/x-raw,format=BGRx "
-                      "! appsink name=sink drop=true max-buffers=1 sync=false"
-                      ).arg(url_).arg(latency);
+        pipeStr = build_fallback_decodebin_udp(url_, latency);
         decoderTag = "decodebin(fallback)";
     }
 
     emit logLine(QString("[GST] pipeline: %1").arg(pipeStr));
-    emit logLine(QString("[GST] started (tcp) | decoder=%1 | latency=%2ms").arg(decoderTag).arg(latency));
+    emit logLine(QString("[GST] started (udp) | decoder=%1 | latency=%2ms").arg(decoderTag).arg(latency));
 
     GError* err = nullptr;
     GstElement* pipeline = gst_parse_launch(pipeStr.toUtf8().constData(), &err);
@@ -267,7 +281,7 @@ RECONNECT:
     gst_element_set_state(pipeline, GST_STATE_PLAYING);
 
     QString stateErr;
-    wait_playing_or_fail(pipeline, 800, stateErr); // don't block too long
+    wait_playing_or_fail(pipeline, 800, stateErr);
 
     bool needReconnect = false;
     int no_sample_cnt = 0;
@@ -284,8 +298,7 @@ RECONNECT:
     qint64 copyNsAcc = 0;
 
     int busPumpTick = 0;
-    static bool printedCaps = false;
-    printedCaps = false;
+    bool printedCaps = false;
 
     while (!stopFlag_.load(std::memory_order_acquire) && !isInterruptionRequested()) {
 
@@ -332,6 +345,7 @@ RECONNECT:
 
                 QElapsedTimer tCopy; tCopy.start();
 
+                // BGRx -> QImage::Format_RGB32 (BGRA in memory on little endian is fine for display as long as you treat it as 32-bit)
                 QSharedPointer<QImage> img = QSharedPointer<QImage>::create(w, h, QImage::Format_RGB32);
                 const int dstStride = img->bytesPerLine();
 
@@ -362,6 +376,7 @@ RECONNECT:
             if (needReconnect) break;
         }
 
+        // Emit at fixed cadence (22Hz) to avoid Qt/UI overload
         if (latest) {
             if (minEmitIntervalMs <= 0 || emitTimer.elapsed() >= minEmitIntervalMs) {
                 emitTimer.restart();
@@ -369,16 +384,18 @@ RECONNECT:
             }
         }
 
+        // PERF report
         if (nFrames > 0 && (nFrames % 120 == 0 || tPerf.elapsed() > 2000)) {
             const double sec = std::max(0.001, tPerf.elapsed() / 1000.0);
             const double fps = nFrames / sec;
             const double pullMs = (pullNsAcc / 1e6) / std::max<qint64>(1, nFrames);
             const double copyMs = (copyNsAcc / 1e6) / std::max<qint64>(1, nFrames);
-            emit logLine(QString("[PERF] fps=%1 pull=%2ms copy=%3ms decoder=%4")
+            emit logLine(QString("[PERF] fps=%1 pull=%2ms copy=%3ms decoder=%4 transport=udp latency=%5ms")
                              .arg(fps, 0, 'f', 1)
                              .arg(pullMs, 0, 'f', 3)
                              .arg(copyMs, 0, 'f', 3)
-                             .arg(decoderTag));
+                             .arg(decoderTag)
+                             .arg(latency));
             tPerf.restart();
             nFrames = 0;
             pullNsAcc = 0;

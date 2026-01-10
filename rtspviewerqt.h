@@ -40,7 +40,7 @@ private:
     std::atomic<bool> stopFlag_{false};
 
     bool useTcp_ = false;        // 默认 UDP
-    int  latencyMs_ = 200;       // 默认 200ms
+    int  latencyMs_ =200;       // 默认 200ms
     QString portRange_ = "50000-51000";
     friend GstFlowReturn on_new_sample(GstAppSink* sink, gpointer user_data);
 
