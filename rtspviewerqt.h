@@ -1,16 +1,15 @@
-#ifndef RTSP_VIEWER_QT_H
-#define RTSP_VIEWER_QT_H
+#pragma once
 
 #include <QThread>
+#include <QSharedPointer>
 #include <QImage>
 #include <QString>
 #include <atomic>
-#include <QSharedPointer>
 
-
-
-// 依赖：FFmpeg & OpenCV（仅用于色彩转换和 letterbox 可选）
-// 你项目里已在 pro/cmake 里配置好了这些库的包含和链接
+// GStreamer
+#include <gst/gst.h>
+#include <gst/app/gstappsink.h>
+#include <gst/video/video.h>
 
 class RtspViewerQt : public QThread
 {
@@ -19,28 +18,24 @@ public:
     explicit RtspViewerQt(QObject* parent = nullptr);
     ~RtspViewerQt() override;
 
-    // 设置 RTSP 地址（必须在 start() 前调用；或 stop() 完成后再改）
     void setUrl(const QString& url);
-
-    // 线程安全停止
     void stop();
 
+    // 可选：让你能切 UDP/TCP（默认 udp）
+    void setUseTcp(bool on) { useTcp_ = on; }
+    void setLatencyMs(int ms) { latencyMs_ = ms; }
+
 signals:
-    // 送 UI 的帧（固定 1224x1024，RGB888）
-   // void frameReady(const QImage& img);
-    void frameDecoded(const QImage& img, qint64 ptsMs);
-    // 关键日志
-    void logLine(const QString& line);
     void frameReady(QSharedPointer<QImage> img);
+    void logLine(const QString& s);
+
 protected:
     void run() override;
 
 private:
     QString url_;
     std::atomic<bool> stopFlag_{false};
-    // 固定输出分辨率：1080p
 
-
+    bool useTcp_ = false;   // 默认 UDP
+    int latencyMs_ = 200;   // 默认 200ms
 };
-
-#endif // RTSP_VIEWER_QT_H

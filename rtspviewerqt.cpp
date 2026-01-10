@@ -1,30 +1,22 @@
 #include "rtspviewerqt.h"
-
-#include <QDebug>
 #include <QCoreApplication>
+#include <QDir>
+#include <QMutex>
+#include <QMutexLocker>
 
-extern "C" {
-#include <libavformat/avformat.h>
-#include <libavcodec/avcodec.h>
-#include <libavutil/avutil.h>
-#include <libavutil/opt.h>
-#include <libavutil/time.h>
-#include <libswscale/swscale.h>
+static void gst_init_once()
+{
+    static std::once_flag f;
+    std::call_once(f, []{
+        gst_init(nullptr, nullptr);
+    });
 }
-
-static inline QString err2str_q(int e){ char b[256]; av_strerror(e,b,sizeof(b)); return QString::fromLocal8Bit(b); }
-
-// 兼容：老版本没有 av_gettime_relative，用 av_gettime 代替
-#ifndef av_gettime_relative
-#define av_gettime_relative av_gettime
-#endif
-static inline int64_t now_us(){ return av_gettime_relative(); }
 
 RtspViewerQt::RtspViewerQt(QObject* parent)
     : QThread(parent)
 {
-    av_log_set_level(AV_LOG_ERROR);
-     qRegisterMetaType<QSharedPointer<QImage>>("QSharedPointer<QImage>");
+    gst_init_once();
+    qRegisterMetaType<QSharedPointer<QImage>>("QSharedPointer<QImage>");
 }
 
 RtspViewerQt::~RtspViewerQt()
@@ -43,267 +35,164 @@ void RtspViewerQt::stop()
     stopFlag_.store(true, std::memory_order_release);
 }
 
+static inline QString qstr(const char* s){ return QString::fromUtf8(s ? s : ""); }
+
+// 把 GST 的错误打印出来（便于你定位“插件没找到/解码器缺失”）
+static void log_bus_messages(GstElement* pipeline, std::function<void(const QString&)> logFn)
+{
+    GstBus* bus = gst_element_get_bus(pipeline);
+    while (gst_bus_have_pending(bus)) {
+        GstMessage* msg = gst_bus_pop(bus);
+        if (!msg) break;
+
+        switch (GST_MESSAGE_TYPE(msg)) {
+        case GST_MESSAGE_ERROR: {
+            GError* err = nullptr;
+            gchar* dbg = nullptr;
+            gst_message_parse_error(msg, &err, &dbg);
+            logFn(QString("[GST][ERR] %1 | %2").arg(qstr(err?err->message:"")).arg(qstr(dbg)));
+            if (err) g_error_free(err);
+            if (dbg) g_free(dbg);
+        } break;
+        case GST_MESSAGE_WARNING: {
+            GError* err = nullptr;
+            gchar* dbg = nullptr;
+            gst_message_parse_warning(msg, &err, &dbg);
+            logFn(QString("[GST][WRN] %1 | %2").arg(qstr(err?err->message:"")).arg(qstr(dbg)));
+            if (err) g_error_free(err);
+            if (dbg) g_free(dbg);
+        } break;
+        case GST_MESSAGE_STATE_CHANGED: {
+            if (GST_MESSAGE_SRC(msg) == GST_OBJECT(pipeline)) {
+                GstState oldS, newS, pend;
+                gst_message_parse_state_changed(msg, &oldS, &newS, &pend);
+                logFn(QString("[GST] state: %1 -> %2")
+                          .arg(gst_element_state_get_name(oldS))
+                          .arg(gst_element_state_get_name(newS)));
+            }
+        } break;
+        default:
+            break;
+        }
+        gst_message_unref(msg);
+    }
+    gst_object_unref(bus);
+}
+
 void RtspViewerQt::run()
 {
     if (url_.isEmpty()){
-        emit logLine("[RTSP] url is empty");
+        emit logLine("[GST] url is empty");
         return;
     }
 
     stopFlag_.store(false, std::memory_order_release);
 
+// 运行时插件路径（非常关键：否则 decodebin 可能找不到解码器）
+// 建议你最终改成相对路径（打包目录下的 plugins）
+// 这里先不强行设置，避免覆盖你 Qt Creator 里配置的环境。
+// qputenv("GST_PLUGIN_PATH", "...");
+
 RECONNECT:
     if (stopFlag_.load(std::memory_order_acquire)) return;
 
-    // -------- 1) 打开输入（百兆 UDP：允许小抖动缓冲） --------
-    AVFormatContext* fmt = nullptr;
-    AVDictionary* inOpts = nullptr;
+    const QString proto = useTcp_ ? "tcp" : "udp";
+    const QString pipeStr = QString(
+                                "rtspsrc location=%1 protocols=%2 latency=%3 ! "
+                                "decodebin ! "
+                                "videoconvert ! "
+                                "queue leaky=downstream max-size-buffers=1 ! "
+                                "video/x-raw,format=RGB ! "
+                                "appsink name=sink drop=true max-buffers=1 sync=false"
+                                ).arg(url_).arg(proto).arg(latencyMs_);
 
-    av_dict_set(&inOpts, "rtsp_transport", "udp", 0);
-    av_dict_set(&inOpts, "max_delay", "400000", 0);          // 400ms：更能吸收百兆抖动
-    av_dict_set(&inOpts, "reorder_queue_size", "64", 0);     // 关键：给一点重排序空间（UDP 很有用）
+    emit logLine(QString("[GST] pipeline: %1").arg(pipeStr));
 
-    av_dict_set(&inOpts, "buffer_size", "8388608", 0);       // 8MB
-    av_dict_set(&inOpts, "recv_buffer_size", "8388608", 0);  // 8MB
-    av_dict_set(&inOpts, "fifo_size", "16000000", 0);        // 16MB
-    av_dict_set(&inOpts, "fflags", "+discardcorrupt", 0);
-    av_dict_set(&inOpts, "flags", "low_delay", 0);
-    av_dict_set(&inOpts, "pkt_size", "1200", 0);
+    GError* err = nullptr;
+    GstElement* pipeline = gst_parse_launch(pipeStr.toUtf8().constData(), &err);
+    if (!pipeline) {
+        emit logLine(QString("[GST] parse_launch failed: %1").arg(err ? qstr(err->message) : "unknown"));
+        if (err) g_error_free(err);
+        QThread::msleep(300);
+        goto RECONNECT;
+    }
+    if (err) g_error_free(err);
 
-    av_dict_set(&inOpts, "overrun_nonfatal", "1", 0);
-
-    av_dict_set(&inOpts, "use_wallclock_as_timestamps", "1", 0);
-
-    int r = avformat_open_input(&fmt, url_.toUtf8().constData(), nullptr, &inOpts);
-    av_dict_free(&inOpts);
-    if (r < 0){
-        emit logLine(QString("[RTSP] open_input: %1").arg(err2str_q(r)));
+    GstElement* sinkElem = gst_bin_get_by_name(GST_BIN(pipeline), "sink");
+    if (!sinkElem) {
+        emit logLine("[GST] appsink not found");
+        gst_object_unref(pipeline);
         QThread::msleep(300);
         goto RECONNECT;
     }
 
-    r = avformat_find_stream_info(fmt, nullptr);
-    if (r < 0){
-        emit logLine(QString("[RTSP] find_stream_info: %1").arg(err2str_q(r)));
-        avformat_close_input(&fmt);
-        QThread::msleep(300);
-        goto RECONNECT;
-    }
+    GstAppSink* appsink = GST_APP_SINK(sinkElem);
+    gst_app_sink_set_emit_signals(appsink, FALSE);
+    gst_app_sink_set_drop(appsink, TRUE);
+    gst_app_sink_set_max_buffers(appsink, 1);
 
-    int vindex = av_find_best_stream(fmt, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
-    if (vindex < 0){
-        emit logLine("[RTSP] no video stream");
-        avformat_close_input(&fmt);
-        QThread::msleep(300);
-        goto RECONNECT;
-    }
+    gst_element_set_state(pipeline, GST_STATE_PLAYING);
+    emit logLine(QString("[GST] started (%1)").arg(proto));
 
-    AVStream* vs = fmt->streams[vindex];
-    const AVCodec* dec = avcodec_find_decoder(vs->codecpar->codec_id);
-    if (!dec){
-        emit logLine("[RTSP] no decoder");
-        avformat_close_input(&fmt);
-        QThread::msleep(300);
-        goto RECONNECT;
-    }
+    int no_sample_cnt = 0;
 
-    AVCodecContext* cc = avcodec_alloc_context3(dec);
-    avcodec_parameters_to_context(cc, vs->codecpar);
-
-    cc->flags |= AV_CODEC_FLAG_LOW_DELAY;
-#ifdef AV_CODEC_FLAG2_FAST
-    cc->flags2 |= AV_CODEC_FLAG2_FAST;
-#endif
-
-    // ===================== 解码线程：不要锁死 1 =====================
-    // 经验：用 (CPU核心数 - 1)，至少 2 线程；避免把 UI/其它线程饿死
-    const int tc = std::max(2, QThread::idealThreadCount() - 1);
-    cc->thread_count = tc;
-
-    cc->pkt_timebase = vs->time_base;
-
-    AVDictionary* decOpts = nullptr;
-    av_dict_set(&decOpts, "flags", "low_delay", 0);
-    av_dict_set(&decOpts, "thread_type", "slice", 0);
-    const QByteArray tcStr = QByteArray::number(tc);
-    av_dict_set(&decOpts, "threads", tcStr.constData(), 0);
-
-
-    r = avcodec_open2(cc, dec, &decOpts);
-    av_dict_free(&decOpts);
-
-    emit logLine(QString("[RTSP] decoder threads=%1").arg(tc));
-
-
-    if (r < 0){
-        emit logLine(QString("[RTSP] avcodec_open2: %1").arg(err2str_q(r)));
-        avcodec_free_context(&cc);
-        avformat_close_input(&fmt);
-        QThread::msleep(300);
-        goto RECONNECT;
-    }
-
-    // -------- 2) SWS / 帧缓冲（三缓冲，避免每帧 new + copy） --------
-    SwsContext* sws = nullptr;
-    AVFrame* frame = av_frame_alloc();
-    AVPacket* pkt  = av_packet_alloc();
-
-    int outW_fixed = 0; // 0=跟随源；你也可以固定 1224
-    int outH_fixed = 0;
-
-    auto recreateSwsIfNeeded = [&](int srcW, int srcH, AVPixelFormat srcFmt)->bool{
-        int outW = (outW_fixed > 0) ? outW_fixed : srcW;
-        int outH = (outH_fixed > 0) ? outH_fixed : srcH;
-
-        static int cachedSrcW=-1, cachedSrcH=-1, cachedOutW=-1, cachedOutH=-1;
-        static AVPixelFormat cachedSrcFmt=AV_PIX_FMT_NONE;
-
-        if (!sws || srcW!=cachedSrcW || srcH!=cachedSrcH || srcFmt!=cachedSrcFmt ||
-            outW!=cachedOutW || outH!=cachedOutH)
-        {
-            if (sws) sws_freeContext(sws);
-            sws = sws_getContext(srcW, srcH, srcFmt,
-                                 outW, outH, AV_PIX_FMT_RGB24,
-                                 SWS_POINT, nullptr, nullptr, nullptr);
-            cachedSrcW=srcW; cachedSrcH=srcH; cachedSrcFmt=srcFmt;
-            cachedOutW=outW; cachedOutH=outH;
-
-            // 重新分配三缓冲
-        }
-        return sws != nullptr;
-    };
-
-    auto is_keyframe = [&](const AVFrame* f)->bool {
-#ifdef AV_FRAME_FLAG_KEY
-        return (f->flags & AV_FRAME_FLAG_KEY) != 0;
-#else
-        return f->pict_type == AV_PICTURE_TYPE_I || f->pict_type == AV_PICTURE_TYPE_SI;
-#endif
-    };
-
-    auto pkt_ts_ms = [&](const AVPacket* p)->int64_t{
-        int64_t pts = (p->pts != AV_NOPTS_VALUE) ? p->pts : p->dts;
-        if (pts == AV_NOPTS_VALUE) return INT64_MIN;
-        return av_rescale_q(pts, vs->time_base, AVRational{1,1000});
-    };
-
-    // ★ 更温和的追赶：短抖动不立刻跳帧
-    const int64_t LAG_BUDGET_MS = 250;
-    int lag_over_cnt = 0;
-    bool catching_up = false;
-
-    // 三缓冲：QSharedPointer 管生命周期，避免 copy
-    QSharedPointer<QImage> buf[3];
-    int bufW = -1, bufH = -1;
-    int bufIdx = 0;
-
-    auto ensureBuffers = [&](int w, int h){
-        if (w == bufW && h == bufH && buf[0] && buf[1] && buf[2]) return;
-        bufW = w; bufH = h;
-        for (int i = 0; i < 3; ++i){
-            buf[i] = QSharedPointer<QImage>::create(bufW, bufH, QImage::Format_RGB888);
-        }
-        bufIdx = 0;
-        emit logLine(QString("[RTSP] buffers recreated: %1x%2").arg(bufW).arg(bufH));
-    };
-
-    emit logLine(QString("[RTSP] started: %1").arg(url_));
-
-    int read_err_cnt = 0;
-    const int READ_ERR_RECONNECT = 50; // 连续错误次数阈值，防止长时间卡死
-
-    // -------- 3) 主循环 --------
     while (!stopFlag_.load(std::memory_order_acquire)) {
-        r = av_read_frame(fmt, pkt);
-        if (r == AVERROR_EOF) break;
-        if (r < 0) {
-            // 网络/服务器抖动：计数后重连
-            if (++read_err_cnt > READ_ERR_RECONNECT) {
-                emit logLine("[RTSP] read_frame error too many, reconnect...");
+
+        // 拉取样本（50ms 超时），同时处理 bus 信息
+        GstSample* sample = gst_app_sink_try_pull_sample(appsink, 50 * GST_MSECOND);
+
+        log_bus_messages(pipeline, [&](const QString& s){ emit logLine(s); });
+
+        if (!sample) {
+            // 长时间没 sample 可能是断流/卡死，重连
+            if (++no_sample_cnt > 200) { // ~10s
+                emit logLine("[GST] no samples too long, reconnect...");
                 break;
             }
-            QThread::msleep(2);
             continue;
         }
-        read_err_cnt = 0;
+        no_sample_cnt = 0;
 
-        if (pkt->stream_index != vindex){
-            av_packet_unref(pkt);
+        GstCaps* caps = gst_sample_get_caps(sample);
+        if (!caps) { gst_sample_unref(sample); continue; }
+
+        GstVideoInfo vinfo;
+        if (!gst_video_info_from_caps(&vinfo, caps)) {
+            gst_sample_unref(sample);
             continue;
         }
+        const int w = (int)GST_VIDEO_INFO_WIDTH(&vinfo);
+        const int h = (int)GST_VIDEO_INFO_HEIGHT(&vinfo);
+        const int srcStride = (int)GST_VIDEO_INFO_PLANE_STRIDE(&vinfo, 0); // RGB stride
 
-        // lag 估计
-        int64_t pkt_ms = pkt_ts_ms(pkt);
-        if (pkt_ms != INT64_MIN){
-            int64_t now_ms = now_us() / 1000;
-            int64_t lag = now_ms - pkt_ms;
+        GstBuffer* buffer = gst_sample_get_buffer(sample);
+        GstMapInfo map;
+        if (buffer && gst_buffer_map(buffer, &map, GST_MAP_READ)) {
 
-            if (lag > LAG_BUDGET_MS) lag_over_cnt++;
-            else lag_over_cnt = 0;
+            // 生成 QImage 并按行拷贝（兼容 stride != w*3 的情况，避免花屏）
+            auto img = QSharedPointer<QImage>::create(w, h, QImage::Format_RGB888);
+            const int dstStride = img->bytesPerLine();
+            const uchar* src = reinterpret_cast<const uchar*>(map.data);
 
-            // 连续超阈值才进入 catching_up，避免短抖动就跳
-            if (!catching_up && lag_over_cnt >= 10){
-                catching_up = true;
-                cc->skip_frame = AVDISCARD_NONREF;
-                emit logLine(QString("[RTSP] catching up (lag=%1ms)").arg(lag));
+            const int copyBytes = std::min(dstStride, srcStride);
+            for (int y = 0; y < h; ++y) {
+                memcpy(img->scanLine(y), src + y * srcStride, copyBytes);
             }
+
+            gst_buffer_unmap(buffer, &map);
+
+            emit frameReady(img);
+        } else {
+            emit logLine("[GST] buffer_map failed");
         }
 
-        bool pkt_is_key = (pkt->flags & AV_PKT_FLAG_KEY) != 0;
-        if (catching_up && pkt_is_key){
-            catching_up = false;
-            lag_over_cnt = 0;
-            cc->skip_frame = AVDISCARD_DEFAULT;
-            emit logLine("[RTSP] catch-up done (keyframe)");
-        }
-
-        if (avcodec_send_packet(cc, pkt) == 0){
-            while (!stopFlag_.load(std::memory_order_acquire)) {
-                r = avcodec_receive_frame(cc, frame);
-                if (r == AVERROR(EAGAIN) || r == AVERROR_EOF) break;
-                if (r < 0) break;
-
-                if (catching_up && is_keyframe(frame)) {
-                    catching_up = false;
-                    lag_over_cnt = 0;
-                    cc->skip_frame = AVDISCARD_DEFAULT;
-                }
-
-                if (!recreateSwsIfNeeded(cc->width, cc->height, cc->pix_fmt)){
-                    emit logLine("[RTSP] sws_getContext failed");
-                    goto L_EXIT;
-                }
-
-                int outW = (outW_fixed > 0) ? outW_fixed : cc->width;
-                int outH = (outH_fixed > 0) ? outH_fixed : cc->height;
-
-                ensureBuffers(outW, outH);
-
-                // 取一个 buffer 写入
-                QSharedPointer<QImage> img = buf[bufIdx];
-                bufIdx = (bufIdx + 1) % 3;
-
-                uint8_t* dstData[4]  = { img->bits(), nullptr, nullptr, nullptr };
-                int      dstLines[4] = { (int)img->bytesPerLine(), 0, 0, 0 };
-
-                sws_scale(sws, frame->data, frame->linesize, 0, cc->height, dstData, dstLines);
-
-                // ★ 无 copy：直接把 shared_ptr 发给 UI
-                emit frameReady(img);
-            }
-        }
-
-        av_packet_unref(pkt);
+        gst_sample_unref(sample);
     }
 
-L_EXIT:
-    av_packet_free(&pkt);
-    av_frame_free(&frame);
-    if (sws) sws_freeContext(sws);
-    avcodec_free_context(&cc);
-    avformat_close_input(&fmt);
-
-    emit logLine("[RTSP] stopped");
+    gst_element_set_state(pipeline, GST_STATE_NULL);
+    gst_object_unref(sinkElem);
+    gst_object_unref(pipeline);
+    emit logLine("[GST] stopped");
 
     if (!stopFlag_.load(std::memory_order_acquire)) {
         QThread::msleep(300);

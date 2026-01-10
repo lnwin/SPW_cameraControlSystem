@@ -64,5 +64,30 @@ DEFINES += _WIN32_WINNT=0x0601 WIN32_LEAN_AND_MEAN NOMINMAX
 RESOURCES += \
     icons.qrc
 
+# ===================== GStreamer (MSVC x86_64) =====================
+GST_ROOT = E:/ThirdParty/Gstreamer/development/1.0/msvc_x86_64
+
+INCLUDEPATH += \
+    $$GST_ROOT/include/gstreamer-1.0 \
+    $$GST_ROOT/include/glib-2.0 \
+    $$GST_ROOT/lib/glib-2.0/include \
+    $$GST_ROOT/include
+
+DEPENDPATH += $$INCLUDEPATH
+
+# GStreamer libs (MSVC)
+win32: LIBS += -L$$GST_ROOT/lib \
+    -lgstreamer-1.0 \
+    -lgstapp-1.0 \
+    -lgstbase-1.0 \
+    -lgstvideo-1.0 \
+    -lgobject-2.0 \
+    -lglib-2.0
+
+# （可选）如果你用到更多 plugin / net 相关 API，才加下面：
+# win32: LIBS += -lgstnet-1.0
+
+# 运行时 DLL 搜索路径：qmake 里写 PATH=... 不会自动影响运行。
+# 推荐：在 Qt Creator 的 Run Environment 里加 PATH / GST_PLUGIN_PATH（下面第4节给你）。
 
 
