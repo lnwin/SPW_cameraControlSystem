@@ -320,7 +320,7 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::onIpChangeTimeout);
     // system ip + mediamtx
     updateSystemIP();
-    startMediaMTX();
+   // startMediaMTX();
 
     // init state
     curSelectedSn_.clear();
@@ -336,7 +336,7 @@ MainWindow::~MainWindow()
         viewer_->wait(1000);
         viewer_ = nullptr;
     }
-    stopMediaMTX();
+  //  stopMediaMTX();
     stopColorTuneThread();   // 用统一封装
 
     delete ui;
@@ -846,10 +846,10 @@ void MainWindow::updateCameraButtons()
     }
     if (!online) return;
 
-    bool pushing = false;
-    auto it = pathStates_.find(curSelectedSn_);
-    if (it != pathStates_.end()) pushing = it.value().hasPublisher;
-    if (!pushing) return;
+    // bool pushing = false;
+    // auto it = pathStates_.find(curSelectedSn_);
+    // if (it != pathStates_.end()) pushing = it.value().hasPublisher;
+    // if (!pushing) return;
 
     if (actOpen)     actOpen->setEnabled(true);
     if (actClose)    actClose->setEnabled(false);
@@ -858,7 +858,6 @@ void MainWindow::updateCameraButtons()
     if (actStopRec)  actStopRec->setEnabled(false);
 }
 
-// -------------------- open/close/grab/record --------------------
 void MainWindow::on_action_openCamera_triggered()
 {
     if (viewer_) return;
@@ -866,20 +865,35 @@ void MainWindow::on_action_openCamera_triggered()
         QMessageBox::warning(this, tr("提示"), tr("请先在列表中选择一台相机。"));
         return;
     }
+    if (!mgr_) return;
 
-    curPath_ = curSelectedSn_;
-    const QString url = QString("rtsp://%1:%2/%3").arg(curBindIp_).arg(curRtspPort_).arg(curPath_);
+    DeviceInfo dev;
+    if (!mgr_->getDevice(curSelectedSn_, dev)) {
+        QMessageBox::warning(this, tr("提示"), tr("未找到设备信息，请确认设备在线。"));
+        return;
+    }
+
+    const QString devIp = dev.ip.toString();
+    const int rtspPort = 8554;                   // A-scheme：设备端 RTSP server 端口
+    const QString path = curSelectedSn_;         // 你的 mount 就是 SN
+
+    const QString url = QString("rtsp://%1:%2/%3").arg(devIp).arg(rtspPort).arg(path);
+    qInfo().noquote() << "[UI] open rtsp url =" << url;
 
     viewer_ = new RtspViewerQt(this);
     previewActive_ = false;
 
     connect(viewer_, &RtspViewerQt::frameReady, this, &MainWindow::onFrame);
+    connect(viewer_, &RtspViewerQt::logLine, this, [](const QString& s){
+        qInfo().noquote() << s;
+    });
 
     viewer_->setUrl(url);
     viewer_->start();
 
     updateCameraButtons();
 }
+
 
 void MainWindow::on_action_closeCamera_triggered()
 {
