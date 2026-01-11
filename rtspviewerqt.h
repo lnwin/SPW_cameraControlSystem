@@ -1,3 +1,4 @@
+// rtspviewerqt.h  (FULL REPLACEABLE FILE)
 #pragma once
 
 #include <QThread>
@@ -5,11 +6,7 @@
 #include <QImage>
 #include <QString>
 #include <atomic>
-
-// GStreamer
-#include <gst/gst.h>
-#include <gst/app/gstappsink.h>
-#include <gst/video/video.h>
+#include <mutex>
 
 class RtspViewerQt : public QThread
 {
@@ -19,17 +16,18 @@ public:
     ~RtspViewerQt() override;
 
     void setUrl(const QString& url);
-    void stop();
 
-    // 可选：应急切 TCP（默认 UDP）
-    void setUseTcp(bool on) { useTcp_ = on; }
+    // latency hint (ms). If <=0, viewer will choose a sane default.
     void setLatencyMs(int ms) { latencyMs_ = ms; }
 
-    // UDP 端口范围：跨路由/防火墙必备（默认 50000-51000）
-    void setPortRange(const QString& r) { portRange_ = r; }
+    // Non-blocking stop (thread exits by itself)
+    void stop();
+
+    // UI thread calls this periodically (e.g., 60Hz).
+    // Returns latest frame ONLY if a new one arrived since last take.
+    QSharedPointer<QImage> takeLatestFrameIfNew();
 
 signals:
-    void frameReady(QSharedPointer<QImage> img);
     void logLine(const QString& s);
 
 protected:
@@ -38,10 +36,11 @@ protected:
 private:
     QString url_;
     std::atomic<bool> stopFlag_{false};
+    int latencyMs_ = 0;
 
-    bool useTcp_ = false;        // 默认 UDP
-    int  latencyMs_ =200;       // 默认 200ms
-    QString portRange_ = "50000-51000";
-    friend GstFlowReturn on_new_sample(GstAppSink* sink, gpointer user_data);
-
+    // latest frame handoff
+    std::mutex latestMtx_;
+    QSharedPointer<QImage> latest_;
+    std::atomic<uint64_t> latestSeq_{0};
+    std::atomic<uint64_t> takenSeq_{0};
 };

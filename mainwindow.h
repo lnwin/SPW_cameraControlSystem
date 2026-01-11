@@ -16,6 +16,9 @@
 #include <QPainter>
 #include <QLabel>
 #include <QThread>
+#include <QSharedPointer>
+#include <QImage>
+#include <QSet>
 
 #include "rtspviewerqt.h"
 #include "udpserver.h"        // UdpDeviceManager / DeviceInfo
@@ -23,7 +26,8 @@
 #include "systemsetting.h"
 #include "videorecorder.h"
 #include "colortuneworker.h"  // LabABFixed + ColorTuneWorker
-#include "ZoomPanImageView.h"  // 新增
+#include "ZoomPanImageView.h" // ZoomPanImageView
+
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
 QT_END_NAMESPACE
@@ -41,8 +45,11 @@ protected:
     void closeEvent(QCloseEvent* event) override;
 
 private slots:
-    void onFrame(QSharedPointer<QImage> img);              // RTSP frame from viewer
-    void onColorTunedFrame(QSharedPointer<QImage> img);    // processed frame from worker
+    // NOTE: 新结构下不再依赖 viewer_->frameReady 推送；
+    // 这个槽保留（兼容/调试），但默认不会被连接。
+    void onFrame(QSharedPointer<QImage> img);
+
+    void onColorTunedFrame(QSharedPointer<QImage> img);
 
     void updateSystemIP();
     void onSnUpdatedForIpChange(const QString& sn);
@@ -60,6 +67,8 @@ private slots:
     void getMSG(const QString& sn);
     void configCameraForSn(const QString& sn);
 
+    void onTableSelectionChanged();
+
 signals:
     void sendFrame2Record(const QImage& img);
     void sendFrame2Capture(const QImage& img);
@@ -71,14 +80,20 @@ signals:
 private:
     Ui::MainWindow *ui = nullptr;
     ZoomPanImageView* view_ = nullptr;
+
     // ===== ColorTune thread =====
-    QThread*        colorThread_ = nullptr;
+    QThread*         colorThread_ = nullptr;
     ColorTuneWorker* colorWorker_ = nullptr;
     void startColorTuneThread();
     void stopColorTuneThread();
 
     // ===== RTSP viewer =====
     RtspViewerQt* viewer_ = nullptr;
+
+    // ===== New: UI pull timer (decouple acquisition from presentation) =====
+    QTimer* previewPullTimer_ = nullptr;
+    void startPreviewPullTimer();
+    void stopPreviewPullTimer();
 
     // ===== setting/record =====
     systemsetting* mysystemsetting = nullptr;
@@ -118,7 +133,6 @@ private:
     QString curSelectedSn_;
     bool    previewActive_ = false;
     void updateCameraButtons();
-    void onTableSelectionChanged();
     void doStopViewer();
 
     // ---- MediaMTX pushing state ----
@@ -145,14 +159,18 @@ private:
     // ---- title ----
     void titleForm();
 
-    // ===== Color tune params (UI holds the current config; worker gets synced) =====
+    // ===== Color tune params =====
     bool      enableColorTune_ = true;
     LabABFixed tuneParams_;
     int       meanStride_ = 4;
     float     corrRebuildThr_ = 0.5f;
 
-    QHash<QString, int> offlineStrikes_; // 连续离线计数（按 SN）
-    qint64 lastFrameMs_ = 0;             // 最近一次“真正显示/收到帧(out)”的时间戳(ms)
+    // ---- offline/stream alive ----
+    QHash<QString, int> offlineStrikes_;
+    qint64 lastFrameMs_ = 0;
+
+    // ---- misc (your existing) ----
+    void updateTableDeviceInternal(const QString& sn) { updateTableDevice(sn); }
 };
 
 #endif // MAINWINDOW_H
