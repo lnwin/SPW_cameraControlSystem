@@ -76,8 +76,11 @@ signals:
     void stopRecord();
 
     void sendFrameToColorTune(QSharedPointer<QImage> img); // UI -> worker
+private:
+    void shutdownAllThreads();
 
 private:
+
     Ui::MainWindow *ui = nullptr;
     ZoomPanImageView* view_ = nullptr;
 

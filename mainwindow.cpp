@@ -282,18 +282,10 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
-    if (viewer_) {
-        stopPreviewPullTimer();
-        viewer_->stop();
-        viewer_->wait(1000);
-        viewer_ = nullptr;
-    }
-
-    // stopMediaMTX(); // 你当前注释掉，保持不变
-    stopColorTuneThread();
-
+    // 所有线程已在 closeEvent 中安全退出
     delete ui;
 }
+
 
 // ===================== Preview Pull Timer =====================
 void MainWindow::startPreviewPullTimer()
@@ -348,11 +340,10 @@ void MainWindow::stopColorTuneThread()
 
 void MainWindow::closeEvent(QCloseEvent* event)
 {
-    doStopViewer();
-    stopMediaMTXBlocking();
-    stopColorTuneThread();
+    shutdownAllThreads();   // 👈 统一入口
     event->accept();
 }
+
 
 // -------------------- title bar --------------------
 void MainWindow::titleForm()
@@ -1065,4 +1056,40 @@ void MainWindow::onColorTunedFrame(QSharedPointer<QImage> img)
         emit sendFrame2Capture(*img);
         iscapturing_ = false;
     }
+}
+void MainWindow::shutdownAllThreads()
+{
+    // 1. 停止 UI 定时器
+    if (previewPullTimer_) previewPullTimer_->stop();
+    if (devAliveTimer_)    devAliveTimer_->stop();
+    if (ipChangeTimer_)    ipChangeTimer_->stop();
+    if (recBlinkTimer_)    recBlinkTimer_->stop();
+
+    // 2. 停止 RTSP Viewer（最容易炸）
+    if (viewer_) {
+        RtspViewerQt* v = viewer_;
+        viewer_ = nullptr;
+
+        v->stop();                // 发停止信号
+        v->quit();                // ⚠️ 必须
+        if (!v->wait(3000)) {     // ⚠️ 必须 wait
+            qWarning() << "[UI] RtspViewerQt force terminate";
+        }
+        v->deleteLater();
+    }
+
+    // 3. 停止录像线程
+    if (recThread_) {
+        recThread_->quit();
+        if (!recThread_->wait(3000)) {
+            qWarning() << "[UI] recThread force terminate";
+        }
+        recThread_ = nullptr;
+    }
+
+    // 4. 停止 ColorTune
+    stopColorTuneThread();
+
+    // 5. MediaMTX（你已有 blocking 版）
+    stopMediaMTXBlocking();
 }
