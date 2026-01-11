@@ -390,7 +390,7 @@ RECONNECT:
         lastAnyWallMs = tWall.elapsed();
 
         if (!sample) {
-            if (++no_sample_cnt > 600) { // 600 * 20ms = 12s
+            if (++no_sample_cnt > 200) { // 600 * 20ms = 12s
                 emit logLine("[GST] no samples too long, reconnect...");
                 break;
             }

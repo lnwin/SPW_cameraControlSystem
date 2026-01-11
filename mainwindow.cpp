@@ -665,16 +665,16 @@ void MainWindow::onCheckDeviceAlive()
             if (hardOffline && viewer_) {
                 offlineStrikes_[sn] = 0;
 
-                doStopViewer();
-
+                // 不要停止 viewer，让 RtspViewerQt 自己 RECONNECT
                 auto* box = new QMessageBox(QMessageBox::Information,
                                             tr("提示"),
-                                            tr("设备 [%1] 网络中断（心跳离线且视频无数据），预览已自动停止。").arg(sn),
+                                            tr("设备 [%1] 网络中断（心跳离线且视频无数据），将自动重连...").arg(sn),
                                             QMessageBox::Ok,
                                             this);
                 box->setAttribute(Qt::WA_DeleteOnClose, true);
                 box->open(); // 非阻塞
             }
+
         }
     }
 
