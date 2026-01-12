@@ -15,6 +15,62 @@ extern "C" {
 #include <libavutil/time.h>     // av_gettime_relative
 #include <libswscale/swscale.h>
 }
+// ===================== Letterbox 1080p (KeepAspect + Black Padding) =====================
+// Output: RGB888 1920x1080
+static inline QImage letterboxTo1080pRGB888(const QImage& in, bool fast)
+{
+    constexpr int OUT_W = 1920;
+    constexpr int OUT_H = 1080;
+
+    if (in.isNull()) return {};
+
+    // 1) Ensure RGB888
+    QImage src = in;
+    if (src.format() != QImage::Format_RGB888) {
+        src = src.convertToFormat(QImage::Format_RGB888);
+        if (src.isNull()) return {};
+    }
+
+    // 2) Compute keep-aspect fit size
+    const double sx = (double)OUT_W / (double)src.width();
+    const double sy = (double)OUT_H / (double)src.height();
+    const double s  = std::min(sx, sy);
+
+    int w = std::max(1, (int)std::lround(src.width()  * s));
+    int h = std::max(1, (int)std::lround(src.height() * s));
+
+    // Safety clamp
+    if (w > OUT_W) w = OUT_W;
+    if (h > OUT_H) h = OUT_H;
+
+    // 3) Scale (still RGB888)
+    const auto tr = fast ? Qt::FastTransformation : Qt::SmoothTransformation;
+    QImage scaled = src.scaled(w, h, Qt::IgnoreAspectRatio, tr);
+    if (scaled.isNull()) return {};
+    if (scaled.format() != QImage::Format_RGB888)
+        scaled = scaled.convertToFormat(QImage::Format_RGB888);
+
+    // 4) Create black canvas
+    QImage out(OUT_W, OUT_H, QImage::Format_RGB888);
+    out.fill(Qt::black);
+
+    // 5) Center blit (row copy)
+    const int offX = (OUT_W - w) / 2;
+    const int offY = (OUT_H - h) / 2;
+
+    const int srcStride = scaled.bytesPerLine();
+    const int dstStride = out.bytesPerLine();
+    const int rowBytes  = w * 3;
+
+    const uchar* ps = scaled.constBits();
+    uchar* pd = out.bits() + offY * dstStride + offX * 3;
+
+    for (int y = 0; y < h; ++y) {
+        memcpy(pd + y * dstStride, ps + y * srcStride, rowBytes);
+    }
+
+    return out;
+}
 
 // ========== 构造 / 析构 ==========
 
@@ -78,8 +134,15 @@ void VideoRecorder::receiveFrame2Save(const QImage& img)
         return;
     }
 
+    // ★关键：保存用 1080p letterbox（不变形、不裁剪、有黑边）
+    QImage out = letterboxTo1080pRGB888(img, /*fast=*/false);
+    if (out.isNull()) {
+        emit sendMSG2ui(QStringLiteral("[VideoRecorder] 单帧保存失败：letterbox 转换失败"));
+        return;
+    }
+
     const char* fmtStr = imageFormatToQtString(fmt);
-    if (!img.save(path, fmtStr)) {
+    if (!out.save(path, fmtStr)) {
         emit sendMSG2ui(QStringLiteral("[VideoRecorder] 单帧保存失败：%1").arg(path));
         return;
     }
@@ -287,8 +350,9 @@ bool VideoRecorder::openEncoderLockedForImage(const QImage &img)
         ffInited = true;
     }
 
-    encWidth_  = img.width();
-    encHeight_ = img.height();
+    encWidth_  = 1920;
+    encHeight_ = 1080;
+
     encFps_    = (currentOptions_.fps > 0) ? currentOptions_.fps : 22.0;
 
     currentRecordingPath_ = makeVideoFilePathLocked(currentOptions_);
@@ -442,14 +506,13 @@ bool VideoRecorder::encodeImageLocked(const QImage &img)
         rgb = rgb.convertToFormat(QImage::Format_RGB888);
     }
 
-    // 关键修复1：尺寸不一致强制缩放，避免黑屏/白屏/花屏
-    if (rgb.width() != encWidth_ || rgb.height() != encHeight_) {
-        rgb = rgb.scaled(encWidth_, encHeight_, Qt::IgnoreAspectRatio, Qt::FastTransformation);
-        if (rgb.isNull() || rgb.width() != encWidth_ || rgb.height() != encHeight_) {
-            qWarning() << "[VideoRecorder] scaled failed.";
-            return false;
-        }
+    // ★关键：录制用 1080p letterbox（不变形、不裁剪、有黑边）
+    QImage rgb1080 = letterboxTo1080pRGB888(rgb, /*fast=*/true);
+    if (rgb1080.isNull() || rgb1080.width() != encWidth_ || rgb1080.height() != encHeight_) {
+        qWarning() << "[VideoRecorder] letterboxTo1080p failed.";
+        return false;
     }
+
 
     // 关键修复2：复用 AVFrame 前必须可写（避免偶发黑帧）
     int ret = av_frame_make_writable(frame_);
@@ -458,8 +521,9 @@ bool VideoRecorder::encodeImageLocked(const QImage &img)
         return false;
     }
 
-    const uint8_t *srcData[1] = { rgb.bits() };
-    int srcStride[1]          = { rgb.bytesPerLine() };
+    const uint8_t *srcData[1] = { rgb1080.bits() };
+    int srcStride[1]          = { rgb1080.bytesPerLine() };
+
 
     // 2) RGB -> YUV420P
     ret = sws_scale(swsCtx_,

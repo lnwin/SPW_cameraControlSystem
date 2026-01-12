@@ -24,26 +24,8 @@ void ColorTuneWorker::onFrameIn(QSharedPointer<QImage> img)
 
     // bypass：仍然可以选择直接输出，但如果你“保存/显示必须1080”，那 bypass 也应升到1080
     if (!enable_) {
-        if (force1080_) {
-            ensureUpBuffersLocked(outW_, outH_);
-            QSharedPointer<QImage> dstImg = upBuf_[upIdx_];
-            upIdx_ = (upIdx_ + 1) % 3;
-
-            const QImage& in = *img;
-            QImage rgbIn = in;
-            if (rgbIn.format() != QImage::Format_RGB888)
-                rgbIn = rgbIn.convertToFormat(QImage::Format_RGB888);
-
-            cv::Mat src(rgbIn.height(), rgbIn.width(), CV_8UC3,
-                        (void*)rgbIn.constBits(), rgbIn.bytesPerLine());
-            cv::Mat dst(outH_, outW_, CV_8UC3, (void*)dstImg->bits(), dstImg->bytesPerLine());
-
-            cv::resize(src, dst, cv::Size(outW_, outH_), 0, 0, cv::INTER_LINEAR);
-
-            emit frameOut(dstImg);
-        } else {
-            emit frameOut(img);
-        }
+        // UI/录制/截图都必须保持源分辨率（1224x1024），不在这里做任何缩放
+        emit frameOut(img);
         return;
     }
 
@@ -51,27 +33,10 @@ void ColorTuneWorker::onFrameIn(QSharedPointer<QImage> img)
     QImage tuned = applyColorTuneFast_locked(*img);
 
     // 2) 再在 worker 内“最后一步”放大到 1920x1080（只做一次）
-    if (force1080_) {
-        ensureUpBuffersLocked(outW_, outH_);
-        QSharedPointer<QImage> dstImg = upBuf_[upIdx_];
-        upIdx_ = (upIdx_ + 1) % 3;
-
-        // tuned 必须是 RGB888（你的 applyColorTuneFast_locked 输出就是 RGB888）
-        if (tuned.format() != QImage::Format_RGB888)
-            tuned = tuned.convertToFormat(QImage::Format_RGB888);
-
-        cv::Mat src(tuned.height(), tuned.width(), CV_8UC3, (void*)tuned.bits(), tuned.bytesPerLine());
-        cv::Mat dst(outH_, outW_, CV_8UC3, (void*)dstImg->bits(), dstImg->bytesPerLine());
-
-        cv::resize(src, dst, cv::Size(outW_, outH_), 0, 0, cv::INTER_LINEAR);
-
-        // ★零拷贝：直接把三缓冲的 shared_ptr 发给 UI/录制
-        emit frameOut(dstImg);
-        return;
-    }
-
-    // 不强制1080时：仍然共享指针输出，避免 copy
+    // 重要：worker 输出必须保持源分辨率（1224x1024），不做 1080 缩放
     emit frameOut(QSharedPointer<QImage>::create(std::move(tuned)));
+    return;
+
 }
 
 
