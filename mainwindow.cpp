@@ -93,6 +93,22 @@ static QStringList probeWiredIPv4sStatic()
 // ===================== “绿屏/花屏”显示抑制（仅 UI 丢帧） =====================
 // 不改头文件：用静态表记录每个 MainWindow 的 “丢帧截止时间”
 static QHash<const MainWindow*, qint64> g_dropUntilMs;
+// ===================== Adaptive preview pull (UI polling without fixed FPS) =====================
+// 不改头文件：用静态表记录每个 MainWindow 的自适应拉帧状态
+static QHash<const MainWindow*, int>    g_noFrameStreak;   // 连续无帧次数
+static QHash<const MainWindow*, qint64> g_lastNewFrameMs;  // 上一次拿到新帧的时刻（UI侧）
+static QHash<const MainWindow*, bool>   g_previewLoopOn;   // 是否已启动自适应循环
+
+// 计算下一次拉帧间隔（毫秒）：有帧 -> 尽快；无帧 -> 退避省电（不固定FPS）
+static int calcNextPullIntervalMs(int noFrameStreak)
+{
+    // 你可按功耗要求调大/调小
+    if (noFrameStreak <= 2)  return 0;   // 刚启动/刚断一下：立即再试（更顺滑）
+    if (noFrameStreak <= 8)  return 2;
+    if (noFrameStreak <= 20) return 8;
+    if (noFrameStreak <= 60) return 16;
+    return 33; // 长时间无帧：进一步降频（省电）
+}
 
 // ===================================================================
 //                          MainWindow
@@ -229,20 +245,64 @@ MainWindow::MainWindow(QWidget *parent)
 
     previewPullTimer_ = new QTimer(this);
     previewPullTimer_->setTimerType(Qt::PreciseTimer);
-    previewPullTimer_->setInterval(16);
+    previewPullTimer_->setSingleShot(true);   // 关键：singleShot + 自调度（不固定FPS）
+
     connect(previewPullTimer_, &QTimer::timeout, this, [this](){
-        if (!viewer_) return;
+        if (!previewPullTimer_) return;
 
+        // 如果没在预览或 viewer 已空，停止循环（避免空转）
+        if (!viewer_ || !g_previewLoopOn.value(this, false)) {
+            g_previewLoopOn[this] = false;
+            g_noFrameStreak[this] = 0;
+            return;
+        }
+
+        bool gotNewFrame = false;
+
+        // 取最新帧（如果没有新帧，takeLatestFrameIfNew 应该返回 null）
         QSharedPointer<QImage> img = viewer_->takeLatestFrameIfNew();
-        if (!img || img->isNull()) return;
+        if (img && !img->isNull()) {
 
-        // reconnection: drop UI frames for a short window to hide green/partial frames
-        const qint64 now = QDateTime::currentMSecsSinceEpoch();
-        const qint64 until = g_dropUntilMs.value(this, 0);
-        if (until > 0 && now < until) return;
+            const qint64 now = QDateTime::currentMSecsSinceEpoch();
 
-        emit sendFrameToColorTune(img);
+            // 冷启动/重连“丢帧窗口”：隐藏绿屏/半帧（你已有逻辑，保留）
+            const qint64 until = g_dropUntilMs.value(this, 0);
+            if (!(until > 0 && now < until)) {
+                gotNewFrame = true;
+                g_lastNewFrameMs[this] = now;
+                g_noFrameStreak[this] = 0;
+
+                // 关键：来一帧就立刻投喂处理线程
+                emit sendFrameToColorTune(img);
+            } else {
+                // 仍处在丢帧窗口，视作“无帧”（继续快速拉，尽快出稳态）
+                g_noFrameStreak[this] = g_noFrameStreak.value(this, 0) + 1;
+            }
+
+        } else {
+            g_noFrameStreak[this] = g_noFrameStreak.value(this, 0) + 1;
+        }
+
+        // 自适应调度下一次拉帧：有帧尽快、无帧退避
+        int nextMs = calcNextPullIntervalMs(g_noFrameStreak.value(this, 0));
+
+        // 进一步优化“第一次卡”的主观体验：刚启动的前 1 秒，哪怕无帧也不要退避太快
+        // 避免首个 IDR 来得慢时，UI 拉帧频率过低导致“更像卡住”
+        const qint64 now2 = QDateTime::currentMSecsSinceEpoch();
+        const qint64 t0   = g_lastNewFrameMs.value(this, 0);
+        if (t0 == 0) {
+            // 还没拿到过任何新帧：保持相对积极的拉取频率
+            nextMs = qMin(nextMs, 8);
+        } else {
+            // 已经拿到过帧：正常自适应
+            (void)gotNewFrame;
+        }
+
+        if (g_previewLoopOn.value(this, false) && previewPullTimer_) {
+            previewPullTimer_->start(nextMs);
+        }
     });
+
 
     ipChangeTimer_ = new QTimer(this);
     ipChangeTimer_->setSingleShot(true);
@@ -323,18 +383,26 @@ void MainWindow::stopColorTuneThread()
     colorWorker_ = nullptr;
 }
 
-// ===================== Preview Pull Timer =====================
 void MainWindow::startPreviewPullTimer()
 {
-    if (previewPullTimer_ && !previewPullTimer_->isActive())
-        previewPullTimer_->start();
+    if (!previewPullTimer_) return;
+
+    // 启动自适应循环：立即拉一次（不固定FPS）
+    g_previewLoopOn[this] = true;
+    g_noFrameStreak[this] = 0;
+    // 注意：g_lastNewFrameMs 这里不清零，让“重连”也能更平滑；
+    // 但在 openCameraForSelected 里我们会主动清一次，作为“新会话”
+    if (!previewPullTimer_->isActive())
+        previewPullTimer_->start(0);
 }
 
 void MainWindow::stopPreviewPullTimer()
 {
-    if (previewPullTimer_ && previewPullTimer_->isActive())
-        previewPullTimer_->stop();
+    if (previewPullTimer_) previewPullTimer_->stop();
+    g_previewLoopOn[this] = false;
+    g_noFrameStreak[this] = 0;
 }
+
 
 // -------------------- network ip --------------------
 void MainWindow::updateSystemIP()
@@ -599,8 +667,14 @@ bool MainWindow::openCameraForSelected(bool showMsgBox)
     previewActive_ = false;
     lastFrameMs_ = 0;
 
-    // drop UI frames for 600ms after (re)start
-    g_dropUntilMs[this] = QDateTime::currentMSecsSinceEpoch() + 600;
+    // 新会话：重置 UI 拉帧状态（避免上一次的退避影响“第一次体验”）
+    g_noFrameStreak[this]  = 0;
+    g_lastNewFrameMs[this] = 0;
+
+    // drop UI frames for a short window after (re)start
+    // 适当加到 800ms：更能覆盖“等IDR/解码器起帧”的不稳定期（你也可改回 600）
+    g_dropUntilMs[this] = QDateTime::currentMSecsSinceEpoch() + 800;
+
 
     connect(viewer_, &RtspViewerQt::logLine, this, [](const QString& s){
         qInfo().noquote() << s;
@@ -673,6 +747,10 @@ void MainWindow::on_action_openCamera_triggered()
 void MainWindow::on_action_closeCamera_triggered()
 {
     doStopViewer();
+    g_previewLoopOn[this] = false;
+    g_noFrameStreak[this] = 0;
+    g_lastNewFrameMs[this] = 0;
+
 }
 
 void MainWindow::on_action_grap_triggered()
@@ -910,6 +988,10 @@ void MainWindow::shutdownAllThreads()
     stopColorTuneThread();
 
     g_dropUntilMs.remove(this);
+    g_previewLoopOn.remove(this);
+    g_noFrameStreak.remove(this);
+    g_lastNewFrameMs.remove(this);
+
     offlinePopupShown_.clear();
 
 }
