@@ -1,60 +1,53 @@
+#include <QApplication>
+#include <QPalette>
+#include <QColor>
+#include <QDir>
+#include <QFileInfo>
+#include <QDebug>
+
 #include "mainwindow.h"
 
-#include <QApplication>
-#include <QFile>
-#include <QTextStream>
-#include <QApplication>
-#include "mainwindow.h"
-
+// ---------------- theme ----------------
 static void applySimpleDarkBlueTheme(QApplication &app)
 {
     QPalette pal = app.palette();
 
-    // 整体背景色（窗口）
     pal.setColor(QPalette::Window,      QColor("#0b1120"));
     pal.setColor(QPalette::Base,        QColor("#020617"));
     pal.setColor(QPalette::AlternateBase, QColor("#020617"));
 
-    // 文字颜色
     pal.setColor(QPalette::WindowText,  Qt::white);
     pal.setColor(QPalette::Text,        Qt::white);
     pal.setColor(QPalette::ButtonText,  Qt::white);
 
-    // 按钮/高亮
     pal.setColor(QPalette::Button,      QColor("#111827"));
     pal.setColor(QPalette::Highlight,   QColor("#2563eb"));
     pal.setColor(QPalette::HighlightedText, Qt::white);
 
     app.setPalette(pal);
 
-    // ★★★ 在这里追加 QSS ★★★
     const char *qss = R"(
-
-        /* 下拉列表项的文字颜色 */
         QComboBox QAbstractItemView {
-            color: #000000;             /* 黑色字体 */
-            background-color: #ffffff;  /* 白色背景（可选） */
+            color: #000000;
+            background-color: #ffffff;
         }
         QComboBox {
-            color: #000000;             /* 黑色字体 */
-            background-color: #ffffff;  /* 白色背景（可选） */
+            color: #000000;
+            background-color: #ffffff;
         }
-
-        /* 当前选中项 */
         QComboBox QAbstractItemView::item:selected {
-            background-color: #d1d5db;  /* 深一点的灰 */
+            background-color: #d1d5db;
             color: #000000;
         }
         QGroupBox::title {
             subcontrol-origin: margin;
             left: 10px;
             padding: 2px 4px;
-            color: #ffffff;              /* ★ 标题白色 */
-            font-weight: bold;           /* 可选：标题加粗 */
+            color: #ffffff;
+            font-weight: bold;
         }
-        /* TableView 表头颜色 */
         QHeaderView::section {
-            background-color: #1a2335;   /* 深蓝 */
+            background-color: #1a2335;
             color: #ffffff;
             padding: 4px;
             border: none;
@@ -63,49 +56,80 @@ static void applySimpleDarkBlueTheme(QApplication &app)
             background-color: #1a2335;
             border: none;
         }
-
-        /* 弹窗背景 */
         QDialog, QMessageBox {
             background-color: #0b1120;
             color: #ffffff;
         }
-
-        /* 按钮统一风格 */
         QPushButton {
             background-color: #111827;
             color: #ffffff;
             border-radius: 4px;
             padding: 4px 10px;
         }
-        QPushButton:hover {
-            background-color: #1f2937;
-        }
-        QPushButton:pressed {
-            background-color: #020617;
-        }
+        QPushButton:hover { background-color: #1f2937; }
+        QPushButton:pressed { background-color: #020617; }
     )";
-
     app.setStyleSheet(qss);
 }
 
+// ---------------- gstreamer env ----------------
+static void setupGStreamerRuntime(const char* argv0)
+{
+#ifdef Q_OS_WIN
+    // 不依赖 QApplication/QCoreApplication，避免 “Please instantiate QApplication first”
+    const QString appDir = QFileInfo(QString::fromLocal8Bit(argv0)).absolutePath();
 
-// static void initGstEnv() {
-//     const char* GST_ROOT = "E:\\ThirdParty\\Gstreamer\\1.0\\msvc_x86_64";
-//     qputenv("PATH", QByteArray(GST_ROOT) + "\\bin;" + qgetenv("PATH"));
-//     qputenv("GST_PLUGIN_PATH",        QByteArray(GST_ROOT) + "\\lib\\gstreamer-1.0");
-//     qputenv("GST_PLUGIN_SYSTEM_PATH", QByteArray(GST_ROOT) + "\\lib\\gstreamer-1.0");
-//     qputenv("GST_PLUGIN_SCANNER",     QByteArray(GST_ROOT) + "\\libexec\\gstreamer-1.0\\gst-plugin-scanner.exe");
-//     // 可暂时打开：
-//     // qputenv("GST_DEBUG", "rtspserver:3,rtpmanager:3");
-// }
+    // 你打包的相对目录：appDir/gstreamer/...
+    const QString gstRoot = QDir(appDir).filePath("gstreamer");
 
+    const QString gstBin   = QDir(gstRoot).filePath("bin");
+    const QString gstLib   = QDir(gstRoot).filePath("lib");
+    const QString gstPlug  = QDir(gstLib).filePath("gstreamer-1.0");
+    const QString gstShare = QDir(gstRoot).filePath("share");
+    const QString glibSchemas = QDir(gstShare).filePath("glib-2.0/schemas");
 
-int main(int argc, char *argv[]) {
-   // installFileLogger();       // <<< 先装日志
-   // initGstEnv();              // <<< 再设环境
+    // 1) PATH：让 Windows 找到 gstreamer 的 dll
+    QString path = qEnvironmentVariable("PATH");
+    if (!path.startsWith(gstBin + ";"))
+        path = gstBin + ";" + path;
+    qputenv("PATH", path.toLocal8Bit());
+
+    // 2) 插件路径（关键）
+    qputenv("GST_PLUGIN_PATH", gstPlug.toLocal8Bit());
+    qputenv("GST_PLUGIN_SYSTEM_PATH", gstPlug.toLocal8Bit());
+
+    // 3) glib schema（可选但推荐）
+    qputenv("GSETTINGS_SCHEMA_DIR", glibSchemas.toLocal8Bit());
+
+    // 4) 调试时可打开：看插件扫描到底去哪了
+    // qputenv("GST_DEBUG", "2");
+
+    // 5) 基础存在性检查（强烈建议保留一段时间）
+    if (!QDir(gstBin).exists())
+        qWarning().noquote() << "[GST-ENV] missing:" << gstBin;
+    if (!QDir(gstPlug).exists())
+        qWarning().noquote() << "[GST-ENV] missing:" << gstPlug;
+    if (!QFileInfo(QDir(glibSchemas).filePath("gschemas.compiled")).exists())
+        qWarning().noquote() << "[GST-ENV] missing: gschemas.compiled under" << glibSchemas;
+
+    qInfo().noquote() << "[GST-ENV] appDir =" << appDir;
+    qInfo().noquote() << "[GST-ENV] gstBin =" << gstBin;
+    qInfo().noquote() << "[GST-ENV] gstPlug=" << gstPlug;
+#endif
+}
+
+int main(int argc, char *argv[])
+{
+    setupGStreamerRuntime(argv[0]);
+
     QApplication a(argc, argv);
-     qRegisterMetaType<myRecordOptions>("myRecordOptions");
-    applySimpleDarkBlueTheme(a);   // ★ 一句话启用主题
-    MainWindow w; w.show();
+
+    qRegisterMetaType<myRecordOptions>("myRecordOptions");
+
+    applySimpleDarkBlueTheme(a);
+
+    MainWindow w;
+    w.show();
+
     return a.exec();
 }
