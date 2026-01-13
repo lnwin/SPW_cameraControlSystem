@@ -1,10 +1,14 @@
 // rtspviewerqt.cpp  (FULL REPLACEABLE FILE)
 // Windows/Qt + GStreamer RTSP client (UDP) + sample-interval jitter stats.
 //
-// Adds sample interval statistics per 2s window:
-//  gap_avg, p50/p90/p99, min/max, >80ms/>120ms counts, stall_max, jitter_rms.
+// Stability upgrades WITHOUT lowering latency:
+// - Force rtspsrc pad selection via "rtspsrc name=src ... src. !" to avoid linking to wrong pad (NO VIDEO bug).
+// - Add isolation queue after rtspsrc.
+// - appsink max-buffers=2 (drop=true) to tolerate short copy/UI jitter.
+// - pullTimeout 40ms reduces busy polling jitter (does not add media latency).
+// - nominalGap derived from negotiated caps framerate.
 //
-// Also keeps: pre-decode queue + triple QImage pool + short pull timeout.
+// Reconnect on ERROR/EOS or prolonged no-sample.
 
 #include "rtspviewerqt.h"
 
@@ -49,7 +53,6 @@ static bool hasFactory(const char* name)
     return false;
 }
 
-// bus：打印日志；遇到 ERROR/EOS 触发重连
 static void pump_bus(GstElement* pipeline,
                      const std::function<void(const QString&)>& logFn,
                      bool* needReconnect)
@@ -107,52 +110,57 @@ static void pump_bus(GstElement* pipeline,
 static constexpr int  kUdpRcvBufBytes = 16 * 1024 * 1024; // 16MB
 static constexpr bool kDropOnLatency  = false;
 
-// queue before decoder: absorb short RTP burst; must NOT be leaky
+// Isolation queue right after rtspsrc (RTP pad only via "src.")
+static const char* kPostSrcQueue =
+    "queue max-size-time=300000000 max-size-buffers=0 max-size-bytes=0 leaky=no";
+
+// Pre-decode queue (bounded)
 static const char* kPreDecodeQueue =
-    "queue "
-    "max-size-buffers=0 max-size-bytes=0 max-size-time=0 "
-    "min-threshold-time=0 "
-    "leaky=no";
+    "queue max-size-time=300000000 max-size-buffers=0 max-size-bytes=0 min-threshold-time=0 leaky=no";
 
 static QString build_hw_d3d11_pipeline_udp(const QString& url, int latencyMs)
 {
     return QString(
-               "rtspsrc location=%1 protocols=udp latency=%2 buffer-mode=auto "
+               "rtspsrc name=src location=%1 protocols=udp latency=%2 buffer-mode=auto "
                "udp-buffer-size=%3 do-retransmission=false drop-on-latency=%4 timeout=5000000 "
+               "src. ! %5 "
                "! rtph264depay "
                "! h264parse "
-               "! %5 "
+               "! %6 "
                "! d3d11h264dec "
                "! d3d11convert "
                "! video/x-raw(memory:D3D11Memory),format=BGRA "
                "! d3d11download "
                "! video/x-raw,format=BGRA "
-               "! queue leaky=downstream max-size-buffers=1 max-size-time=0 max-size-bytes=0 "
-               "! appsink name=sink drop=true max-buffers=1 sync=false"
+               "! queue leaky=downstream max-size-buffers=2 max-size-time=0 max-size-bytes=0 "
+               "! appsink name=sink drop=true max-buffers=2 sync=false"
                ).arg(url)
         .arg(latencyMs)
         .arg(kUdpRcvBufBytes)
         .arg(kDropOnLatency ? "true" : "false")
+        .arg(kPostSrcQueue)
         .arg(kPreDecodeQueue);
 }
 
 static QString build_sw_pipeline_udp(const QString& url, int latencyMs)
 {
     return QString(
-               "rtspsrc location=%1 protocols=udp latency=%2 buffer-mode=auto "
+               "rtspsrc name=src location=%1 protocols=udp latency=%2 buffer-mode=auto "
                "udp-buffer-size=%3 do-retransmission=false drop-on-latency=%4 timeout=5000000 "
+               "src. ! %5 "
                "! rtph264depay "
                "! h264parse "
-               "! %5 "
+               "! %6 "
                "! avdec_h264 "
                "! videoconvert "
                "! video/x-raw,format=BGRA "
-               "! queue leaky=downstream max-size-buffers=1 max-size-time=0 max-size-bytes=0 "
-               "! appsink name=sink drop=true max-buffers=1 sync=false"
+               "! queue leaky=downstream max-size-buffers=2 max-size-time=0 max-size-bytes=0 "
+               "! appsink name=sink drop=true max-buffers=2 sync=false"
                ).arg(url)
         .arg(latencyMs)
         .arg(kUdpRcvBufBytes)
         .arg(kDropOnLatency ? "true" : "false")
+        .arg(kPostSrcQueue)
         .arg(kPreDecodeQueue);
 }
 
@@ -161,16 +169,17 @@ static QString build_fallback_decodebin_udp(const QString& url, int latencyMs)
     return QString(
                "rtspsrc name=src location=%1 protocols=udp latency=%2 buffer-mode=auto "
                "udp-buffer-size=%3 do-retransmission=false drop-on-latency=%4 timeout=5000000 "
-               "src. ! queue max-size-buffers=0 max-size-time=0 max-size-bytes=0 "
+               "src. ! %5 "
                "! decodebin "
                "! videoconvert "
                "! video/x-raw,format=BGRA "
-               "! queue leaky=downstream max-size-buffers=1 max-size-time=0 max-size-bytes=0 "
-               "! appsink name=sink drop=true max-buffers=1 sync=false"
+               "! queue leaky=downstream max-size-buffers=2 max-size-time=0 max-size-bytes=0 "
+               "! appsink name=sink drop=true max-buffers=2 sync=false"
                ).arg(url)
         .arg(latencyMs)
         .arg(kUdpRcvBufBytes)
-        .arg(kDropOnLatency ? "true" : "false");
+        .arg(kDropOnLatency ? "true" : "false")
+        .arg(kPostSrcQueue);
 }
 
 static bool wait_playing_or_fail(GstElement* pipeline, int timeout_ms, QString& errOut)
@@ -180,6 +189,13 @@ static bool wait_playing_or_fail(GstElement* pipeline, int timeout_ms, QString& 
     if (r == GST_STATE_CHANGE_FAILURE) {
         errOut = "[GST] state change failure";
         return false;
+    }
+    if (state != GST_STATE_PLAYING && state != GST_STATE_PAUSED) {
+        errOut = QString("[GST] not playing, state=%1 pending=%2")
+                     .arg(gst_element_state_get_name(state))
+                     .arg(gst_element_state_get_name(pending));
+        // allow PAUSED (some pipelines settle there briefly), but if still not playing after timeout, treat as fail
+        if (state != GST_STATE_PAUSED) return false;
     }
     return true;
 }
@@ -200,6 +216,19 @@ static double percentile_ms(std::vector<double>& v, double p01)
     if (i0 == i1) return v[i0];
     const double t = idx - (double)i0;
     return v[i0] * (1.0 - t) + v[i1] * t;
+}
+
+static double caps_fps(const GstCaps* caps, double fallbackFps)
+{
+    if (!caps || gst_caps_is_empty(caps)) return fallbackFps;
+    GstStructure* st = gst_caps_get_structure((GstCaps*)caps, 0);
+    if (!st) return fallbackFps;
+
+    int n = 0, d = 1;
+    if (gst_structure_get_fraction(st, "framerate", &n, &d)) {
+        if (d != 0 && n > 0) return (double)n / (double)d;
+    }
+    return fallbackFps;
 }
 
 // ---------------------------------------------------------------------------
@@ -257,8 +286,8 @@ RECONNECT:
     if (latency <= 0) latency = 350;
     latency = std::clamp(latency, 300, 600);
 
-    // Short pull timeout to reduce "stall then jump".
-    const GstClockTime pullTimeout = 20 * GST_MSECOND;
+    // Only loop wait-time, not media latency.
+    const GstClockTime pullTimeout = 40 * GST_MSECOND;
 
     const bool haveD3D11 =
         hasFactory("rtph264depay") &&
@@ -315,7 +344,7 @@ RECONNECT:
     GstAppSink* appsink = GST_APP_SINK(sinkElem);
     gst_app_sink_set_emit_signals(appsink, FALSE);
     gst_app_sink_set_drop(appsink, TRUE);
-    gst_app_sink_set_max_buffers(appsink, 1);
+    gst_app_sink_set_max_buffers(appsink, 2);
 
     // Force caps to BGRA
     {
@@ -329,14 +358,21 @@ RECONNECT:
     gst_element_set_state(pipeline, GST_STATE_PLAYING);
 
     QString stateErr;
-    wait_playing_or_fail(pipeline, 2000, stateErr);
+    if (!wait_playing_or_fail(pipeline, 2000, stateErr)) {
+        emit logLine(QString("[GST] failed to reach PLAYING: %1").arg(stateErr));
+        pump_bus(pipeline, [&](const QString& s){ emit logLine(s); }, nullptr);
+        gst_element_set_state(pipeline, GST_STATE_NULL);
+        gst_object_unref(sinkElem);
+        gst_object_unref(pipeline);
+        QThread::msleep(200);
+        goto RECONNECT;
+    }
 
     bool needReconnect = false;
     int  no_sample_cnt = 0;
     bool printedCaps = false;
     int  busPumpTick = 0;
 
-    // triple-buffer reuse (avoid per-frame new)
     std::array<QSharedPointer<QImage>, 3> pool;
     int poolIdx = 0;
     int poolW = 0, poolH = 0;
@@ -351,17 +387,13 @@ RECONNECT:
         emit logLine(QString("[GST] QImage pool recreated: %1x%2").arg(poolW).arg(poolH));
     };
 
-    // PERF + jitter window (2s)
-    QElapsedTimer tPerf;
-    tPerf.start();
+    QElapsedTimer tPerf; tPerf.start();
     qint64 frames = 0;
     qint64 copyNsAcc = 0;
 
-    // sample timing
-    QElapsedTimer tWall;
-    tWall.start();
+    QElapsedTimer tWall; tWall.start();
     qint64 lastSampleWallMs = -1;
-    qint64 lastAnyWallMs = tWall.elapsed(); // used for stall_max
+    qint64 lastAnyWallMs = tWall.elapsed();
     qint64 stallMaxMs = 0;
 
     std::vector<double> gapsMs; gapsMs.reserve(256);
@@ -372,7 +404,7 @@ RECONNECT:
     double gapMin = 1e9;
     double gapMax = 0.0;
 
-    const double nominalGap = 1000.0 / 22.0; // you can change if your true fps differs
+    double nominalGap = 1000.0 / 22.0;
 
     while (!stopFlag_.load(std::memory_order_acquire) && !isInterruptionRequested()) {
 
@@ -390,14 +422,13 @@ RECONNECT:
         lastAnyWallMs = tWall.elapsed();
 
         if (!sample) {
-            if (++no_sample_cnt > 200) { // 600 * 20ms = 12s
+            if (++no_sample_cnt > 250) { // ~10s
                 emit logLine("[GST] no samples too long, reconnect...");
                 break;
             }
             continue;
         }
 
-        // sample arrived
         const qint64 nowMs = tWall.elapsed();
         if (lastSampleWallMs >= 0) {
             const double gap = (double)(nowMs - lastSampleWallMs);
@@ -417,6 +448,11 @@ RECONNECT:
         GstCaps* caps = gst_sample_get_caps(sample);
         if (!caps) { gst_sample_unref(sample); continue; }
 
+        if (!printedCaps) {
+            const double fpsFromCaps = caps_fps(caps, 22.0);
+            if (fpsFromCaps > 1.0 && fpsFromCaps < 240.0) nominalGap = 1000.0 / fpsFromCaps;
+        }
+
         GstVideoInfo vinfo;
         if (!gst_video_info_from_caps(&vinfo, caps)) {
             emit logLine(QString("[GST] gst_video_info_from_caps failed, caps=%1").arg(capsToString(caps)));
@@ -431,7 +467,8 @@ RECONNECT:
         if (!printedCaps) {
             printedCaps = true;
             emit logLine(QString("[GST] negotiated caps: %1").arg(capsToString(caps)));
-            emit logLine(QString("[GST] w=%1 h=%2 stride=%3").arg(w).arg(h).arg(srcStride));
+            emit logLine(QString("[GST] w=%1 h=%2 stride=%3 nominalGap=%4ms")
+                             .arg(w).arg(h).arg(srcStride).arg(nominalGap, 0, 'f', 2));
         }
 
         ensurePool(w, h);
@@ -450,8 +487,13 @@ RECONNECT:
             uchar* dst0 = img->bits();
 
             const int rowBytes = w * 4;
-            for (int y = 0; y < h; ++y) {
-                memcpy(dst0 + y * dstStride, src + y * srcStride, rowBytes);
+
+            if (srcStride == dstStride && srcStride == rowBytes) {
+                memcpy(dst0, src, (size_t)rowBytes * (size_t)h);
+            } else {
+                for (int y = 0; y < h; ++y) {
+                    memcpy(dst0 + y * dstStride, src + y * srcStride, rowBytes);
+                }
             }
 
             copyNsAcc += tCopy.nsecsElapsed();
@@ -482,14 +524,13 @@ RECONNECT:
             const double fps = frames / sec;
             const double copyMs = (copyNsAcc / 1e6) / std::max<qint64>(1, frames);
 
-            // jitter stats
             double gapAvg = 0.0;
             double p50 = 0.0, p90 = 0.0, p99 = 0.0;
             double jitterRms = 0.0;
             const int nGap = (int)gapsMs.size();
             if (nGap > 0) {
                 gapAvg = gapSum / (double)nGap;
-                std::vector<double> tmp = gapsMs; // copy for percentile sort
+                std::vector<double> tmp = gapsMs;
                 p50 = percentile_ms(tmp, 0.50);
                 p90 = percentile_ms(tmp, 0.90);
                 p99 = percentile_ms(tmp, 0.99);
@@ -501,7 +542,7 @@ RECONNECT:
 
             emit logLine(QString("[PERF] fps=%1 copy=%2ms decoder=%3 transport=udp latency=%4ms | "
                                  "gap_avg=%5ms p50=%6 p90=%7 p99=%8 min=%9 max=%10 gt80=%11 gt120=%12 "
-                                 "stall_max=%13ms jitter_rms=%14ms")
+                                 "stall_max=%13ms jitter_rms=%14ms nominalGap=%15ms")
                              .arg(fps, 0, 'f', 1)
                              .arg(copyMs, 0, 'f', 3)
                              .arg(decoderTag)
@@ -515,9 +556,9 @@ RECONNECT:
                              .arg(gapGt80)
                              .arg(gapGt120)
                              .arg(stallMaxMs)
-                             .arg(jitterRms, 0, 'f', 1));
+                             .arg(jitterRms, 0, 'f', 1)
+                             .arg(nominalGap, 0, 'f', 2));
 
-            // reset window
             tPerf.restart();
             frames = 0;
             copyNsAcc = 0;
