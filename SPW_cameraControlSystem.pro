@@ -3,7 +3,9 @@ CONFIG += c++17
 QMAKE_CFLAGS += -utf-8
 QMAKE_CXXFLAGS += -utf-8
 
-win32:RC_ICONS = YS-camera-logo.ico
+win32 {
+    RC_ICONS = $$PWD/YS-camera-logo.ico
+}
 
 # ===================== Sources =====================
 SOURCES += \
