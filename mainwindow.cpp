@@ -953,12 +953,13 @@ void MainWindow::onColorTunedFrame(QSharedPointer<QImage> img)
         updateCameraButtons();
     }
 
-    if (isRecording_) emit sendFrame2Record(*img);
+    if (isRecording_) emit sendFrame2Record(img);
 
     if (iscapturing_) {
-        emit sendFrame2Capture(*img);
+        emit sendFrame2Capture(img);
         iscapturing_ = false;
     }
+
 }
 
 // -------------------- shutdown --------------------

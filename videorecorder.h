@@ -38,8 +38,8 @@ public:
 
 public slots:
     void receiveRecordOptions(myRecordOptions myOptions);
-    void receiveFrame2Save(const QImage& img);
-    void receiveFrame2Record(const QImage& img);
+    void receiveFrame2Save(QSharedPointer<QImage> img);
+    void receiveFrame2Record(QSharedPointer<QImage> img);
 
     void startRecording();   // ✅ 无参数
     void stopRecording();    // ✅ 无参数

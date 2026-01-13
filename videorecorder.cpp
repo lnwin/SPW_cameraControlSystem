@@ -113,10 +113,10 @@ void VideoRecorder::receiveRecordOptions(myRecordOptions myOptions)
 
 // ========== 单帧保存 ==========
 
-void VideoRecorder::receiveFrame2Save(const QImage& img)
+void VideoRecorder::receiveFrame2Save(QSharedPointer<QImage> img)
 {
     QMutexLocker lk(&mutex_);
-
+    const QImage& ref = *img;
     if (img.isNull()) {
         qWarning() << "[VideoRecorder] receiveFrame2Save: empty image, skip.";
         return;
@@ -135,7 +135,7 @@ void VideoRecorder::receiveFrame2Save(const QImage& img)
     }
 
     // ★关键：保存用 1080p letterbox（不变形、不裁剪、有黑边）
-    QImage out = letterboxTo1080pRGB888(img, /*fast=*/false);
+    QImage out = letterboxTo1080pRGB888(ref, false);
     if (out.isNull()) {
         emit sendMSG2ui(QStringLiteral("[VideoRecorder] 单帧保存失败：letterbox 转换失败"));
         return;
@@ -153,22 +153,19 @@ void VideoRecorder::receiveFrame2Save(const QImage& img)
 
 // ========== 录制帧输入 ==========
 
-void VideoRecorder::receiveFrame2Record(const QImage& img)
+void VideoRecorder::receiveFrame2Record(QSharedPointer<QImage> img)
 {
     QMutexLocker lk(&mutex_);
 
     if (!recording_) return;
     if (img.isNull()) return;
 
-    // 缓存最近一帧（如果你后面要做“录制中截图”也有用）
-    lastFrame_ = img;
-
     if (!encoderOpened_) {
         frameIndex_ = 0;
         lastPtsMs_ = 0;
         recStartUs_ = 0;
 
-        if (!openEncoderLockedForImage(img)) {
+        if (!openEncoderLockedForImage(*img)) {
             recording_ = false;
             encoderOpened_ = false;
             emit sendMSG2ui(QStringLiteral("[VideoRecorder] 视频录制初始化失败"));
@@ -179,7 +176,7 @@ void VideoRecorder::receiveFrame2Record(const QImage& img)
         emit recordingStarted(currentRecordingPath_);
     }
 
-    if (!encodeImageLocked(img)) {
+    if (!encodeImageLocked(*img)) {
         emit sendMSG2ui(QStringLiteral("[VideoRecorder] 视频编码失败"));
     }
 }

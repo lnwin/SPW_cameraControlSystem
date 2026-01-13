@@ -35,8 +35,8 @@ protected:
 signals:
     void sendFrameToColorTune(QSharedPointer<QImage> img);
 
-    void sendFrame2Capture(const QImage& img);
-    void sendFrame2Record(const QImage& img);
+    void sendFrame2Record(QSharedPointer<QImage> img);
+    void sendFrame2Capture(QSharedPointer<QImage> img);
 
     void startRecord();
     void stopRecord();
