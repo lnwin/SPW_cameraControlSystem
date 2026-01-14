@@ -1,4 +1,7 @@
 #include "colortuneworker.h"
+#include <cmath>
+#include <algorithm>
+
 
 ColorTuneWorker::ColorTuneWorker(QObject* parent)
     : QObject(parent)
@@ -38,8 +41,6 @@ void ColorTuneWorker::onFrameIn(QSharedPointer<QImage> img)
     return;
 
 }
-
-
 
 QImage ColorTuneWorker::applyColorTuneFast_locked(const QImage& in)
 {
@@ -81,7 +82,6 @@ QImage ColorTuneWorker::applyColorTuneFast_locked(const QImage& in)
         lutValid_  = true;
     }
 
-    // 5) LUT：原地改 AB（效果不变）
     applyAB_LUT_inplace(lab_u8_, abLut_);
 
     // 6) 输出：直接创建 QImage，让 cvtColor 写进去（避免 out.copy）
