@@ -120,7 +120,18 @@ static void setupGStreamerRuntime(const char* argv0)
 
 int main(int argc, char *argv[])
 {
+    // === High DPI 支持（必须在 QApplication 之前）===
+    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
+
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
+        Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
+#endif
     setupGStreamerRuntime(argv[0]);
+    QFont f;
+    f.setFamily("Microsoft YaHei UI");  // 或 "Microsoft YaHei"
+    f.setPointSize(9);                  // 不要太大
 
     QApplication a(argc, argv);
 
