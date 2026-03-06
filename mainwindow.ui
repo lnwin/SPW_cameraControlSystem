@@ -24,123 +24,158 @@
     <normaloff>:/new/prefix1/release/icons/current/Slogo.png</normaloff>:/new/prefix1/release/icons/current/Slogo.png</iconset>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QHBoxLayout" name="horizontalLayout_5">
+   <layout class="QHBoxLayout" name="horizontalLayout_6">
     <item>
-     <layout class="QVBoxLayout" name="verticalLayout_3">
+     <layout class="QVBoxLayout" name="verticalLayout_5">
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_4">
+       <layout class="QHBoxLayout" name="horizontalLayout_5" stretch="1,2">
         <item>
-         <widget class="QSplitter" name="deviceSplitter">
-          <property name="minimumSize">
-           <size>
-            <width>350</width>
-            <height>0</height>
-           </size>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>350</width>
-            <height>16777215</height>
-           </size>
-          </property>
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
-          </property>
-          <widget class="QWidget" name="panelDeviceList" native="true">
-           <property name="maximumSize">
-            <size>
-             <width>350</width>
-             <height>16777215</height>
-            </size>
-           </property>
-           <layout class="QHBoxLayout" name="horizontalLayout">
-            <property name="leftMargin">
-             <number>0</number>
+         <layout class="QVBoxLayout" name="verticalLayout_4">
+          <item>
+           <widget class="QWidget" name="panelDeviceList" native="true">
+            <property name="maximumSize">
+             <size>
+              <width>350</width>
+              <height>16777215</height>
+             </size>
             </property>
-            <property name="rightMargin">
-             <number>0</number>
-            </property>
+            <layout class="QHBoxLayout" name="horizontalLayout">
+             <property name="leftMargin">
+              <number>0</number>
+             </property>
+             <property name="rightMargin">
+              <number>0</number>
+             </property>
+             <item>
+              <widget class="QTableWidget" name="deviceList">
+               <property name="maximumSize">
+                <size>
+                 <width>9999999</width>
+                 <height>999999</height>
+                </size>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <layout class="QVBoxLayout" name="verticalLayout_3">
             <item>
-             <widget class="QTableWidget" name="deviceList">
-              <property name="maximumSize">
-               <size>
-                <width>9999999</width>
-                <height>999999</height>
-               </size>
+             <layout class="QHBoxLayout" name="horizontalLayout_4" stretch="1,5">
+              <property name="spacing">
+               <number>0</number>
               </property>
-             </widget>
+              <item>
+               <widget class="QLabel" name="label_2">
+                <property name="maximumSize">
+                 <size>
+                  <width>58</width>
+                  <height>16777215</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>画面亮度</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QSlider" name="brightSlider">
+                <property name="maximumSize">
+                 <size>
+                  <width>280</width>
+                  <height>16777215</height>
+                 </size>
+                </property>
+                <property name="layoutDirection">
+                 <enum>Qt::LeftToRight</enum>
+                </property>
+                <property name="maximum">
+                 <number>15</number>
+                </property>
+                <property name="value">
+                 <number>15</number>
+                </property>
+                <property name="orientation">
+                 <enum>Qt::Horizontal</enum>
+                </property>
+               </widget>
+              </item>
+             </layout>
             </item>
-           </layout>
-          </widget>
-          <widget class="QWidget" name="panelDeviceInfo" native="true">
-           <property name="minimumSize">
-            <size>
-             <width>0</width>
-             <height>120</height>
-            </size>
-           </property>
-           <property name="maximumSize">
-            <size>
-             <width>350</width>
-             <height>100</height>
-            </size>
-           </property>
-           <layout class="QHBoxLayout" name="horizontalLayout_2">
-            <property name="leftMargin">
-             <number>0</number>
-            </property>
-            <property name="rightMargin">
-             <number>0</number>
-            </property>
             <item>
-             <widget class="QGroupBox" name="groupDeviceInfo">
+             <widget class="QWidget" name="panelDeviceInfo" native="true">
               <property name="minimumSize">
                <size>
                 <width>0</width>
-                <height>100</height>
+                <height>120</height>
                </size>
               </property>
               <property name="maximumSize">
                <size>
-                <width>16777215</width>
+                <width>350</width>
                 <height>100</height>
                </size>
               </property>
-              <property name="title">
-               <string>设备详细信息</string>
-              </property>
-              <layout class="QVBoxLayout" name="verticalLayout_2">
+              <layout class="QHBoxLayout" name="horizontalLayout_2">
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
                <item>
-                <layout class="QVBoxLayout" name="verticalLayout">
-                 <item>
-                  <widget class="QLabel" name="lblCamIp">
-                   <property name="text">
-                    <string>当前相机IP：</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QLabel" name="lblCamLastSeen">
-                   <property name="text">
-                    <string>相机上线时间：</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QLabel" name="lblHostIp">
-                   <property name="text">
-                    <string>当前主机IP：</string>
-                   </property>
-                  </widget>
-                 </item>
-                </layout>
+                <widget class="QGroupBox" name="groupDeviceInfo">
+                 <property name="minimumSize">
+                  <size>
+                   <width>0</width>
+                   <height>100</height>
+                  </size>
+                 </property>
+                 <property name="maximumSize">
+                  <size>
+                   <width>16777215</width>
+                   <height>100</height>
+                  </size>
+                 </property>
+                 <property name="title">
+                  <string>设备详细信息</string>
+                 </property>
+                 <layout class="QVBoxLayout" name="verticalLayout_2">
+                  <item>
+                   <layout class="QVBoxLayout" name="verticalLayout">
+                    <item>
+                     <widget class="QLabel" name="lblCamIp">
+                      <property name="text">
+                       <string>当前相机IP：</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QLabel" name="lblCamLastSeen">
+                      <property name="text">
+                       <string>相机上线时间：</string>
+                      </property>
+                     </widget>
+                    </item>
+                    <item>
+                     <widget class="QLabel" name="lblHostIp">
+                      <property name="text">
+                       <string>当前主机IP：</string>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </item>
+                 </layout>
+                </widget>
                </item>
               </layout>
              </widget>
             </item>
            </layout>
-          </widget>
-         </widget>
+          </item>
+         </layout>
         </item>
         <item>
          <widget class="QWidget" name="widget" native="true">

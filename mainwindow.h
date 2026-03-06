@@ -17,6 +17,7 @@
 #include "zoompanimageview.h" // ZoomPanImageView (你已有)
 #include "systemsetting.h"
 #include "videorecorder.h"
+#include <QString>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -28,7 +29,7 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
-
+    QString Localsn;
 protected:
     void closeEvent(QCloseEvent* event) override;
 
@@ -40,6 +41,7 @@ signals:
 
     void startRecord();
     void stopRecord();
+    qint64 sendCameraExporeGain(const QString& sn, int exposureUs, double gainDb);
 
 private slots:
     void onCheckDeviceAlive();
@@ -56,6 +58,8 @@ private slots:
     void onIpChangeTimeout();
 
     void onColorTunedFrame(QSharedPointer<QImage> img);
+
+    void on_brightSlider_valueChanged(int value);
 
 private:
     // ===== 你原来已有的功能函数（这里只列出本文会用到的）=====

@@ -187,12 +187,12 @@ MainWindow::MainWindow(QWidget *parent)
                 ui->messageBox->append(QString("[%1] %2").arg(t, s));
             });
 
-    // splitter
-    if (ui->deviceSplitter) {
-        ui->deviceSplitter->setHandleWidth(3);
-        ui->deviceSplitter->setStretchFactor(0, 3);
-        ui->deviceSplitter->setStretchFactor(1, 2);
-    }
+    // // splitter
+    // if (ui->deviceSplitter) {
+    //     ui->deviceSplitter->setHandleWidth(3);
+    //     ui->deviceSplitter->setStretchFactor(0, 3);
+    //     ui->deviceSplitter->setStretchFactor(1, 2);
+    // }
 
     // deviceList
     if (ui->deviceList) {
@@ -236,6 +236,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(mgr_, &UdpDeviceManager::snDiscoveredOrUpdated,
             this, &MainWindow::onSnUpdatedForIpChange);
+
+    connect(this, &MainWindow::sendCameraExporeGain,mgr_, &UdpDeviceManager::sendSetCameraParams);
 
     // timers
     devAliveTimer_ = new QTimer(this);
@@ -422,6 +424,7 @@ void MainWindow::upsertCameraSN(const QString& sn)
 {
     if (sn.isEmpty() || !mgr_) return;
     updateTableDevice(sn);
+    Localsn=sn;
 }
 
 void MainWindow::updateTableDevice(const QString& sn)
@@ -996,3 +999,9 @@ void MainWindow::shutdownAllThreads()
     offlinePopupShown_.clear();
 
 }
+
+void MainWindow::on_brightSlider_valueChanged(int value)
+{
+   emit sendCameraExporeGain(Localsn, 0, (double)value);
+}
+
