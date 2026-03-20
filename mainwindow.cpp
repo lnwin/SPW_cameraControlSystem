@@ -98,7 +98,7 @@ static QHash<const MainWindow*, qint64> g_dropUntilMs;
 static QHash<const MainWindow*, int>    g_noFrameStreak;   // 连续无帧次数
 static QHash<const MainWindow*, qint64> g_lastNewFrameMs;  // 上一次拿到新帧的时刻（UI侧）
 static QHash<const MainWindow*, bool>   g_previewLoopOn;   // 是否已启动自适应循环
-
+static QHash<const MainWindow*, qint64> g_streamStartMs;   // 第一次成功出帧时间
 // 计算下一次拉帧间隔（毫秒）：有帧 -> 尽快；无帧 -> 退避省电（不固定FPS）
 static int calcNextPullIntervalMs(int noFrameStreak)
 {
@@ -524,101 +524,35 @@ bool MainWindow::isControlOnline(const QString& sn, DeviceInfo* outDev) const
     return online;
 }
 
-void MainWindow::onCheckDeviceAlive()
-{
-    if (!ui || !ui->deviceList || !mgr_) return;
+if (viewerRunning && everGotFrame && !uiOnline) {
 
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    const qint64 offlineMs = 10000;
+    if (!offlinePopupShown_.value(sn, false)) {
+        offlinePopupShown_[sn] = true;
 
-    const int rows = ui->deviceList->rowCount();
-    for (int r = 0; r < rows; ++r) {
-
-        QTableWidgetItem* nameItem = ui->deviceList->item(r, 0);
-        if (!nameItem) continue;
-
-        const QString sn = nameItem->data(Qt::UserRole).toString();
-        if (sn.isEmpty()) continue;
-
-        DeviceInfo dev;
-        const bool exists = mgr_->getDevice(sn, dev);
-        const bool ctrlOnline = exists && (now - dev.lastSeenMs <= offlineMs);
-
-        const bool isSelected = (!curSelectedSn_.isEmpty() && sn == curSelectedSn_);
-        const bool viewerRunning = (viewer_ != nullptr) && isSelected;
-
-        const bool everGotFrame = (viewerRunning && lastFrameMs_ > 0);
-        const bool streamRecentlyAlive =
-            (everGotFrame && (now - lastFrameMs_) <= 1200);
-
-        // B方案：必须“曾经收到过至少 1 帧”后，才允许判定断流/累计 strike
-        if (viewerRunning && ctrlOnline && everGotFrame && !streamRecentlyAlive) {
-            streamStrikes_[sn] = streamStrikes_.value(sn, 0) + 1;
-        } else {
-            streamStrikes_[sn] = 0;
+        QString durationText = QStringLiteral("未知");
+        const qint64 startMs = g_streamStartMs.value(this, 0);
+        if (startMs > 0) {
+            const qint64 elapsedMs = now - startMs;
+            const qint64 totalMinutes = elapsedMs / 60000;
+            const qint64 hours = totalMinutes / 60;
+            const qint64 minutes = totalMinutes % 60;
+            durationText = QStringLiteral("%1小时%2分钟").arg(hours).arg(minutes);
         }
 
-        const bool streamDown = viewerRunning && ctrlOnline && everGotFrame
-                                && (streamStrikes_.value(sn, 0) >= 3);
+        auto* box = new QMessageBox(
+            QMessageBox::Information,
+            tr("提示"),
+            tr("设备 [%1] 网络中断或视频断流。\n"
+               "本次从开始抓流成功到中断，共持续：%2。\n"
+               "请检查网络后重新打开相机。")
+                .arg(sn, durationText),
+            QMessageBox::Ok,
+            this);
 
-
-        // UI 统一在线态：控制在线且视频不处于断流
-        const bool uiOnline = ctrlOnline && !streamDown;
-
-        // status item
-        QTableWidgetItem* stItem = ui->deviceList->item(r, 1);
-        if (!stItem) {
-            stItem = new QTableWidgetItem;
-            ui->deviceList->setItem(r, 1, stItem);
-        }
-        const QString oldText = stItem->text();
-
-        if (!uiOnline) {
-            stItem->setIcon(iconOffline_);
-            stItem->setText(QStringLiteral("离线"));
-            stItem->setForeground(Qt::gray);
-        } else {
-            stItem->setIcon(iconOnline_);
-            stItem->setText(QStringLiteral("在线"));
-            stItem->setForeground(Qt::black);
-        }
-        stItem->setTextAlignment(Qt::AlignCenter);
-
-        // 从离线恢复到在线：清除“只弹一次”门禁
-        if (uiOnline && oldText == QStringLiteral("离线")) {
-            offlinePopupShown_.remove(sn);
-        }
-
-        // online since（首次记录）
-        if (uiOnline && !camOnlineSinceMs_.contains(sn))
-            camOnlineSinceMs_[sn] = now;
-
-        // selected info panel
-        if (isSelected) {
-            if (uiOnline) updateDeviceInfoPanel(&dev, true);
-            else clearDeviceInfoPanel();
-        }
-
-        // B方案：从未出帧阶段不弹窗（避免“刚点开就弹”）
-        if (viewerRunning && everGotFrame && !uiOnline) {
-
-            if (!offlinePopupShown_.value(sn, false)) {
-                offlinePopupShown_[sn] = true;
-
-                auto* box = new QMessageBox(QMessageBox::Information,
-                                            tr("提示"),
-                                            tr("设备 [%1] 网络中断或视频断流。\n请检查网络后重新打开相机。").arg(sn),
-                                            QMessageBox::Ok,
-                                            this);
-                box->setAttribute(Qt::WA_DeleteOnClose, true);
-                box->open(); // 非阻塞
-            }
-        }
+        box->setAttribute(Qt::WA_DeleteOnClose, true);
+        box->open(); // 非阻塞
     }
-
-    updateCameraButtons();
 }
-
 // -------------------- viewer stop --------------------
 void MainWindow::doStopViewer()
 {
@@ -630,7 +564,7 @@ void MainWindow::doStopViewer()
     viewer_ = nullptr;
     previewActive_ = false;
     lastFrameMs_ = 0;
-
+    g_streamStartMs[this] = 0;
     connect(v, &QThread::finished, this, [this, v]() {
         v->deleteLater();
         updateCameraButtons();
@@ -646,6 +580,10 @@ void MainWindow::doStopViewer()
 // -------------------- New: open camera state machine --------------------
 bool MainWindow::openCameraForSelected(bool showMsgBox)
 {
+    // 新会话：重置 UI 拉帧状态
+    g_noFrameStreak[this]  = 0;
+    g_lastNewFrameMs[this] = 0;
+    g_streamStartMs[this]  = 0;   // 新增：本次抓流开始时间清零
     if (viewer_) return true;
 
     if (curSelectedSn_.isEmpty()) {
@@ -949,6 +887,11 @@ void MainWindow::onColorTunedFrame(QSharedPointer<QImage> img)
     if (!view_) return;
     if (!img || img->isNull()) return;
 
+    // 第一次成功出帧，记录抓流成功起点
+    if (g_streamStartMs.value(this, 0) == 0) {
+        g_streamStartMs[this] = lastFrameMs_;
+    }
+
     view_->setImage(*img);
 
     if (!previewActive_) {
@@ -962,9 +905,7 @@ void MainWindow::onColorTunedFrame(QSharedPointer<QImage> img)
         emit sendFrame2Capture(img);
         iscapturing_ = false;
     }
-
 }
-
 // -------------------- shutdown --------------------
 void MainWindow::shutdownAllThreads()
 {
@@ -995,7 +936,7 @@ void MainWindow::shutdownAllThreads()
     g_previewLoopOn.remove(this);
     g_noFrameStreak.remove(this);
     g_lastNewFrameMs.remove(this);
-
+    g_streamStartMs.remove(this);
     offlinePopupShown_.clear();
 
 }
