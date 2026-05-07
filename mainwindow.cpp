@@ -482,6 +482,83 @@ void MainWindow::updateTableDevice(const QString& sn)
     updateCameraButtons();
 }
 
+
+void MainWindow::onCheckDeviceAlive()
+{
+    if (!ui || !ui->deviceList || !mgr_) return;
+
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+
+    for (int r = 0; r < ui->deviceList->rowCount(); ++r) {
+        QTableWidgetItem* nameItem = ui->deviceList->item(r, 0);
+        QTableWidgetItem* stItem   = ui->deviceList->item(r, 1);
+
+        if (!nameItem || !stItem) continue;
+
+        const QString sn = nameItem->data(Qt::UserRole).toString().trimmed();
+        if (sn.isEmpty()) continue;
+
+        DeviceInfo dev;
+        const bool online = isControlOnline(sn, &dev);
+
+        if (online) {
+            stItem->setIcon(iconOnline_);
+            stItem->setText(QStringLiteral("在线"));
+            stItem->setForeground(Qt::black);
+        } else {
+            stItem->setIcon(iconOffline_);
+            stItem->setText(QStringLiteral("离线"));
+            stItem->setForeground(Qt::gray);
+        }
+    }
+
+    const QString sn = curSelectedSn_.trimmed();
+    if (sn.isEmpty()) {
+        updateCameraButtons();
+        return;
+    }
+
+    DeviceInfo dev;
+    const bool controlOnline = isControlOnline(sn, &dev);
+
+    const bool viewerRunning = (viewer_ != nullptr);
+    const bool everGotFrame  = (g_streamStartMs.value(this, 0) > 0);
+    const bool videoAlive    = (lastFrameMs_ > 0 && (now - lastFrameMs_) <= 1200);
+    const bool uiOnline      = controlOnline && (!viewerRunning || videoAlive);
+
+    if (viewerRunning && everGotFrame && !uiOnline) {
+        if (!offlinePopupShown_.value(sn, false)) {
+            offlinePopupShown_[sn] = true;
+
+            QString durationText = QStringLiteral("未知");
+            const qint64 startMs = g_streamStartMs.value(this, 0);
+            if (startMs > 0) {
+                const qint64 elapsedMs = now - startMs;
+                const qint64 totalMinutes = elapsedMs / 60000;
+                const qint64 hours = totalMinutes / 60;
+                const qint64 minutes = totalMinutes % 60;
+                durationText = QStringLiteral("%1小时%2分钟").arg(hours).arg(minutes);
+            }
+
+            auto* box = new QMessageBox(
+                QMessageBox::Information,
+                tr("提示"),
+                tr("设备 [%1] 网络中断或视频断流。\n"
+                   "本次从开始抓流成功到中断，共持续：%2。\n"
+                   "请检查网络后重新打开相机。")
+                    .arg(sn, durationText),
+                QMessageBox::Ok,
+                this);
+
+            box->setAttribute(Qt::WA_DeleteOnClose, true);
+            box->open();
+        }
+    }
+
+    updateCameraButtons();
+}
+
+
 // -------------------- selection --------------------
 void MainWindow::onTableSelectionChanged()
 {
@@ -524,35 +601,35 @@ bool MainWindow::isControlOnline(const QString& sn, DeviceInfo* outDev) const
     return online;
 }
 
-if (viewerRunning && everGotFrame && !uiOnline) {
+// if (viewerRunning && everGotFrame && !uiOnline) {
 
-    if (!offlinePopupShown_.value(sn, false)) {
-        offlinePopupShown_[sn] = true;
+//     if (!offlinePopupShown_.value(sn, false)) {
+//         offlinePopupShown_[sn] = true;
 
-        QString durationText = QStringLiteral("未知");
-        const qint64 startMs = g_streamStartMs.value(this, 0);
-        if (startMs > 0) {
-            const qint64 elapsedMs = now - startMs;
-            const qint64 totalMinutes = elapsedMs / 60000;
-            const qint64 hours = totalMinutes / 60;
-            const qint64 minutes = totalMinutes % 60;
-            durationText = QStringLiteral("%1小时%2分钟").arg(hours).arg(minutes);
-        }
+//         QString durationText = QStringLiteral("未知");
+//         const qint64 startMs = g_streamStartMs.value(this, 0);
+//         if (startMs > 0) {
+//             const qint64 elapsedMs = now - startMs;
+//             const qint64 totalMinutes = elapsedMs / 60000;
+//             const qint64 hours = totalMinutes / 60;
+//             const qint64 minutes = totalMinutes % 60;
+//             durationText = QStringLiteral("%1小时%2分钟").arg(hours).arg(minutes);
+//         }
 
-        auto* box = new QMessageBox(
-            QMessageBox::Information,
-            tr("提示"),
-            tr("设备 [%1] 网络中断或视频断流。\n"
-               "本次从开始抓流成功到中断，共持续：%2。\n"
-               "请检查网络后重新打开相机。")
-                .arg(sn, durationText),
-            QMessageBox::Ok,
-            this);
+//         auto* box = new QMessageBox(
+//             QMessageBox::Information,
+//             tr("提示"),
+//             tr("设备 [%1] 网络中断或视频断流。\n"
+//                "本次从开始抓流成功到中断，共持续：%2。\n"
+//                "请检查网络后重新打开相机。")
+//                 .arg(sn, durationText),
+//             QMessageBox::Ok,
+//             this);
 
-        box->setAttribute(Qt::WA_DeleteOnClose, true);
-        box->open(); // 非阻塞
-    }
-}
+//         box->setAttribute(Qt::WA_DeleteOnClose, true);
+//         box->open(); // 非阻塞
+//     }
+// }
 // -------------------- viewer stop --------------------
 void MainWindow::doStopViewer()
 {
