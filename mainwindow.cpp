@@ -32,7 +32,7 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
-
+// 准备接入claude
 // -------------------- Filter IPv4 --------------------
 static bool isUsableIPv4(const QHostAddress& ip) {
     if (ip.protocol() != QAbstractSocket::IPv4Protocol) return false;
