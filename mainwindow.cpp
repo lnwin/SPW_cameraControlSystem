@@ -127,6 +127,7 @@ MainWindow::MainWindow(QWidget *parent)
         view_ = new ZoomPanImageView(ui->label->parentWidget());
         view_->setObjectName(ui->label->objectName());
         view_->setZoomRange(1.0, 3.0);
+        view_->setDisplayCrop(290, 290);
 
         if (auto* lay = ui->label->parentWidget()->layout()) {
             lay->replaceWidget(ui->label, view_);
@@ -274,8 +275,24 @@ MainWindow::MainWindow(QWidget *parent)
                 g_lastNewFrameMs[this] = now;
                 g_noFrameStreak[this] = 0;
 
-                // 关键：来一帧就立刻投喂处理线程
-                emit sendFrameToColorTune(img);
+                // 直接显示 + 录像（相机已输出 1080P，无需色彩处理）
+                lastFrameMs_ = QDateTime::currentMSecsSinceEpoch();
+                if (g_streamStartMs.value(this, 0) == 0)
+                    g_streamStartMs[this] = lastFrameMs_;
+
+                if (view_) view_->setImage(*img);
+
+                if (!previewActive_) {
+                    previewActive_ = true;
+                    updateCameraButtons();
+                }
+
+                if (isRecording_) emit sendFrame2Record(img);
+
+                if (iscapturing_) {
+                    emit sendFrame2Capture(img);
+                    iscapturing_ = false;
+                }
             } else {
                 // 仍处在丢帧窗口，视作“无帧”（继续快速拉，尽快出稳态）
                 g_noFrameStreak[this] = g_noFrameStreak.value(this, 0) + 1;
@@ -290,14 +307,10 @@ MainWindow::MainWindow(QWidget *parent)
 
         // 进一步优化“第一次卡”的主观体验：刚启动的前 1 秒，哪怕无帧也不要退避太快
         // 避免首个 IDR 来得慢时，UI 拉帧频率过低导致“更像卡住”
-        const qint64 now2 = QDateTime::currentMSecsSinceEpoch();
         const qint64 t0   = g_lastNewFrameMs.value(this, 0);
         if (t0 == 0) {
             // 还没拿到过任何新帧：保持相对积极的拉取频率
             nextMs = qMin(nextMs, 8);
-        } else {
-            // 已经拿到过帧：正常自适应
-            (void)gotNewFrame;
         }
 
         if (g_previewLoopOn.value(this, false) && previewPullTimer_) {
@@ -309,9 +322,6 @@ MainWindow::MainWindow(QWidget *parent)
     ipChangeTimer_ = new QTimer(this);
     ipChangeTimer_->setSingleShot(true);
     connect(ipChangeTimer_, &QTimer::timeout, this, &MainWindow::onIpChangeTimeout);
-
-    // start ColorTune worker
-    startColorTuneThread();
 
     // init
     curSelectedSn_.clear();
@@ -352,38 +362,6 @@ void MainWindow::titleForm()
 #endif
 }
 
-// ====== ColorTune worker thread ======
-void MainWindow::startColorTuneThread()
-{
-    if (colorThread_) return;
-
-    qRegisterMetaType<QImage>("QImage");
-
-    colorWorker_ = new ColorTuneWorker();
-    colorThread_ = new QThread(this);
-    colorWorker_->moveToThread(colorThread_);
-
-    connect(colorThread_, &QThread::finished, colorWorker_, &QObject::deleteLater);
-
-    connect(this, &MainWindow::sendFrameToColorTune,
-            colorWorker_, &ColorTuneWorker::onFrameIn,
-            Qt::QueuedConnection);
-
-    connect(colorWorker_, &ColorTuneWorker::frameOut,
-            this, &MainWindow::onColorTunedFrame,
-            Qt::QueuedConnection);
-
-    colorThread_->start();
-}
-
-void MainWindow::stopColorTuneThread()
-{
-    if (!colorThread_) return;
-    colorThread_->quit();
-    colorThread_->wait(1500);
-    colorThread_ = nullptr;
-    colorWorker_ = nullptr;
-}
 
 void MainWindow::startPreviewPullTimer()
 {
@@ -601,35 +579,6 @@ bool MainWindow::isControlOnline(const QString& sn, DeviceInfo* outDev) const
     return online;
 }
 
-// if (viewerRunning && everGotFrame && !uiOnline) {
-
-//     if (!offlinePopupShown_.value(sn, false)) {
-//         offlinePopupShown_[sn] = true;
-
-//         QString durationText = QStringLiteral("未知");
-//         const qint64 startMs = g_streamStartMs.value(this, 0);
-//         if (startMs > 0) {
-//             const qint64 elapsedMs = now - startMs;
-//             const qint64 totalMinutes = elapsedMs / 60000;
-//             const qint64 hours = totalMinutes / 60;
-//             const qint64 minutes = totalMinutes % 60;
-//             durationText = QStringLiteral("%1小时%2分钟").arg(hours).arg(minutes);
-//         }
-
-//         auto* box = new QMessageBox(
-//             QMessageBox::Information,
-//             tr("提示"),
-//             tr("设备 [%1] 网络中断或视频断流。\n"
-//                "本次从开始抓流成功到中断，共持续：%2。\n"
-//                "请检查网络后重新打开相机。")
-//                 .arg(sn, durationText),
-//             QMessageBox::Ok,
-//             this);
-
-//         box->setAttribute(Qt::WA_DeleteOnClose, true);
-//         box->open(); // 非阻塞
-//     }
-// }
 // -------------------- viewer stop --------------------
 void MainWindow::doStopViewer()
 {
@@ -956,33 +905,6 @@ void MainWindow::clearDeviceInfoPanel()
     updateDeviceInfoPanel(nullptr, false);
 }
 
-// -------------------- tuned frame out --------------------
-void MainWindow::onColorTunedFrame(QSharedPointer<QImage> img)
-{
-    lastFrameMs_ = QDateTime::currentMSecsSinceEpoch();
-
-    if (!view_) return;
-    if (!img || img->isNull()) return;
-
-    // 第一次成功出帧，记录抓流成功起点
-    if (g_streamStartMs.value(this, 0) == 0) {
-        g_streamStartMs[this] = lastFrameMs_;
-    }
-
-    view_->setImage(*img);
-
-    if (!previewActive_) {
-        previewActive_ = true;
-        updateCameraButtons();
-    }
-
-    if (isRecording_) emit sendFrame2Record(img);
-
-    if (iscapturing_) {
-        emit sendFrame2Capture(img);
-        iscapturing_ = false;
-    }
-}
 // -------------------- shutdown --------------------
 void MainWindow::shutdownAllThreads()
 {
@@ -1006,8 +928,6 @@ void MainWindow::shutdownAllThreads()
         recThread_->wait(2000);
         recThread_ = nullptr;
     }
-
-    stopColorTuneThread();
 
     g_dropUntilMs.remove(this);
     g_previewLoopOn.remove(this);

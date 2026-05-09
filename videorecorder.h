@@ -95,7 +95,7 @@ private:
 
     int     encWidth_  = 0;
     int     encHeight_ = 0;
-    double  encFps_    = 22.0;
+    double  encFps_    = 25.0;
     qint64  frameIndex_ = 0;
 
     bool openEncoderLockedForImage(const QImage &img);

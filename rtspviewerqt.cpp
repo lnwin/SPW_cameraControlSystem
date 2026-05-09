@@ -389,13 +389,12 @@ RECONNECT:
 
     QElapsedTimer tPerf; tPerf.start();
     qint64 frames = 0;
+#ifndef QT_NO_DEBUG
     qint64 copyNsAcc = 0;
-
     QElapsedTimer tWall; tWall.start();
     qint64 lastSampleWallMs = -1;
     qint64 lastAnyWallMs = tWall.elapsed();
     qint64 stallMaxMs = 0;
-
     std::vector<double> gapsMs; gapsMs.reserve(256);
     double gapSum = 0.0;
     double jitterSqSum = 0.0;
@@ -403,14 +402,16 @@ RECONNECT:
     int gapGt120 = 0;
     double gapMin = 1e9;
     double gapMax = 0.0;
-
-    double nominalGap = 1000.0 / 22.0;
+    double nominalGap = 1000.0 / 25.0;
+#endif
 
     while (!stopFlag_.load(std::memory_order_acquire) && !isInterruptionRequested()) {
 
+#ifndef QT_NO_DEBUG
         const qint64 nowAny = tWall.elapsed();
         const qint64 stall = nowAny - lastAnyWallMs;
         if (stall > stallMaxMs) stallMaxMs = stall;
+#endif
 
         if ((busPumpTick++ & 7) == 0) {
             pump_bus(pipeline, [&](const QString& s){ emit logLine(s); }, &needReconnect);
@@ -419,7 +420,9 @@ RECONNECT:
 
         GstSample* sample = gst_app_sink_try_pull_sample(appsink, pullTimeout);
 
+#ifndef QT_NO_DEBUG
         lastAnyWallMs = tWall.elapsed();
+#endif
 
         if (!sample) {
             if (++no_sample_cnt > 250) { // ~10s
@@ -429,6 +432,7 @@ RECONNECT:
             continue;
         }
 
+#ifndef QT_NO_DEBUG
         const qint64 nowMs = tWall.elapsed();
         if (lastSampleWallMs >= 0) {
             const double gap = (double)(nowMs - lastSampleWallMs);
@@ -442,6 +446,7 @@ RECONNECT:
             jitterSqSum += j * j;
         }
         lastSampleWallMs = nowMs;
+#endif
 
         no_sample_cnt = 0;
 
@@ -449,8 +454,10 @@ RECONNECT:
         if (!caps) { gst_sample_unref(sample); continue; }
 
         if (!printedCaps) {
-            const double fpsFromCaps = caps_fps(caps, 22.0);
+#ifndef QT_NO_DEBUG
+            const double fpsFromCaps = caps_fps(caps, 25.0);
             if (fpsFromCaps > 1.0 && fpsFromCaps < 240.0) nominalGap = 1000.0 / fpsFromCaps;
+#endif
         }
 
         GstVideoInfo vinfo;
@@ -467,8 +474,7 @@ RECONNECT:
         if (!printedCaps) {
             printedCaps = true;
             emit logLine(QString("[GST] negotiated caps: %1").arg(capsToString(caps)));
-            emit logLine(QString("[GST] w=%1 h=%2 stride=%3 nominalGap=%4ms")
-                             .arg(w).arg(h).arg(srcStride).arg(nominalGap, 0, 'f', 2));
+            emit logLine(QString("[GST] w=%1 h=%2 stride=%3").arg(w).arg(h).arg(srcStride));
         }
 
         ensurePool(w, h);
@@ -477,8 +483,9 @@ RECONNECT:
         GstMapInfo map;
         if (buffer && gst_buffer_map(buffer, &map, GST_MAP_READ)) {
 
+#ifndef QT_NO_DEBUG
             QElapsedTimer tCopy; tCopy.start();
-
+#endif
             QSharedPointer<QImage> img = pool[poolIdx];
             poolIdx = (poolIdx + 1) % (int)pool.size();
 
@@ -496,8 +503,9 @@ RECONNECT:
                 }
             }
 
+#ifndef QT_NO_DEBUG
             copyNsAcc += tCopy.nsecsElapsed();
-
+#endif
             gst_buffer_unmap(buffer, &map);
 
             {
@@ -520,6 +528,7 @@ RECONNECT:
         }
 
         if (tPerf.elapsed() > 2000) {
+#ifndef QT_NO_DEBUG
             const double sec = std::max(0.001, tPerf.elapsed() / 1000.0);
             const double fps = frames / sec;
             const double copyMs = (copyNsAcc / 1e6) / std::max<qint64>(1, frames);
@@ -558,11 +567,11 @@ RECONNECT:
                              .arg(stallMaxMs)
                              .arg(jitterRms, 0, 'f', 1)
                              .arg(nominalGap, 0, 'f', 2));
-
+#endif
             tPerf.restart();
             frames = 0;
+#ifndef QT_NO_DEBUG
             copyNsAcc = 0;
-
             gapsMs.clear();
             gapSum = 0.0;
             jitterSqSum = 0.0;
@@ -571,6 +580,7 @@ RECONNECT:
             gapMin = 1e9;
             gapMax = 0.0;
             stallMaxMs = 0;
+#endif
         }
     }
 

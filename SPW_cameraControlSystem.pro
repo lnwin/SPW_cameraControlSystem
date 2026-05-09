@@ -14,7 +14,6 @@ SOURCES += \
     rtspviewerqt.cpp \
     udpserver.cpp \
     videorecorder.cpp \
-    colortuneworker.cpp \
     restipclient.cpp \
     systemsetting.cpp \
     titlebar.cpp
@@ -24,7 +23,6 @@ HEADERS += \
     rtspviewerqt.h \
     udpserver.h \
     videorecorder.h \
-    colortuneworker.h \
     restipclient.h \
     systemsetting.h \
     titlebar.h \

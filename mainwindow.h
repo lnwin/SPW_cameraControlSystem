@@ -13,7 +13,6 @@
 
 #include "udpserver.h"        // UdpDeviceManager / DeviceInfo
 #include "rtspviewerqt.h"     // RtspViewerQt
-#include "colortuneworker.h"  // ColorTuneWorker (你已有)
 #include "zoompanimageview.h" // ZoomPanImageView (你已有)
 #include "systemsetting.h"
 #include "videorecorder.h"
@@ -34,8 +33,6 @@ protected:
     void closeEvent(QCloseEvent* event) override;
 
 signals:
-    void sendFrameToColorTune(QSharedPointer<QImage> img);
-
     void sendFrame2Record(QSharedPointer<QImage> img);
     void sendFrame2Capture(QSharedPointer<QImage> img);
 
@@ -57,16 +54,11 @@ private slots:
     void onSnUpdatedForIpChange(const QString& sn);
     void onIpChangeTimeout();
 
-    void onColorTunedFrame(QSharedPointer<QImage> img);
-
     void on_brightSlider_valueChanged(int value);
 
 private:
     // ===== 你原来已有的功能函数（这里只列出本文会用到的）=====
     void titleForm();
-    void startColorTuneThread();
-    void stopColorTuneThread();
-
     void startPreviewPullTimer();
     void stopPreviewPullTimer();
 
@@ -105,10 +97,6 @@ private:
     QTimer* devAliveTimer_ = nullptr;
     QTimer* previewPullTimer_ = nullptr;
     QTimer* ipChangeTimer_ = nullptr;
-
-    // color tune worker
-    QThread* colorThread_ = nullptr;
-    ColorTuneWorker* colorWorker_ = nullptr;
 
     // recorder
     systemsetting* mysystemsetting = nullptr;

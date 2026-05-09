@@ -8,6 +8,7 @@
 #include <QWheelEvent>
 #include <QResizeEvent>
 #include <QtMath>
+#include <cmath>
 
 class ZoomPanImageView : public QWidget
 {
@@ -24,6 +25,9 @@ public:
     void setZoomRange(double minZ, double maxZ) { minZoom_ = minZ; maxZoom_ = maxZ; clampZoom(); }
     double zoom() const { return zoom_; }
 
+    // 显示裁剪（仅影响显示，不影响录像）
+    void setDisplayCrop(int left, int right) { cropLeft_ = left; cropRight_ = right; updateGeometry(); update(); }
+
     void setImage(const QImage& img)
     {
         img_ = img;
@@ -31,6 +35,7 @@ public:
 
         if (img_.size() != lastImgSize_) {
             lastImgSize_ = img_.size();
+            updateGeometry();   // 通知布局重新计算高度
             resetView();
         }
         update();
@@ -45,6 +50,14 @@ public:
     }
 
 protected:
+    bool hasHeightForWidth() const override { return !img_.isNull(); }
+    int  heightForWidth(int w) const override
+    {
+        if (img_.isNull() || img_.width() == 0) return w;
+        const int cropW = img_.width() - cropLeft_ - cropRight_;
+        return (int)std::round((double)w * img_.height() / cropW);
+    }
+
     void paintEvent(QPaintEvent*) override
     {
         QPainter p(this);
@@ -54,7 +67,8 @@ protected:
         if (img_.isNull()) return;
 
         const QSizeF vw = size();
-        const QSizeF iw = img_.size();
+        const int cropW = img_.width() - cropLeft_ - cropRight_;
+        const QSizeF iw(cropW, img_.height());
 
         const double sFit = qMin(vw.width()/iw.width(), vw.height()/iw.height());
         const double s    = sFit * zoom_;
@@ -64,7 +78,8 @@ protected:
                                   (vw.height()-drawSize.height())*0.5);
 
         const QPointF topLeft = baseTopLeft + pan_;
-        p.drawImage(QRectF(topLeft, drawSize), img_);
+        const QRectF srcRect(cropLeft_, 0, cropW, img_.height());
+        p.drawImage(QRectF(topLeft, drawSize), img_, srcRect);
     }
 
     void wheelEvent(QWheelEvent* e) override
@@ -145,7 +160,7 @@ private:
         if (img_.isNull()) return;
 
         const QSizeF vw = size();
-        const QSizeF iw = img_.size();
+        const QSizeF iw(img_.width() - cropLeft_ - cropRight_, img_.height());
 
         const double sFit = qMin(vw.width()/iw.width(), vw.height()/iw.height());
         const double s    = sFit * zoom_;
@@ -174,7 +189,7 @@ private:
         if (qFuzzyCompare(newZoom, oldZoom)) return;
 
         const QSizeF vw = size();
-        const QSizeF iw = img_.size();
+        const QSizeF iw(img_.width() - cropLeft_ - cropRight_, img_.height());
 
         const double sFit = qMin(vw.width()/iw.width(), vw.height()/iw.height());
 
@@ -216,4 +231,7 @@ private:
 
     bool    dragging_ = false;
     QPointF lastMousePos_;
+
+    int     cropLeft_  = 0;
+    int     cropRight_ = 0;
 };
