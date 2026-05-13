@@ -99,6 +99,7 @@ static QHash<const MainWindow*, int>    g_noFrameStreak;   // 连续无帧次数
 static QHash<const MainWindow*, qint64> g_lastNewFrameMs;  // 上一次拿到新帧的时刻（UI侧）
 static QHash<const MainWindow*, bool>   g_previewLoopOn;   // 是否已启动自适应循环
 static QHash<const MainWindow*, qint64> g_streamStartMs;   // 第一次成功出帧时间
+static QHash<const MainWindow*, qint64> g_viewerStartMs;   // viewer 启动时间
 // 计算下一次拉帧间隔（毫秒）：有帧 -> 尽快；无帧 -> 退避省电（不固定FPS）
 static int calcNextPullIntervalMs(int noFrameStreak)
 {
@@ -503,8 +504,12 @@ void MainWindow::onCheckDeviceAlive()
     const bool everGotFrame  = (g_streamStartMs.value(this, 0) > 0);
     const bool videoAlive    = (lastFrameMs_ > 0 && (now - lastFrameMs_) <= 1200);
     const bool uiOnline      = controlOnline && (!viewerRunning || videoAlive);
+    const qint64 viewerStartMs = g_viewerStartMs.value(this, 0);
+    const bool neverGotFrameTimeout = viewerRunning && !everGotFrame
+                                      && viewerStartMs > 0
+                                      && (now - viewerStartMs) > 8000;
 
-    if (viewerRunning && everGotFrame && !uiOnline) {
+    if (viewerRunning && (everGotFrame || neverGotFrameTimeout) && !uiOnline) {
         if (!offlinePopupShown_.value(sn, false)) {
             offlinePopupShown_[sn] = true;
 
@@ -591,6 +596,7 @@ void MainWindow::doStopViewer()
     previewActive_ = false;
     lastFrameMs_ = 0;
     g_streamStartMs[this] = 0;
+    g_viewerStartMs[this] = 0;
     connect(v, &QThread::finished, this, [this, v]() {
         v->deleteLater();
         updateCameraButtons();
@@ -610,6 +616,7 @@ bool MainWindow::openCameraForSelected(bool showMsgBox)
     g_noFrameStreak[this]  = 0;
     g_lastNewFrameMs[this] = 0;
     g_streamStartMs[this]  = 0;   // 新增：本次抓流开始时间清零
+    g_viewerStartMs[this]  = 0;
     if (viewer_) return true;
 
     if (curSelectedSn_.isEmpty()) {
@@ -641,6 +648,7 @@ bool MainWindow::openCameraForSelected(bool showMsgBox)
     // drop UI frames for a short window after (re)start
     // 适当加到 800ms：更能覆盖“等IDR/解码器起帧”的不稳定期（你也可改回 600）
     g_dropUntilMs[this] = QDateTime::currentMSecsSinceEpoch() + 800;
+    g_viewerStartMs[this] = QDateTime::currentMSecsSinceEpoch();
 
 
     connect(viewer_, &RtspViewerQt::logLine, this, [](const QString& s){
