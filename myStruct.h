@@ -24,6 +24,7 @@ struct myRecordOptions {
     QString recordPath;
     ImageFormat  capturType;
     VideoContainer  recordType;
+    bool overlayEnabled = false;
 
 };
 

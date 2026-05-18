@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>400</width>
-    <height>200</height>
+    <height>230</height>
    </rect>
   </property>
   <property name="minimumSize">
@@ -19,7 +19,7 @@
   <property name="maximumSize">
    <size>
     <width>400</width>
-    <height>200</height>
+    <height>230</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -109,11 +109,24 @@
     <string>...</string>
    </property>
   </widget>
+  <widget class="QCheckBox" name="checkBox_overlayEnabled">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>163</y>
+     <width>220</width>
+     <height>23</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>录像/拍照时保存叠加信息</string>
+   </property>
+  </widget>
   <widget class="QDialogButtonBox" name="buttonBox">
    <property name="geometry">
     <rect>
      <x>230</x>
-     <y>160</y>
+     <y>193</y>
      <width>161</width>
      <height>31</height>
     </rect>

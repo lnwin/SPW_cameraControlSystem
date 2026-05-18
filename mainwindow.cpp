@@ -16,6 +16,7 @@
 #include <QPushButton>
 #include <QCloseEvent>
 #include <QNetworkInterface>
+#include <QSettings>
 
 // ---------- Optional TitleBar ----------
 #if defined(__has_include)
@@ -112,6 +113,37 @@ static int calcNextPullIntervalMs(int noFrameStreak)
 }
 
 // ===================================================================
+//                     Overlay helper
+// ===================================================================
+// 左上角合并显示：时间 + 用户自定义文字（同一黑底色块）
+static QImage applyOverlay(const QImage& src,
+                           const QString& topText,
+                           bool /*drawTime*/)
+{
+    QImage dst = src.copy();
+    QPainter p(&dst);
+    p.setRenderHint(QPainter::TextAntialiasing);
+
+    const QFont font("Arial", 20, QFont::Bold);
+    p.setFont(font);
+    const QFontMetrics fm(font);
+    const int pad = 6;
+
+    const QString ts = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
+    const QString line = topText.isEmpty() ? ts : (ts + "  " + topText);
+
+    const int w = fm.horizontalAdvance(line) + pad * 2;
+    const int h = fm.height() + pad * 2;
+    const QRect bg((dst.width() - w) / 2, 6, w, h);
+    p.fillRect(bg, Qt::black);
+    p.setPen(Qt::white);
+    p.drawText(bg, Qt::AlignCenter, line);
+
+    p.end();
+    return dst;
+}
+
+// ===================================================================
 //                          MainWindow
 // ===================================================================
 MainWindow::MainWindow(QWidget *parent)
@@ -136,6 +168,11 @@ MainWindow::MainWindow(QWidget *parent)
         ui->label->hide();
         ui->label->deleteLater();
         ui->label = nullptr;
+    }
+
+    // 双击 view_ 弹出顶部文字编辑框
+    if (view_) {
+        view_->installEventFilter(this);
     }
 
     // title bar (optional)
@@ -168,8 +205,21 @@ MainWindow::MainWindow(QWidget *parent)
     myVideoRecorder->moveToThread(recThread_);
     recThread_->start();
 
+    // 从持久化配置恢复 overlay 状态
+    {
+        QSettings s("SPwater", "CameraControl");
+        overlayEnabled_ = s.value("overlay/enabled", false).toBool();
+        overlayTopText_ = tr("双击改动文字信息");
+    }
+
     connect(mysystemsetting, &systemsetting::sendRecordOptions,
             myVideoRecorder, &VideoRecorder::receiveRecordOptions);
+
+    // 同步 overlayEnabled_ 到 MainWindow
+    connect(mysystemsetting, &systemsetting::sendRecordOptions,
+            this, [this](const myRecordOptions& opt){
+                overlayEnabled_ = opt.overlayEnabled;
+            });
 
     connect(this, &MainWindow::sendFrame2Capture,
             myVideoRecorder, &VideoRecorder::receiveFrame2Save);
@@ -281,17 +331,33 @@ MainWindow::MainWindow(QWidget *parent)
                 if (g_streamStartMs.value(this, 0) == 0)
                     g_streamStartMs[this] = lastFrameMs_;
 
-                if (view_) view_->setImage(*img);
+                // 显示时始终叠加（时间 + 顶部文字）
+                QImage displayImg = applyOverlay(*img, overlayTopText_, true);
+                if (view_) view_->setImage(displayImg);
 
                 if (!previewActive_) {
                     previewActive_ = true;
                     updateCameraButtons();
                 }
 
-                if (isRecording_) emit sendFrame2Record(img);
+                if (isRecording_) {
+                    if (overlayEnabled_) {
+                        QSharedPointer<QImage> overlaid =
+                            QSharedPointer<QImage>::create(applyOverlay(*img, overlayTopText_, true));
+                        emit sendFrame2Record(overlaid);
+                    } else {
+                        emit sendFrame2Record(img);
+                    }
+                }
 
                 if (iscapturing_) {
-                    emit sendFrame2Capture(img);
+                    if (overlayEnabled_) {
+                        QSharedPointer<QImage> overlaid =
+                            QSharedPointer<QImage>::create(applyOverlay(*img, overlayTopText_, true));
+                        emit sendFrame2Capture(overlaid);
+                    } else {
+                        emit sendFrame2Capture(img);
+                    }
                     iscapturing_ = false;
                 }
             } else {
@@ -344,6 +410,25 @@ void MainWindow::closeEvent(QCloseEvent* event)
 {
     shutdownAllThreads();
     event->accept();
+}
+
+bool MainWindow::eventFilter(QObject* obj, QEvent* event)
+{
+    if (obj == view_ && event->type() == QEvent::MouseButtonDblClick) {
+        bool ok = false;
+        QInputDialog dlg(this);
+        dlg.setWindowTitle(tr("编辑顶部文字"));
+        dlg.setLabelText(tr("顶部叠加文字："));
+        dlg.setTextValue(overlayTopText_);
+        dlg.setStyleSheet("QLineEdit { color: black; background: white; }");
+        ok = (dlg.exec() == QDialog::Accepted);
+        if (ok) {
+            overlayTopText_ = dlg.textValue();
+            systemsetting::saveTopText(overlayTopText_);
+        }
+        return true;
+    }
+    return QMainWindow::eventFilter(obj, event);
 }
 
 // -------------------- title bar --------------------

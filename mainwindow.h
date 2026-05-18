@@ -31,6 +31,7 @@ public:
     QString Localsn;
 protected:
     void closeEvent(QCloseEvent* event) override;
+    bool eventFilter(QObject* obj, QEvent* event) override;
 
 signals:
     void sendFrame2Record(QSharedPointer<QImage> img);
@@ -137,6 +138,10 @@ private:
     QString curBindIp_;
     // 断网弹窗门禁：同一 SN 的一次断网只弹一次；恢复在线后清零
     QHash<QString, bool> offlinePopupShown_;
+
+    // overlay
+    bool    overlayEnabled_ = false;
+    QString overlayTopText_;
 
     // === 你原有其它字段（ColorTune 参数、pathStates_、meanStride_ 等）请保留并放回这里 ===
 };
