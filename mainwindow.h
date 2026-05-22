@@ -118,7 +118,8 @@ private:
     bool ipChangeWaiting_ = false;
     QString pendingIpSn_;
     QString pendingIpNew_;
-    QProgressDialog* ipWaitDlg_ = nullptr;
+    QProgressDialog* ipWaitDlg_  = nullptr;
+    QProgressDialog* recSaveDlg_ = nullptr;
 
     // online tracking
     QHash<QString, qint64> camOnlineSinceMs_;

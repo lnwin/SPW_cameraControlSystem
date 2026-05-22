@@ -845,10 +845,21 @@ void MainWindow::on_action_stopRecord_triggered()
     if (ui->action_startRecord) ui->action_startRecord->setEnabled(true);
     if (ui->action_stopRecord)  ui->action_stopRecord->setEnabled(false);
 
-    emit stopRecord();
-
     if (recBlinkTimer_) recBlinkTimer_->stop();
     if (recIndicator_)  recIndicator_->hide();
+
+    recSaveDlg_ = new QProgressDialog(tr("正在保存录像，请稍候..."), QString(), 0, 0, this);
+    recSaveDlg_->setWindowModality(Qt::WindowModal);
+    recSaveDlg_->setCancelButton(nullptr);
+    recSaveDlg_->show();
+
+    auto* conn = new QMetaObject::Connection;
+    *conn = connect(myVideoRecorder, &VideoRecorder::recordingStopped, this, [this, conn]() {
+        if (recSaveDlg_) { recSaveDlg_->close(); recSaveDlg_->deleteLater(); recSaveDlg_ = nullptr; }
+        disconnect(*conn); delete conn;
+    });
+
+    emit stopRecord();
 }
 
 void MainWindow::on_action_triggered()
@@ -1017,8 +1028,16 @@ void MainWindow::shutdownAllThreads()
     }
 
     if (recThread_) {
+        if (isRecording_ && myVideoRecorder) {
+            QProgressDialog dlg(tr("正在保存录像，请勿操作..."), QString(), 0, 0, this);
+            dlg.setWindowModality(Qt::WindowModal);
+            dlg.setCancelButton(nullptr);
+            dlg.show();
+            QApplication::processEvents();
+            QMetaObject::invokeMethod(myVideoRecorder, "stopRecording", Qt::BlockingQueuedConnection);
+        }
         recThread_->quit();
-        recThread_->wait(2000);
+        recThread_->wait(5000);
         recThread_ = nullptr;
     }
 

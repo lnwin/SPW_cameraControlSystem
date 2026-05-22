@@ -14,7 +14,7 @@ TitleBar::TitleBar(QWidget *parent)
    // iconLabel->setFixedSize(30, 30);           // 给一点 padding，让位置更好看
     iconLabel->setContentsMargins(6, 6, 0, 6);   // 左侧 padding = 6 像素
 
-    m_titleLabel = new QLabel("TurbidCamera - 浑水相机控制系统V3.2");
+    m_titleLabel = new QLabel("TurbidCamera - 浑水相机控制系统V3.3");
     m_titleLabel->setStyleSheet("color: white; font-size:14px; padding-left:30px;");
     QPushButton *btnMin = new QPushButton("-");
     QPushButton *btnMax = new QPushButton("□");
