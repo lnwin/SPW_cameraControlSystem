@@ -110,6 +110,38 @@ void VideoRecorder::receiveFrame2Record(QSharedPointer<QImage> img)
 
         encoderOpened_ = true;
         emit recordingStarted(currentRecordingPath_);
+    } else if (lastPtsMs_ >= kMaxSegmentMs) {
+        // 超过 30 分钟，切换到新文件
+        QString finishedPath = currentRecordingPath_;
+
+        // flush & 关闭旧文件
+        avcodec_send_frame(codecCtx_, nullptr);
+        while (true) {
+            int r = avcodec_receive_packet(codecCtx_, pkt_);
+            if (r == AVERROR(EAGAIN) || r == AVERROR_EOF) break;
+            if (r < 0) break;
+            pkt_->duration = qMax<int64_t>(1, (int64_t)(1000.0 / encFps_));
+            av_packet_rescale_ts(pkt_, codecCtx_->time_base, videoStream_->time_base);
+            pkt_->stream_index = videoStream_->index;
+            av_interleaved_write_frame(fmtCtx_, pkt_);
+            av_packet_unref(pkt_);
+        }
+        closeEncoderLocked();
+        emit recordingStopped(finishedPath);
+        emit sendMSG2ui(QStringLiteral("[VideoRecorder] 录像已保存到：%1").arg(finishedPath));
+
+        // 立即开新文件
+        frameIndex_ = 0;
+        lastPtsMs_ = 0;
+        recStartUs_ = 0;
+        if (!openEncoderLockedForImage(*img)) {
+            recording_ = false;
+            encoderOpened_ = false;
+            emit sendMSG2ui(QStringLiteral("[VideoRecorder] 新段录制初始化失败"));
+            return;
+        }
+        encoderOpened_ = true;
+        emit recordingStarted(currentRecordingPath_);
     }
 
     if (!encodeImageLocked(*img)) {

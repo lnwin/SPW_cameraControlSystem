@@ -595,6 +595,9 @@ void MainWindow::onCheckDeviceAlive()
                                       && (now - viewerStartMs) > 8000;
 
     if (viewerRunning && (everGotFrame || neverGotFrameTimeout) && !uiOnline) {
+        if (isRecording_) {
+            on_action_stopRecord_triggered();
+        }
         if (!offlinePopupShown_.value(sn, false)) {
             offlinePopupShown_[sn] = true;
 

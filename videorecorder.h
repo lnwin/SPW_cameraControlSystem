@@ -98,6 +98,8 @@ private:
     double  encFps_    = 25.0;
     qint64  frameIndex_ = 0;
 
+    static constexpr qint64 kMaxSegmentMs = 30LL * 60 * 1000; // 30 分钟
+
     bool openEncoderLockedForImage(const QImage &img);
     bool encodeImageLocked(const QImage &img);
     void closeEncoderLocked();
