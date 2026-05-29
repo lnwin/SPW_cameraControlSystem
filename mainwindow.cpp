@@ -413,6 +413,14 @@ void MainWindow::bindUiController(UiController* ctrl)
         ctrl->setConnecting(true);
         ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + "正在连接相机...");
         on_action_openCamera_triggered();
+        // 30 秒超时：若仍未收到第一帧则复原
+        QTimer::singleShot(30000, this, [this, ctrl](){
+            if (ctrl->connecting()) {
+                ctrl->setConnecting(false);
+                ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + "连接超时，请检查设备和网络");
+                doStopViewer();
+            }
+        });
     });
     connect(ctrl, &UiController::requestCloseCamera, this, [this, ctrl](){
         ctrl->setConnecting(false);

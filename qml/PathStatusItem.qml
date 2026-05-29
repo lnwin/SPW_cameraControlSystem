@@ -26,8 +26,8 @@ Item {
         anchors.right: parent.right
         anchors.top: lbl.bottom
         anchors.topMargin: 4
-        elide: Text.ElideMiddle
-        wrapMode: Text.NoWrap
+        elide: Text.ElideNone
+        wrapMode: Text.WrapAnywhere
     }
     MouseArea {
         id: hoverArea
