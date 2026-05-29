@@ -1,152 +1,62 @@
-// mainwindow.cpp  (FULL REPLACEABLE, MATCHES YOUR mainwindow.h)
-
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
-#include <QCoreApplication>
+#include <QApplication>
+#include <QCloseEvent>
+#include <QDateTime>
 #include <QDebug>
+#include <QDesktopServices>
 #include <QDir>
 #include <QFileInfo>
-#include <QHeaderView>
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPainter>
-#include <QProcess>
-#include <QPushButton>
-#include <QCloseEvent>
-#include <QNetworkInterface>
+#include <QProgressDialog>
+#include <QRegularExpression>
 #include <QSettings>
+#include <QUrl>
 
-// ---------- Optional TitleBar ----------
-#if defined(__has_include)
-#if __has_include("titlebar.h")
-#include "titlebar.h"
-#define HAVE_TITLEBAR 1
-#else
-#define HAVE_TITLEBAR 0
-#endif
-#else
-#define HAVE_TITLEBAR 0
-#endif
-
-#ifdef Q_OS_WIN
-#include <windows.h>
-#endif
-// 准备接入claude
-// -------------------- Filter IPv4 --------------------
-static bool isUsableIPv4(const QHostAddress& ip) {
-    if (ip.protocol() != QAbstractSocket::IPv4Protocol) return false;
-    const quint32 v = ip.toIPv4Address();
-    if ((v & 0xFF000000u) == 0x7F000000u) return false; // 127.0.0.0/8
-    if ((v & 0xFFFF0000u) == 0xA9FE0000u) return false; // 169.254.0.0/16
-    if (v == 0u) return false;                           // 0.0.0.0
-    return true;
-}
-
-// -------------------- dot icon helper --------------------
-static QIcon makeDotIcon(const QColor& fill, const QColor& border) {
-    const int size = 12;
-    QPixmap pm(size, size);
-    pm.fill(Qt::transparent);
-    QPainter p(&pm);
-    p.setRenderHint(QPainter::Antialiasing, true);
-    QPen pen(border); pen.setWidth(1);
-    p.setPen(pen);
-    p.setBrush(fill);
-    p.drawEllipse(1, 1, size - 2, size - 2);
-    return QIcon(pm);
-}
-
-// -------------------- probe wired ipv4s (NOT a member) --------------------
-static QStringList probeWiredIPv4sStatic()
-{
-    QStringList out;
-    QSet<QString> dedup;
-
-    const auto ifs = QNetworkInterface::allInterfaces();
-    for (const QNetworkInterface& iface : ifs) {
-        const bool likelyEthernet =
-            (iface.type() == QNetworkInterface::Ethernet) ||
-            iface.humanReadableName().contains("Ethernet", Qt::CaseInsensitive) ||
-            iface.humanReadableName().contains(QStringLiteral("以太网"));
-
-        if (!likelyEthernet) continue;
-
-        const auto flags = iface.flags();
-        if (!(flags.testFlag(QNetworkInterface::IsUp) &&
-              flags.testFlag(QNetworkInterface::IsRunning))) continue;
-        if (flags.testFlag(QNetworkInterface::IsLoopBack)) continue;
-
-        for (const QNetworkAddressEntry& e : iface.addressEntries()) {
-            const QHostAddress ip = e.ip();
-            if (!isUsableIPv4(ip)) continue;
-            const QString s = ip.toString();
-            if (!dedup.contains(s)) {
-                dedup.insert(s);
-                out << s;
-            }
-        }
-    }
-    return out;
-}
-
-// ===================== “绿屏/花屏”显示抑制（仅 UI 丢帧） =====================
-// 不改头文件：用静态表记录每个 MainWindow 的 “丢帧截止时间”
+// ── 静态帧状态表（避免污染头文件）──────────────────────────────────────────
 static QHash<const MainWindow*, qint64> g_dropUntilMs;
-// ===================== Adaptive preview pull (UI polling without fixed FPS) =====================
-// 不改头文件：用静态表记录每个 MainWindow 的自适应拉帧状态
-static QHash<const MainWindow*, int>    g_noFrameStreak;   // 连续无帧次数
-static QHash<const MainWindow*, qint64> g_lastNewFrameMs;  // 上一次拿到新帧的时刻（UI侧）
-static QHash<const MainWindow*, bool>   g_previewLoopOn;   // 是否已启动自适应循环
-static QHash<const MainWindow*, qint64> g_streamStartMs;   // 第一次成功出帧时间
-static QHash<const MainWindow*, qint64> g_viewerStartMs;   // viewer 启动时间
-// 计算下一次拉帧间隔（毫秒）：有帧 -> 尽快；无帧 -> 退避省电（不固定FPS）
-static int calcNextPullIntervalMs(int noFrameStreak)
+static QHash<const MainWindow*, int>    g_noFrameStreak;
+static QHash<const MainWindow*, qint64> g_lastNewFrameMs;
+static QHash<const MainWindow*, bool>   g_previewLoopOn;
+static QHash<const MainWindow*, qint64> g_streamStartMs;
+static QHash<const MainWindow*, qint64> g_viewerStartMs;
+
+static int calcNextPullIntervalMs(int streak)
 {
-    // 你可按功耗要求调大/调小
-    if (noFrameStreak <= 2)  return 0;   // 刚启动/刚断一下：立即再试（更顺滑）
-    if (noFrameStreak <= 8)  return 2;
-    if (noFrameStreak <= 20) return 8;
-    if (noFrameStreak <= 60) return 16;
-    return 33; // 长时间无帧：进一步降频（省电）
+    if (streak <= 2)  return 0;
+    if (streak <= 8)  return 2;
+    if (streak <= 20) return 8;
+    if (streak <= 60) return 16;
+    return 33;
 }
 
-// ===================================================================
-//                     Overlay helper
-// ===================================================================
-// 左上角合并显示：时间 + 用户自定义文字（同一黑底色块）
-static QImage applyOverlay(const QImage& src,
-                           const QString& topText,
-                           bool /*drawTime*/)
+// ── 叠加时间文字 ─────────────────────────────────────────────────────────────
+static QImage applyOverlay(const QImage& src, const QString& topText)
 {
     QImage dst = src.copy();
     QPainter p(&dst);
     p.setRenderHint(QPainter::TextAntialiasing);
-
     const QFont font("Arial", 20, QFont::Bold);
     p.setFont(font);
     const QFontMetrics fm(font);
     const int pad = 6;
-
-    const QString ts = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
-    const QString line = topText.isEmpty() ? ts : (ts + "  " + topText);
-
+    const QString line = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss")
+                       + (topText.isEmpty() ? "" : "  " + topText);
     const int w = fm.horizontalAdvance(line) + pad * 2;
     const int h = fm.height() + pad * 2;
     const QRect bg((dst.width() - w) / 2, 6, w, h);
     p.fillRect(bg, Qt::black);
     p.setPen(Qt::white);
     p.drawText(bg, Qt::AlignCenter, line);
-
-    p.end();
     return dst;
 }
 
-// ===================================================================
-//                          MainWindow
-// ===================================================================
-MainWindow::MainWindow(QWidget *parent)
+// ── 构造 ─────────────────────────────────────────────────────────────────────
+MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
     , ui(new Ui::MainWindow)
 {
@@ -155,311 +65,151 @@ MainWindow::MainWindow(QWidget *parent)
 
     ui->setupUi(this);
 
-    // replace label with ZoomPanImageView
+    // 用 ZoomPanImageView 替换 .ui 里的占位 label
     if (ui->label) {
         view_ = new ZoomPanImageView(ui->label->parentWidget());
         view_->setObjectName(ui->label->objectName());
         view_->setZoomRange(1.0, 3.0);
         view_->setDisplayCrop(290, 290);
-
-        if (auto* lay = ui->label->parentWidget()->layout()) {
+        if (auto* lay = ui->label->parentWidget()->layout())
             lay->replaceWidget(ui->label, view_);
-        }
         ui->label->hide();
         ui->label->deleteLater();
         ui->label = nullptr;
     }
+    if (view_) view_->installEventFilter(this);
 
-    // 双击 view_ 弹出顶部文字编辑框
-    if (view_) {
-        view_->installEventFilter(this);
-    }
-
-    // title bar (optional)
-    titleForm();
-
-    // recorder indicator
-    recIndicator_ = new QLabel(view_);
-    recIndicator_->setFixedSize(32, 32);
-    recIndicator_->move(8, 8);
-    recIndicator_->setStyleSheet(
-        "background-color: red;"
-        "border-radius: 16px;"
-        "border: 1px solid white;"
-        );
-    recIndicator_->hide();
-    recIndicator_->setAttribute(Qt::WA_TransparentForMouseEvents, true);
-
-    recBlinkTimer_ = new QTimer(this);
-    recBlinkTimer_->setInterval(500);
-    connect(recBlinkTimer_, &QTimer::timeout, this, [this](){
-        if (!recIndicator_) return;
-        if (!isRecording_) { recIndicator_->hide(); return; }
-        recIndicator_->setVisible(!recIndicator_->isVisible());
-    });
-
-    // systemsetting / recorder
-    mysystemsetting = new systemsetting();
+    // 录像线程
     myVideoRecorder = new VideoRecorder;
     recThread_ = new QThread(this);
     myVideoRecorder->moveToThread(recThread_);
     recThread_->start();
 
-    // 从持久化配置恢复 overlay 状态
+    // 恢复 overlay 设置
     {
         QSettings s("SPwater", "CameraControl");
         overlayEnabled_ = s.value("overlay/enabled", false).toBool();
         overlayTopText_ = tr("双击改动文字信息");
     }
 
-    connect(mysystemsetting, &systemsetting::sendRecordOptions,
-            myVideoRecorder, &VideoRecorder::receiveRecordOptions);
+    connect(this, &MainWindow::sendFrame2Capture, myVideoRecorder, &VideoRecorder::receiveFrame2Save);
+    connect(this, &MainWindow::sendFrame2Record,  myVideoRecorder, &VideoRecorder::receiveFrame2Record);
+    connect(this, &MainWindow::startRecord,       myVideoRecorder, &VideoRecorder::startRecording);
+    connect(this, &MainWindow::stopRecord,        myVideoRecorder, &VideoRecorder::stopRecording);
 
-    // 同步 overlayEnabled_ 到 MainWindow
-    connect(mysystemsetting, &systemsetting::sendRecordOptions,
-            this, [this](const myRecordOptions& opt){
-                overlayEnabled_ = opt.overlayEnabled;
-            });
-
-    connect(this, &MainWindow::sendFrame2Capture,
-            myVideoRecorder, &VideoRecorder::receiveFrame2Save);
-    connect(this, &MainWindow::sendFrame2Record,
-            myVideoRecorder, &VideoRecorder::receiveFrame2Record);
-
-    connect(this, &MainWindow::startRecord,
-            myVideoRecorder, &VideoRecorder::startRecording);
-    connect(this, &MainWindow::stopRecord,
-            myVideoRecorder, &VideoRecorder::stopRecording);
-
-    // NOTE: header里没有 getMSG()，因此用 lambda 替代
-    connect(myVideoRecorder, &VideoRecorder::sendMSG2ui,
-            this, [this](const QString& s){
-                if (!ui || !ui->messageBox) return;
-                const QString t = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss");
-                ui->messageBox->append(QString("[%1] %2").arg(t, s));
-            });
-
-    // // splitter
-    // if (ui->deviceSplitter) {
-    //     ui->deviceSplitter->setHandleWidth(3);
-    //     ui->deviceSplitter->setStretchFactor(0, 3);
-    //     ui->deviceSplitter->setStretchFactor(1, 2);
-    // }
-
-    // deviceList
-    if (ui->deviceList) {
-        ui->deviceList->setColumnCount(3);
-        ui->deviceList->setHorizontalHeaderLabels({ "设备名称", "设备状态", "修改IP" });
-
-        auto* header = ui->deviceList->horizontalHeader();
-        header->setSectionResizeMode(0, QHeaderView::Stretch);
-        header->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-        header->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-
-        ui->deviceList->setSelectionBehavior(QAbstractItemView::SelectRows);
-        ui->deviceList->setSelectionMode(QAbstractItemView::SingleSelection);
-        ui->deviceList->setEditTriggers(QAbstractItemView::NoEditTriggers);
-
-        connect(ui->deviceList, &QTableWidget::itemSelectionChanged,
-                this, &MainWindow::onTableSelectionChanged);
-    }
-
-    // icons
-    iconOnline_       = makeDotIcon(QColor(0, 200, 0), QColor(0, 120, 0));
-    iconOffline_      = makeDotIcon(QColor(180, 180, 180), QColor(120, 120, 120));
-
-    // UdpDeviceManager
+    // UDP 设备发现
     mgr_ = new UdpDeviceManager(this);
     mgr_->setDefaultCmdPort(10000);
-    if (!mgr_->start(7777, 8888)) {
+    if (!mgr_->start(7777, 8888))
         qWarning() << "UdpDeviceManager start failed";
-    }
 
-    connect(mgr_, &UdpDeviceManager::logLine, this, [](const QString& s) {
-        qDebug().noquote() << s;
+    connect(mgr_, &UdpDeviceManager::snDiscoveredOrUpdated, this, [this](const QString& sn){
+        QMetaObject::invokeMethod(this, [this, sn]{
+            if (!camOnlineSinceMs_.contains(sn))
+                camOnlineSinceMs_.insert(sn, QDateTime::currentMSecsSinceEpoch());
+        }, Qt::QueuedConnection);
     });
+    connect(mgr_, &UdpDeviceManager::snDiscoveredOrUpdated, this, &MainWindow::onSnUpdatedForIpChange);
+    connect(this, &MainWindow::sendCameraExporeGain, mgr_, &UdpDeviceManager::sendSetCameraParams);
 
-    connect(mgr_, &UdpDeviceManager::snDiscoveredOrUpdated,
-            this, [this](const QString& sn) {
-                QMetaObject::invokeMethod(this, [this, sn]{
-                        upsertCameraSN(sn);
-                    }, Qt::QueuedConnection);
-            });
-
-    connect(mgr_, &UdpDeviceManager::snDiscoveredOrUpdated,
-            this, &MainWindow::onSnUpdatedForIpChange);
-
-    connect(this, &MainWindow::sendCameraExporeGain,mgr_, &UdpDeviceManager::sendSetCameraParams);
-
-    // timers
+    // 设备存活定时器
     devAliveTimer_ = new QTimer(this);
     devAliveTimer_->setInterval(1000);
     connect(devAliveTimer_, &QTimer::timeout, this, &MainWindow::onCheckDeviceAlive);
     devAliveTimer_->start();
 
+    // 自适应拉帧定时器
     previewPullTimer_ = new QTimer(this);
     previewPullTimer_->setTimerType(Qt::PreciseTimer);
-    previewPullTimer_->setSingleShot(true);   // 关键：singleShot + 自调度（不固定FPS）
-
+    previewPullTimer_->setSingleShot(true);
     connect(previewPullTimer_, &QTimer::timeout, this, [this](){
-        if (!previewPullTimer_) return;
-
-        // 如果没在预览或 viewer 已空，停止循环（避免空转）
         if (!viewer_ || !g_previewLoopOn.value(this, false)) {
             g_previewLoopOn[this] = false;
             g_noFrameStreak[this] = 0;
             return;
         }
 
-        bool gotNewFrame = false;
-
-        // 取最新帧（如果没有新帧，takeLatestFrameIfNew 应该返回 null）
         QSharedPointer<QImage> img = viewer_->takeLatestFrameIfNew();
         if (img && !img->isNull()) {
-
             const qint64 now = QDateTime::currentMSecsSinceEpoch();
-
-            // 冷启动/重连“丢帧窗口”：隐藏绿屏/半帧（你已有逻辑，保留）
             const qint64 until = g_dropUntilMs.value(this, 0);
             if (!(until > 0 && now < until)) {
-                gotNewFrame = true;
                 g_lastNewFrameMs[this] = now;
                 g_noFrameStreak[this] = 0;
+                lastFrameMs_ = now;
+                if (g_streamStartMs.value(this, 0) == 0) g_streamStartMs[this] = now;
 
-                // 直接显示 + 录像（相机已输出 1080P，无需色彩处理）
-                lastFrameMs_ = QDateTime::currentMSecsSinceEpoch();
-                if (g_streamStartMs.value(this, 0) == 0)
-                    g_streamStartMs[this] = lastFrameMs_;
-
-                // 显示时始终叠加（时间 + 顶部文字）
-                QImage displayImg = applyOverlay(*img, overlayTopText_, true);
-                if (view_) view_->setImage(displayImg);
-
-                if (!previewActive_) {
-                    previewActive_ = true;
-                    updateCameraButtons();
+                // 帧率统计（1秒窗口）
+                if (fpsWindowStart_ == 0) fpsWindowStart_ = now;
+                fpsFrameCount_++;
+                if (now - fpsWindowStart_ >= 1000) {
+                    lastFps_ = fpsFrameCount_;
+                    fpsFrameCount_ = 0;
+                    fpsWindowStart_ = now;
                 }
+
+                if (view_) view_->setImage(applyOverlay(*img, overlayTopText_));
 
                 if (isRecording_) {
-                    if (overlayEnabled_) {
-                        QSharedPointer<QImage> overlaid =
-                            QSharedPointer<QImage>::create(applyOverlay(*img, overlayTopText_, true));
-                        emit sendFrame2Record(overlaid);
-                    } else {
+                    if (overlayEnabled_)
+                        emit sendFrame2Record(QSharedPointer<QImage>::create(applyOverlay(*img, overlayTopText_)));
+                    else
                         emit sendFrame2Record(img);
-                    }
                 }
-
                 if (iscapturing_) {
-                    if (overlayEnabled_) {
-                        QSharedPointer<QImage> overlaid =
-                            QSharedPointer<QImage>::create(applyOverlay(*img, overlayTopText_, true));
-                        emit sendFrame2Capture(overlaid);
-                    } else {
+                    if (overlayEnabled_)
+                        emit sendFrame2Capture(QSharedPointer<QImage>::create(applyOverlay(*img, overlayTopText_)));
+                    else
                         emit sendFrame2Capture(img);
-                    }
                     iscapturing_ = false;
                 }
             } else {
-                // 仍处在丢帧窗口，视作“无帧”（继续快速拉，尽快出稳态）
                 g_noFrameStreak[this] = g_noFrameStreak.value(this, 0) + 1;
             }
-
         } else {
             g_noFrameStreak[this] = g_noFrameStreak.value(this, 0) + 1;
         }
 
-        // 自适应调度下一次拉帧：有帧尽快、无帧退避
-        int nextMs = calcNextPullIntervalMs(g_noFrameStreak.value(this, 0));
-
-        // 进一步优化“第一次卡”的主观体验：刚启动的前 1 秒，哪怕无帧也不要退避太快
-        // 避免首个 IDR 来得慢时，UI 拉帧频率过低导致“更像卡住”
-        const qint64 t0   = g_lastNewFrameMs.value(this, 0);
-        if (t0 == 0) {
-            // 还没拿到过任何新帧：保持相对积极的拉取频率
-            nextMs = qMin(nextMs, 8);
-        }
-
-        if (g_previewLoopOn.value(this, false) && previewPullTimer_) {
-            previewPullTimer_->start(nextMs);
-        }
+        const int nextMs = (g_lastNewFrameMs.value(this, 0) == 0)
+                         ? qMin(calcNextPullIntervalMs(g_noFrameStreak.value(this, 0)), 8)
+                         : calcNextPullIntervalMs(g_noFrameStreak.value(this, 0));
+        if (g_previewLoopOn.value(this, false)) previewPullTimer_->start(nextMs);
     });
 
-
+    // IP 修改超时定时器
     ipChangeTimer_ = new QTimer(this);
     ipChangeTimer_->setSingleShot(true);
     connect(ipChangeTimer_, &QTimer::timeout, this, &MainWindow::onIpChangeTimeout);
-
-    // init
-    curSelectedSn_.clear();
-    previewActive_ = false;
-    clearDeviceInfoPanel();
-    updateSystemIP();
-    updateCameraButtons();
 }
 
-MainWindow::~MainWindow()
-{
-    shutdownAllThreads();
+MainWindow::~MainWindow() { shutdownAllThreads(); delete ui; }
 
-    delete ui;
-    ui = nullptr;
-}
-
-void MainWindow::closeEvent(QCloseEvent* event)
-{
-    shutdownAllThreads();
-    event->accept();
-}
+void MainWindow::closeEvent(QCloseEvent* e) { shutdownAllThreads(); e->accept(); }
 
 bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 {
     if (obj == view_ && event->type() == QEvent::MouseButtonDblClick) {
-        bool ok = false;
         QInputDialog dlg(this);
         dlg.setWindowTitle(tr("编辑顶部文字"));
         dlg.setLabelText(tr("顶部叠加文字："));
         dlg.setTextValue(overlayTopText_);
         dlg.setStyleSheet("QLineEdit { color: black; background: white; }");
-        ok = (dlg.exec() == QDialog::Accepted);
-        if (ok) {
+        if (dlg.exec() == QDialog::Accepted) {
             overlayTopText_ = dlg.textValue();
-            systemsetting::saveTopText(overlayTopText_);
+            QSettings s("SPwater", "CameraControl");
+            s.setValue("overlay/topText", overlayTopText_);
         }
         return true;
     }
     return QMainWindow::eventFilter(obj, event);
 }
 
-// -------------------- title bar --------------------
-void MainWindow::titleForm()
-{
-#if HAVE_TITLEBAR
-    TitleBar *title = new TitleBar(this);
-    setMenuWidget(title);
-
-    connect(title, &TitleBar::minimizeRequested, this, &MainWindow::showMinimized);
-    connect(title, &TitleBar::maximizeRequested, [this](){
-        isMaximized() ? showNormal() : showMaximized();
-    });
-    connect(title, &TitleBar::closeRequested, this, &MainWindow::close);
-#else
-    // no titlebar
-#endif
-}
-
-
+// ── 拉帧定时器 ───────────────────────────────────────────────────────────────
 void MainWindow::startPreviewPullTimer()
 {
-    if (!previewPullTimer_) return;
-
-    // 启动自适应循环：立即拉一次（不固定FPS）
     g_previewLoopOn[this] = true;
     g_noFrameStreak[this] = 0;
-    // 注意：g_lastNewFrameMs 这里不清零，让“重连”也能更平滑；
-    // 但在 openCameraForSelected 里我们会主动清一次，作为“新会话”
-    if (!previewPullTimer_->isActive())
-        previewPullTimer_->start(0);
+    if (!previewPullTimer_->isActive()) previewPullTimer_->start(0);
 }
 
 void MainWindow::stopPreviewPullTimer()
@@ -469,343 +219,96 @@ void MainWindow::stopPreviewPullTimer()
     g_noFrameStreak[this] = 0;
 }
 
-
-// -------------------- network ip --------------------
-void MainWindow::updateSystemIP()
-{
-    const QStringList ips = probeWiredIPv4sStatic();
-    if (ips.isEmpty()) {
-        qWarning() << "[IP] no usable wired IPv4 found, keep curBindIp_ =" << curBindIp_;
-        if (ui && ui->lblHostIp) ui->lblHostIp->setText(tr("无可用 IP"));
-        return;
-    }
-    curBindIp_ = ips.first();
-    if (ui && ui->lblHostIp) ui->lblHostIp->setText(curBindIp_);
-}
-
-// -------------------- device discovery upsert --------------------
-void MainWindow::upsertCameraSN(const QString& sn)
-{
-    if (sn.isEmpty() || !mgr_) return;
-    updateTableDevice(sn);
-    Localsn=sn;
-}
-
-void MainWindow::updateTableDevice(const QString& sn)
-{
-    if (!ui || !ui->deviceList || !mgr_) return;
-
-    DeviceInfo dev;
-    if (!mgr_->getDevice(sn, dev)) return;
-
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (!camOnlineSinceMs_.contains(sn)) camOnlineSinceMs_.insert(sn, now);
-
-    QString name = dev.sn;
-    if (name.isEmpty()) name = sn;
-    QString displayName = (name != sn) ? QString("%1 | %2").arg(name, sn) : sn;
-
-    int row = -1;
-    for (int r = 0; r < ui->deviceList->rowCount(); ++r) {
-        auto* item = ui->deviceList->item(r, 0);
-        if (item && item->data(Qt::UserRole).toString() == sn) { row = r; break; }
-    }
-    if (row < 0) {
-        row = ui->deviceList->rowCount();
-        ui->deviceList->insertRow(row);
-    }
-
-    // col0
-    QTableWidgetItem* nameItem = ui->deviceList->item(row, 0);
-    if (!nameItem) {
-        nameItem = new QTableWidgetItem;
-        ui->deviceList->setItem(row, 0, nameItem);
-    }
-    nameItem->setText(displayName);
-    nameItem->setData(Qt::UserRole, sn);
-    nameItem->setTextAlignment(Qt::AlignVCenter | Qt::AlignLeft);
-
-    // col1 status
-    QTableWidgetItem* stItem = ui->deviceList->item(row, 1);
-    if (!stItem) {
-        stItem = new QTableWidgetItem;
-        ui->deviceList->setItem(row, 1, stItem);
-    }
-    stItem->setIcon(iconOnline_);
-    stItem->setText(QStringLiteral("在线"));
-    stItem->setTextAlignment(Qt::AlignCenter);
-    stItem->setForeground(Qt::black);
-
-    // col2 button
-    if (!ui->deviceList->cellWidget(row, 2)) {
-        auto* btnIp = new QPushButton(QStringLiteral("修改IP"), ui->deviceList);
-        connect(btnIp, &QPushButton::clicked, this, [this, sn] { changeCameraIpForSn(sn); });
-        ui->deviceList->setCellWidget(row, 2, btnIp);
-    }
-
-    updateCameraButtons();
-}
-
-
+// ── 设备存活检测 ─────────────────────────────────────────────────────────────
 void MainWindow::onCheckDeviceAlive()
 {
-    if (!ui || !ui->deviceList || !mgr_) return;
-
+    if (curSelectedSn_.isEmpty()) return;
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
-
-    for (int r = 0; r < ui->deviceList->rowCount(); ++r) {
-        QTableWidgetItem* nameItem = ui->deviceList->item(r, 0);
-        QTableWidgetItem* stItem   = ui->deviceList->item(r, 1);
-
-        if (!nameItem || !stItem) continue;
-
-        const QString sn = nameItem->data(Qt::UserRole).toString().trimmed();
-        if (sn.isEmpty()) continue;
-
-        DeviceInfo dev;
-        const bool online = isControlOnline(sn, &dev);
-
-        if (online) {
-            stItem->setIcon(iconOnline_);
-            stItem->setText(QStringLiteral("在线"));
-            stItem->setForeground(Qt::black);
-        } else {
-            stItem->setIcon(iconOffline_);
-            stItem->setText(QStringLiteral("离线"));
-            stItem->setForeground(Qt::gray);
-        }
-    }
-
-    const QString sn = curSelectedSn_.trimmed();
-    if (sn.isEmpty()) {
-        updateCameraButtons();
-        return;
-    }
-
-    DeviceInfo dev;
-    const bool controlOnline = isControlOnline(sn, &dev);
-
     const bool viewerRunning = (viewer_ != nullptr);
     const bool everGotFrame  = (g_streamStartMs.value(this, 0) > 0);
     const bool videoAlive    = (lastFrameMs_ > 0 && (now - lastFrameMs_) <= 1200);
+    const bool controlOnline = isControlOnline(curSelectedSn_);
     const bool uiOnline      = controlOnline && (!viewerRunning || videoAlive);
     const qint64 viewerStartMs = g_viewerStartMs.value(this, 0);
     const bool neverGotFrameTimeout = viewerRunning && !everGotFrame
-                                      && viewerStartMs > 0
-                                      && (now - viewerStartMs) > 8000;
+                                   && viewerStartMs > 0 && (now - viewerStartMs) > 8000;
 
     if (viewerRunning && (everGotFrame || neverGotFrameTimeout) && !uiOnline) {
-        if (isRecording_) {
-            on_action_stopRecord_triggered();
-        }
-        if (!offlinePopupShown_.value(sn, false)) {
-            offlinePopupShown_[sn] = true;
-
-            QString durationText = QStringLiteral("未知");
-            const qint64 startMs = g_streamStartMs.value(this, 0);
-            if (startMs > 0) {
-                const qint64 elapsedMs = now - startMs;
-                const qint64 totalMinutes = elapsedMs / 60000;
-                const qint64 hours = totalMinutes / 60;
-                const qint64 minutes = totalMinutes % 60;
-                durationText = QStringLiteral("%1小时%2分钟").arg(hours).arg(minutes);
+        if (isRecording_) on_action_stopRecord_triggered();
+        if (!offlinePopupShown_.value(curSelectedSn_, false)) {
+            offlinePopupShown_[curSelectedSn_] = true;
+            QString dur = "未知";
+            const qint64 t0 = g_streamStartMs.value(this, 0);
+            if (t0 > 0) {
+                const qint64 m = (now - t0) / 60000;
+                dur = QStringLiteral("%1小时%2分钟").arg(m / 60).arg(m % 60);
             }
-
-            auto* box = new QMessageBox(
-                QMessageBox::Information,
-                tr("提示"),
-                tr("设备 [%1] 网络中断或视频断流。\n"
-                   "本次从开始抓流成功到中断，共持续：%2。\n"
-                   "请检查网络后重新打开相机。")
-                    .arg(sn, durationText),
-                QMessageBox::Ok,
-                this);
-
-            box->setAttribute(Qt::WA_DeleteOnClose, true);
+            auto* box = new QMessageBox(QMessageBox::Information, tr("提示"),
+                tr("设备 [%1] 网络中断或视频断流。\n持续：%2。\n请检查网络后重新打开相机。")
+                    .arg(curSelectedSn_, dur), QMessageBox::Ok, this);
+            box->setAttribute(Qt::WA_DeleteOnClose);
             box->open();
         }
     }
-
-    updateCameraButtons();
 }
 
-
-// -------------------- selection --------------------
-void MainWindow::onTableSelectionChanged()
-{
-    curSelectedSn_.clear();
-    if (!ui || !ui->deviceList) { clearDeviceInfoPanel(); updateCameraButtons(); return; }
-
-    auto* sel = ui->deviceList->selectionModel();
-    if (!sel) { clearDeviceInfoPanel(); updateCameraButtons(); return; }
-
-    const QModelIndexList rows = sel->selectedRows();
-    if (!rows.isEmpty()) {
-        const int row = rows.first().row();
-        QTableWidgetItem* nameItem = ui->deviceList->item(row, 0);
-        if (nameItem) curSelectedSn_ = nameItem->data(Qt::UserRole).toString().trimmed();
-    }
-
-    if (curSelectedSn_.isEmpty()) {
-        clearDeviceInfoPanel();
-    } else {
-        DeviceInfo dev;
-        const bool online = isControlOnline(curSelectedSn_, &dev);
-        updateDeviceInfoPanel(online ? &dev : nullptr, online);
-    }
-
-    updateCameraButtons();
-}
-
-// -------------------- helper: control online --------------------
+// ── 相机控制 ─────────────────────────────────────────────────────────────────
 bool MainWindow::isControlOnline(const QString& sn, DeviceInfo* outDev) const
 {
     if (!mgr_) return false;
     DeviceInfo dev;
     if (!mgr_->getDevice(sn, dev)) return false;
-
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    const qint64 offlineMs = 10000;
-    const bool online = (now - dev.lastSeenMs <= offlineMs);
-
+    const bool online = (QDateTime::currentMSecsSinceEpoch() - dev.lastSeenMs) <= 10000;
     if (outDev) *outDev = dev;
     return online;
 }
 
-// -------------------- viewer stop --------------------
-void MainWindow::doStopViewer()
-{
-    stopPreviewPullTimer();
-
-    if (!viewer_) return;
-
-    RtspViewerQt* v = viewer_;
-    viewer_ = nullptr;
-    previewActive_ = false;
-    lastFrameMs_ = 0;
-    g_streamStartMs[this] = 0;
-    g_viewerStartMs[this] = 0;
-    connect(v, &QThread::finished, this, [this, v]() {
-        v->deleteLater();
-        updateCameraButtons();
-    });
-
-    v->stop();
-    v->quit();
-    v->wait(1200);
-
-    updateCameraButtons();
-}
-
-// -------------------- New: open camera state machine --------------------
 bool MainWindow::openCameraForSelected(bool showMsgBox)
 {
-    // 新会话：重置 UI 拉帧状态
-    g_noFrameStreak[this]  = 0;
-    g_lastNewFrameMs[this] = 0;
-    g_streamStartMs[this]  = 0;   // 新增：本次抓流开始时间清零
-    g_viewerStartMs[this]  = 0;
+    g_noFrameStreak[this] = 0; g_lastNewFrameMs[this] = 0;
+    g_streamStartMs[this] = 0; g_viewerStartMs[this]  = 0;
     if (viewer_) return true;
 
     if (curSelectedSn_.isEmpty()) {
         if (showMsgBox) QMessageBox::warning(this, tr("提示"), tr("请先在列表中选择一台相机。"));
         return false;
     }
-
     DeviceInfo dev;
     if (!isControlOnline(curSelectedSn_, &dev)) {
         if (showMsgBox) QMessageBox::warning(this, tr("提示"), tr("设备离线，请确认心跳在线后再打开。"));
         return false;
     }
 
-    const QString devIp = dev.ip.toString();
-    const int rtspPort = 8554;
-    const QString path = curSelectedSn_;
-    const QString url = QString("rtsp://%1:%2/%3").arg(devIp).arg(rtspPort).arg(path);
-
+    const QString url = QString("rtsp://%1:8554/%2").arg(dev.ip.toString(), curSelectedSn_);
     qInfo().noquote() << "[UI] open rtsp url =" << url;
 
     viewer_ = new RtspViewerQt(this);
-    previewActive_ = false;
     lastFrameMs_ = 0;
-
-    // 新会话：重置 UI 拉帧状态（避免上一次的退避影响“第一次体验”）
-    g_noFrameStreak[this]  = 0;
-    g_lastNewFrameMs[this] = 0;
-
-    // drop UI frames for a short window after (re)start
-    // 适当加到 800ms：更能覆盖“等IDR/解码器起帧”的不稳定期（你也可改回 600）
-    g_dropUntilMs[this] = QDateTime::currentMSecsSinceEpoch() + 800;
+    g_noFrameStreak[this] = 0; g_lastNewFrameMs[this] = 0;
+    g_dropUntilMs[this]   = QDateTime::currentMSecsSinceEpoch() + 800;
     g_viewerStartMs[this] = QDateTime::currentMSecsSinceEpoch();
 
-
-    connect(viewer_, &RtspViewerQt::logLine, this, [](const QString& s){
-        qInfo().noquote() << s;
-    });
-
+    connect(viewer_, &RtspViewerQt::logLine, this, [](const QString& s){ qInfo().noquote() << s; });
     viewer_->setUrl(url);
     viewer_->start();
     startPreviewPullTimer();
-
-    updateCameraButtons();
     return true;
 }
 
-
-// -------------------- update buttons --------------------
-void MainWindow::updateCameraButtons()
+void MainWindow::doStopViewer()
 {
-    if (!ui) return;
-
-    QAction* actOpen      = ui->action_openCamera;
-    QAction* actClose     = ui->action_closeCamera;
-    QAction* actGrab      = ui->action_grap;
-    QAction* actStartRec  = ui->action_startRecord;
-    QAction* actStopRec   = ui->action_stopRecord;
-
-    auto disableAll = [&](){
-        if (actOpen)     actOpen->setEnabled(false);
-        if (actClose)    actClose->setEnabled(false);
-        if (actGrab)     actGrab->setEnabled(false);
-        if (actStartRec) actStartRec->setEnabled(false);
-        if (actStopRec)  actStopRec->setEnabled(false);
-    };
-
-    disableAll();
-
-    if (curSelectedSn_.isEmpty()) return;
-    if (ipChangeWaiting_) return;
-
-    DeviceInfo dev;
-    if (!isControlOnline(curSelectedSn_, &dev)) return;
-    // 正在预览但视频已断流：也视为离线（禁用按钮）
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    if (viewer_ && lastFrameMs_ > 0 && (now - lastFrameMs_) > 1200) return;
-
-
-    if (viewer_) {
-        if (actOpen)  actOpen->setEnabled(false);
-        if (actClose) actClose->setEnabled(true);
-        if (actGrab)  actGrab->setEnabled(true);
-
-        if (isRecording_) {
-            if (actStartRec) actStartRec->setEnabled(false);
-            if (actStopRec)  actStopRec->setEnabled(true);
-        } else {
-            if (actStartRec) actStartRec->setEnabled(true);
-            if (actStopRec)  actStopRec->setEnabled(false);
-        }
-        return;
-    }
-
-    if (actOpen)  actOpen->setEnabled(true);
+    stopPreviewPullTimer();
+    if (!viewer_) return;
+    RtspViewerQt* v = viewer_;
+    viewer_ = nullptr;
+    lastFrameMs_ = 0;
+    g_streamStartMs[this] = 0;
+    g_viewerStartMs[this] = 0;
+    connect(v, &QThread::finished, v, &QObject::deleteLater);
+    v->stop(); v->quit(); v->wait(1200);
 }
 
-// -------------------- UI actions --------------------
-void MainWindow::on_action_openCamera_triggered()
-{
-    openCameraForSelected(true);
-}
+void MainWindow::on_action_openCamera_triggered()  { openCameraForSelected(true); }
 
 void MainWindow::on_action_closeCamera_triggered()
 {
@@ -813,13 +316,9 @@ void MainWindow::on_action_closeCamera_triggered()
     g_previewLoopOn[this] = false;
     g_noFrameStreak[this] = 0;
     g_lastNewFrameMs[this] = 0;
-
 }
 
-void MainWindow::on_action_grap_triggered()
-{
-    iscapturing_ = true;
-}
+void MainWindow::on_action_grap_triggered() { iscapturing_ = true; }
 
 void MainWindow::on_action_startRecord_triggered()
 {
@@ -828,15 +327,7 @@ void MainWindow::on_action_startRecord_triggered()
         QMessageBox::information(this, tr("提示"), tr("请先打开相机预览再开始录制。"));
         return;
     }
-
     isRecording_ = true;
-
-    if (ui->action_startRecord) ui->action_startRecord->setEnabled(false);
-    if (ui->action_stopRecord)  ui->action_stopRecord->setEnabled(true);
-
-    if (recIndicator_) recIndicator_->show();
-    if (recBlinkTimer_) recBlinkTimer_->start();
-
     emit startRecord();
 }
 
@@ -845,216 +336,161 @@ void MainWindow::on_action_stopRecord_triggered()
     if (!isRecording_) return;
     isRecording_ = false;
 
-    if (ui->action_startRecord) ui->action_startRecord->setEnabled(true);
-    if (ui->action_stopRecord)  ui->action_stopRecord->setEnabled(false);
-
-    if (recBlinkTimer_) recBlinkTimer_->stop();
-    if (recIndicator_)  recIndicator_->hide();
-
     recSaveDlg_ = new QProgressDialog(tr("正在保存录像，请稍候..."), QString(), 0, 0, this);
     recSaveDlg_->setWindowModality(Qt::WindowModal);
     recSaveDlg_->setCancelButton(nullptr);
     recSaveDlg_->show();
 
     auto* conn = new QMetaObject::Connection;
-    *conn = connect(myVideoRecorder, &VideoRecorder::recordingStopped, this, [this, conn]() {
+    *conn = connect(myVideoRecorder, &VideoRecorder::recordingStopped, this, [this, conn](){
         if (recSaveDlg_) { recSaveDlg_->close(); recSaveDlg_->deleteLater(); recSaveDlg_ = nullptr; }
         disconnect(*conn); delete conn;
     });
-
     emit stopRecord();
 }
 
-void MainWindow::on_action_triggered()
+// ── IP 修改 ──────────────────────────────────────────────────────────────────
+void MainWindow::changeIp(const QString& sn, const QString& newIp)
 {
-    if (mysystemsetting) mysystemsetting->show();
-}
-
-// -------------------- IP change --------------------
-void MainWindow::changeCameraIpForSn(const QString& sn)
-{
-    if (ipChangeWaiting_) {
-        QMessageBox::information(this, tr("提示"), tr("已有一个修改 IP 操作正在进行，请稍候。"));
-        return;
-    }
-
-    const QString trimmedSn = sn.trimmed();
-    if (trimmedSn.isEmpty()) {
-        QMessageBox::warning(this, tr("提示"), tr("请先选择一个设备 ID (SN)。"));
-        return;
-    }
-
-    if (!curSelectedSn_.isEmpty() && curSelectedSn_ == trimmedSn && viewer_) {
-        doStopViewer();
-    }
-
-    QString curIp;
-    if (mgr_) {
-        DeviceInfo dev;
-        if (mgr_->getDevice(trimmedSn, dev)) curIp = dev.ip.toString();
-    }
-    if (curIp.isEmpty()) curIp = "192.168.0.100";
-
-    QInputDialog dlg(this);
-    dlg.setWindowTitle(tr("修改相机 IP"));
-    dlg.setLabelText(tr("设备 SN: %1\n当前 IP: %2\n\n请输入新的 IP：").arg(trimmedSn, curIp));
-    dlg.setTextValue(curIp);
-    if (QLineEdit* edit = dlg.findChild<QLineEdit*>()) edit->setStyleSheet("color:#000000;");
-    if (dlg.exec() != QDialog::Accepted) return;
-
-    QString newIp = dlg.textValue().trimmed();
-
-    static const QRegularExpression re(
-        R"(^((25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(25[0-5]|2[0-4]\d|1?\d?\d)$)");
+    static const QRegularExpression re(R"(^((25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(25[0-5]|2[0-4]\d|1?\d?\d)$)");
     if (!re.match(newIp).hasMatch()) {
-        QMessageBox::warning(this, tr("错误"), tr("IP 地址格式不正确，请重新输入。"));
+        QMessageBox::warning(nullptr, tr("错误"), tr("IP 地址格式不正确。"));
         return;
     }
+    if (curSelectedSn_ == sn && viewer_) doStopViewer();
 
-    const int mask = 16;
-    const qint64 n = mgr_->sendSetIp(trimmedSn, newIp, mask);
-    if (n <= 0) {
-        QMessageBox::warning(this, tr("错误"), tr("发送改 IP 命令失败（ret=%1）。").arg(n));
-        return;
+    const qint64 n = mgr_->sendSetIp(sn, newIp, 16);
+    if (n <= 0) { QMessageBox::warning(nullptr, tr("错误"), tr("发送改 IP 命令失败。")); return; }
+
+    pendingIpSn_ = sn; pendingIpNew_ = newIp; ipChangeWaiting_ = true;
+
+    if (uiCtrl_) {
+        uiCtrl_->notifyIpWaiting(tr("正在将 [%1] 的 IP 修改为 %2...").arg(sn, newIp));
+        uiCtrl_->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + tr("正在修改 IP：%1 → %2").arg(sn, newIp));
     }
-
-    pendingIpSn_     = trimmedSn;
-    pendingIpNew_    = newIp;
-    ipChangeWaiting_ = true;
-
-    if (!ipWaitDlg_) {
-        ipWaitDlg_ = new QProgressDialog(this);
-        ipWaitDlg_->setWindowModality(Qt::ApplicationModal);
-        ipWaitDlg_->setCancelButton(nullptr);
-        ipWaitDlg_->setMinimum(0);
-        ipWaitDlg_->setMaximum(0);
-        ipWaitDlg_->setAutoClose(false);
-        ipWaitDlg_->setAutoReset(false);
-    }
-
-    ipWaitDlg_->setWindowTitle(tr("正在修改 IP"));
-    ipWaitDlg_->setLabelText(tr("正在将设备 [%1] 的 IP 从 %2 修改为 %3...\n请等待设备使用新 IP 重新上线。")
-                                 .arg(trimmedSn, curIp, newIp));
-    ipWaitDlg_->show();
-
     if (ipChangeTimer_) ipChangeTimer_->start(15000);
-
-    updateCameraButtons();
 }
 
 void MainWindow::onSnUpdatedForIpChange(const QString& sn)
 {
-    if (!ipChangeWaiting_) return;
-    if (sn != pendingIpSn_) return;
-    if (!mgr_) return;
-
+    if (!ipChangeWaiting_ || sn != pendingIpSn_ || !mgr_) return;
     DeviceInfo dev;
-    if (!mgr_->getDevice(sn, dev)) return;
-
-    const QString curIp = dev.ip.toString();
-    if (curIp == pendingIpNew_) {
-        finishIpChange(true, tr("设备 [%1] 的 IP 已成功修改为 %2。").arg(sn, curIp));
-    }
+    if (mgr_->getDevice(sn, dev) && dev.ip.toString() == pendingIpNew_)
+        finishIpChange(true, tr("设备 [%1] 的 IP 已成功修改为 %2。").arg(sn, pendingIpNew_));
 }
 
 void MainWindow::onIpChangeTimeout()
 {
-    if (!ipChangeWaiting_) return;
-    finishIpChange(false, tr("等待设备 [%1] 使用新 IP [%2] 上线超时，可能修改失败。\n请检查网络或设备状态后重试。")
-                              .arg(pendingIpSn_, pendingIpNew_));
+    finishIpChange(false, tr("等待设备 [%1] 使用新 IP [%2] 上线超时。").arg(pendingIpSn_, pendingIpNew_));
 }
 
 void MainWindow::finishIpChange(bool ok, const QString& msg)
 {
     ipChangeWaiting_ = false;
     if (ipChangeTimer_) ipChangeTimer_->stop();
-    if (ipWaitDlg_) ipWaitDlg_->hide();
+    if (uiCtrl_) {
+        uiCtrl_->notifyIpDone(msg, ok);
+        uiCtrl_->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + msg);
+    }
 
-    QMessageBox::information(this, ok ? tr("修改成功") : tr("修改超时"), msg);
-    updateCameraButtons();
+    // IP 修改成功后，更新选中 SN 并自动重连
+    if (ok && !pendingIpSn_.isEmpty()) {
+        curSelectedSn_ = pendingIpSn_;
+        // 延迟 1 秒等设备用新 IP 稳定后再拉流
+        QTimer::singleShot(1000, this, [this](){
+            openCameraForSelected(false);
+        });
+    }
 }
 
-// -------------------- info panel --------------------
-void MainWindow::updateDeviceInfoPanel(const DeviceInfo* dev, bool /*online*/)
+// ── bindUiController ─────────────────────────────────────────────────────────
+void MainWindow::bindUiController(UiController* ctrl)
 {
-    if (!ui) return;
+    if (!ctrl) return;
+    uiCtrl_ = ctrl;
 
-    if (ui->lblHostIp) {
-        ui->lblHostIp->setText("当前主机IP：" + (curBindIp_.isEmpty() ? tr("--") : curBindIp_));
-    }
+    connect(ctrl, &UiController::requestOpenCamera, this, [this, ctrl](){
+        ctrl->setConnecting(true);
+        ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + "正在连接相机...");
+        on_action_openCamera_triggered();
+    });
+    connect(ctrl, &UiController::requestCloseCamera, this, [this, ctrl](){
+        ctrl->setConnecting(false);
+        ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + "断开相机连接");
+        on_action_closeCamera_triggered();
+    });
+    connect(ctrl, &UiController::requestStartRecord,   this, &MainWindow::on_action_startRecord_triggered);
+    connect(ctrl, &UiController::requestStopRecord,    this, &MainWindow::on_action_stopRecord_triggered);
+    connect(ctrl, &UiController::requestSnapshot,      this, &MainWindow::on_action_grap_triggered);
+    connect(ctrl, &UiController::requestRefreshDevices, this, [this](){ if (mgr_) mgr_->start(7777, 8888); });
+    connect(ctrl, &UiController::requestSelectDevice,  this, [this](const QString& sn){
+        curSelectedSn_ = sn;
+        offlinePopupShown_.remove(sn);
+    });
+    connect(ctrl, &UiController::requestOpenFolder, this, [this](){
+        QDesktopServices::openUrl(QUrl::fromLocalFile("D:/SP_camera_record"));
+    });
 
-    if (!dev) {
-        if (ui->lblCamIp) ui->lblCamIp->setText("当前相机IP：--");
-        if (ui->lblCamLastSeen) ui->lblCamLastSeen->setText("该相机本次上线时间：--");
-        return;
-    }
+    connect(myVideoRecorder, &VideoRecorder::recordingStarted, ctrl, [ctrl](const QString& path){
+        ctrl->setRecording(true);
+        ctrl->setRecordFileName(QFileInfo(path).fileName());
+        ctrl->setRecordSegmentIndex(ctrl->recordSegmentIndex() + 1);
+        ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + "开始录像：" + QFileInfo(path).fileName());
+    });
+    connect(myVideoRecorder, &VideoRecorder::recordingStopped, ctrl, [ctrl](const QString& path){
+        ctrl->setRecording(false);
+        ctrl->setRecordSegmentIndex(0);
+        ctrl->setRecordSegmentElapsed("00:00");
+        ctrl->setRecordTotalElapsed("00:00");
+        ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + "录像已保存：" + QFileInfo(path).fileName());
+    });
+    connect(myVideoRecorder, &VideoRecorder::sendMSG2ui, ctrl, [ctrl](const QString& msg){
+        ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + msg);
+    });
 
-    if (ui->lblCamIp) ui->lblCamIp->setText("当前相机IP：" + dev->ip.toString());
-
-    if (ui->lblCamLastSeen) {
-        QString sn = dev->sn;
-        if (sn.isEmpty()) sn = curSelectedSn_;
-
-        QString tsText = "该相机本次上线时间：--";
-        if (!sn.isEmpty()) {
-            const qint64 t0 = camOnlineSinceMs_.value(sn, 0);
-            if (t0 > 0) {
-                const QDateTime dt = QDateTime::fromMSecsSinceEpoch(t0);
-                tsText = "该相机本次上线时间：" + dt.toString("yyyy-MM-dd HH:mm:ss");
-            }
+    connect(devAliveTimer_, &QTimer::timeout, ctrl, [this, ctrl](){
+        DeviceInfo dev;
+        const bool online = !curSelectedSn_.isEmpty() && isControlOnline(curSelectedSn_, &dev);
+        ctrl->setDeviceOnline(online);
+        ctrl->setRtspConnected(viewer_ != nullptr && lastFrameMs_ > 0
+                               && (QDateTime::currentMSecsSinceEpoch() - lastFrameMs_) <= 1200);
+        ctrl->setDeviceName(online ? dev.sn : (curSelectedSn_.isEmpty() ? "未连接" : curSelectedSn_));
+        if (online) ctrl->setDeviceIp(dev.ip.toString());
+        if (mgr_) ctrl->setDeviceList(mgr_->allSns());
+        ctrl->setSelectedSn(curSelectedSn_);
+        ctrl->setCurrentFps(lastFps_);
+        // 收到第一帧后清除 connecting 状态
+        if (ctrl->connecting() && lastFrameMs_ > 0
+            && (QDateTime::currentMSecsSinceEpoch() - lastFrameMs_) <= 1200) {
+            ctrl->setConnecting(false);
+            ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + "相机连接成功，视频流已建立");
         }
-        ui->lblCamLastSeen->setText(tsText);
-    }
+    });
 }
 
-void MainWindow::clearDeviceInfoPanel()
-{
-    updateDeviceInfoPanel(nullptr, false);
-}
-
-// -------------------- shutdown --------------------
+// ── 关闭 ─────────────────────────────────────────────────────────────────────
 void MainWindow::shutdownAllThreads()
 {
     if (previewPullTimer_) previewPullTimer_->stop();
     if (devAliveTimer_)    devAliveTimer_->stop();
     if (ipChangeTimer_)    ipChangeTimer_->stop();
-    if (recBlinkTimer_)    recBlinkTimer_->stop();
 
     if (viewer_) {
-        RtspViewerQt* v = viewer_;
-        viewer_ = nullptr;
-
-        v->stop();
-        v->quit();
-        v->wait(2000);
-        v->deleteLater();
+        RtspViewerQt* v = viewer_; viewer_ = nullptr;
+        v->stop(); v->quit(); v->wait(2000); v->deleteLater();
     }
-
     if (recThread_) {
         if (isRecording_ && myVideoRecorder) {
-            QProgressDialog dlg(tr("正在保存录像，请勿操作..."), QString(), 0, 0, this);
+            QProgressDialog dlg(tr("正在保存录像..."), QString(), 0, 0, this);
             dlg.setWindowModality(Qt::WindowModal);
-            dlg.setCancelButton(nullptr);
-            dlg.show();
+            dlg.setCancelButton(nullptr); dlg.show();
             QApplication::processEvents();
             QMetaObject::invokeMethod(myVideoRecorder, "stopRecording", Qt::BlockingQueuedConnection);
         }
-        recThread_->quit();
-        recThread_->wait(5000);
-        recThread_ = nullptr;
+        recThread_->quit(); recThread_->wait(5000); recThread_ = nullptr;
     }
-
-    g_dropUntilMs.remove(this);
-    g_previewLoopOn.remove(this);
-    g_noFrameStreak.remove(this);
-    g_lastNewFrameMs.remove(this);
-    g_streamStartMs.remove(this);
+    g_dropUntilMs.remove(this); g_previewLoopOn.remove(this);
+    g_noFrameStreak.remove(this); g_lastNewFrameMs.remove(this);
+    g_streamStartMs.remove(this); g_viewerStartMs.remove(this);
     offlinePopupShown_.clear();
-
 }
-
-void MainWindow::on_brightSlider_valueChanged(int value)
-{
-   emit sendCameraExporeGain(Localsn, 0, (double)value);
-}
-

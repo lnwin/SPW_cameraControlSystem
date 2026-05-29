@@ -1,146 +1,137 @@
 #include <QApplication>
-#include <QPalette>
-#include <QColor>
 #include <QDir>
 #include <QFileInfo>
-#include <QDebug>
+#include <QFont>
+#include <QIcon>
+#include <QImage>
+#include <QUrl>
 
 #include "mainwindow.h"
+#include "hudwindow.h"
+#include "uicontroller.h"
+#include "settingscontroller.h"
+#include "videorecorder.h"
+#include "udpserver.h"
+#include "myStruct.h"
+#include <QQuickItem>
+#include <QQuickWidget>
+#include <QQmlContext>
 
-// ---------------- theme ----------------
-static void applySimpleDarkBlueTheme(QApplication &app)
-{
-    QPalette pal = app.palette();
-
-    pal.setColor(QPalette::Window,      QColor("#0b1120"));
-    pal.setColor(QPalette::Base,        QColor("#020617"));
-    pal.setColor(QPalette::AlternateBase, QColor("#020617"));
-
-    pal.setColor(QPalette::WindowText,  Qt::white);
-    pal.setColor(QPalette::Text,        Qt::white);
-    pal.setColor(QPalette::ButtonText,  Qt::white);
-
-    pal.setColor(QPalette::Button,      QColor("#111827"));
-    pal.setColor(QPalette::Highlight,   QColor("#2563eb"));
-    pal.setColor(QPalette::HighlightedText, Qt::white);
-
-    app.setPalette(pal);
-
-    const char *qss = R"(
-        QComboBox QAbstractItemView {
-            color: #000000;
-            background-color: #ffffff;
-        }
-        QComboBox {
-            color: #000000;
-            background-color: #ffffff;
-        }
-        QComboBox QAbstractItemView::item:selected {
-            background-color: #d1d5db;
-            color: #000000;
-        }
-        QGroupBox::title {
-            subcontrol-origin: margin;
-            left: 10px;
-            padding: 2px 4px;
-            color: #ffffff;
-            font-weight: bold;
-        }
-        QHeaderView::section {
-            background-color: #1a2335;
-            color: #ffffff;
-            padding: 4px;
-            border: none;
-        }
-        QTableCornerButton::section {
-            background-color: #1a2335;
-            border: none;
-        }
-        QDialog, QMessageBox {
-            background-color: #0b1120;
-            color: #ffffff;
-        }
-        QPushButton {
-            background-color: #111827;
-            color: #ffffff;
-            border-radius: 4px;
-            padding: 4px 10px;
-        }
-        QPushButton:hover { background-color: #1f2937; }
-        QPushButton:pressed { background-color: #020617; }
-    )";
-    app.setStyleSheet(qss);
-}
-
-// ---------------- gstreamer env ----------------
 static void setupGStreamerRuntime(const char* argv0)
 {
 #ifdef Q_OS_WIN
-    // 不依赖 QApplication/QCoreApplication，避免 “Please instantiate QApplication first”
-    const QString appDir = QFileInfo(QString::fromLocal8Bit(argv0)).absolutePath();
-
-    // 你打包的相对目录：appDir/gstreamer/...
+    const QString appDir  = QFileInfo(QString::fromLocal8Bit(argv0)).absolutePath();
     const QString gstRoot = QDir(appDir).filePath("gstreamer");
+    const QString gstBin  = QDir(gstRoot).filePath("bin");
+    const QString gstPlug = QDir(gstRoot).filePath("lib/gstreamer-1.0");
 
-    const QString gstBin   = QDir(gstRoot).filePath("bin");
-    const QString gstLib   = QDir(gstRoot).filePath("lib");
-    const QString gstPlug  = QDir(gstLib).filePath("gstreamer-1.0");
-    const QString gstShare = QDir(gstRoot).filePath("share");
-    const QString glibSchemas = QDir(gstShare).filePath("glib-2.0/schemas");
-
-    // 1) PATH：让 Windows 找到 gstreamer 的 dll
     QString path = qEnvironmentVariable("PATH");
-    if (!path.startsWith(gstBin + ";"))
-        path = gstBin + ";" + path;
+    if (!path.startsWith(gstBin + ";")) path = gstBin + ";" + path;
     qputenv("PATH", path.toLocal8Bit());
-
-    // 2) 插件路径（关键）
-    qputenv("GST_PLUGIN_PATH", gstPlug.toLocal8Bit());
+    qputenv("GST_PLUGIN_PATH",        gstPlug.toLocal8Bit());
     qputenv("GST_PLUGIN_SYSTEM_PATH", gstPlug.toLocal8Bit());
-
-    // 3) glib schema（可选但推荐）
-    qputenv("GSETTINGS_SCHEMA_DIR", glibSchemas.toLocal8Bit());
-
-    // 4) 调试时可打开：看插件扫描到底去哪了
-    // qputenv("GST_DEBUG", "2");
-
-    // 5) 基础存在性检查（强烈建议保留一段时间）
-    if (!QDir(gstBin).exists())
-        qWarning().noquote() << "[GST-ENV] missing:" << gstBin;
-    if (!QDir(gstPlug).exists())
-        qWarning().noquote() << "[GST-ENV] missing:" << gstPlug;
-    if (!QFileInfo(QDir(glibSchemas).filePath("gschemas.compiled")).exists())
-        qWarning().noquote() << "[GST-ENV] missing: gschemas.compiled under" << glibSchemas;
-
-    qInfo().noquote() << "[GST-ENV] appDir =" << appDir;
-    qInfo().noquote() << "[GST-ENV] gstBin =" << gstBin;
-    qInfo().noquote() << "[GST-ENV] gstPlug=" << gstPlug;
+    qputenv("GSETTINGS_SCHEMA_DIR",
+            QDir(gstRoot).filePath("share/glib-2.0/schemas").toLocal8Bit());
 #endif
 }
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
-    // === High DPI 支持（必须在 QApplication 之前）===
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QCoreApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
-
 #if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
     QGuiApplication::setHighDpiScaleFactorRoundingPolicy(
         Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
 #endif
+
     setupGStreamerRuntime(argv[0]);
-    QFont f;
-    f.setFamily("Microsoft YaHei UI");  // 或 "Microsoft YaHei"
-    f.setPointSize(9);                  // 不要太大
 
     QApplication a(argc, argv);
+    QFont f; f.setFamily("Microsoft YaHei UI"); f.setPointSize(9);
+    a.setFont(f);
+
+    // 系统弹窗（QMessageBox / QInputDialog）保持可读
+    a.setStyleSheet("QDialog, QMessageBox { background:#0b1120; color:#ffffff; }"
+                    "QMessageBox QLabel { color:#ffffff; }"
+                    "QPushButton { background:#111827; color:#ffffff; border-radius:3px; padding:4px 10px; }"
+                    "QPushButton:hover { background:#1f2937; }"
+                    "QLineEdit { color:#000000; background:#ffffff; }");
 
     qRegisterMetaType<myRecordOptions>("myRecordOptions");
 
-    applySimpleDarkBlueTheme(a);
-
     MainWindow w;
-    w.show();
+    UiController uiCtrl;
+    w.bindUiController(&uiCtrl);
+
+    HudWindow hud(&uiCtrl, {});
+    hud.setWindowIcon(QIcon(":/new/prefix1/release/icons/current/Slogo.png"));
+    hud.show();
+
+    QObject::connect(&uiCtrl, &UiController::requestWinMinimize, &hud, &QWidget::showMinimized);
+    QObject::connect(&uiCtrl, &UiController::requestWinMaximize, &hud, [&hud](){
+        hud.isMaximized() ? hud.showNormal() : hud.showMaximized();
+    });
+    QObject::connect(&uiCtrl, &UiController::requestWinClose, &hud, &QWidget::close);
+    QObject::connect(&uiCtrl, &UiController::requestWinDrag, &hud, [&hud](int dx, int dy){
+        if (!hud.isMaximized()) hud.move(hud.x() + dx, hud.y() + dy);
+    });
+
+    if (w.videoView()) hud.embedVideoWidget(w.videoView());
+
+    // 系统设置窗口
+    SettingsController settingsCtrl;
+    QQuickWidget settingsWin;
+    settingsWin.setWindowFlags(Qt::FramelessWindowHint | Qt::Window | Qt::Tool);
+    settingsWin.rootContext()->setContextProperty("settingsCtrl", &settingsCtrl);
+    settingsWin.setSource(QUrl("qrc:/qml/Settings.qml"));
+    settingsWin.setResizeMode(QQuickWidget::SizeRootObjectToView);
+    settingsWin.resize(480, 360);
+
+    QObject::connect(&settingsCtrl, &SettingsController::requestDrag, &settingsWin,
+                     [&settingsWin](int dx, int dy){ settingsWin.move(settingsWin.x()+dx, settingsWin.y()+dy); });
+    QObject::connect(&settingsCtrl, &SettingsController::requestClose, &settingsWin, &QWidget::hide);
+    QObject::connect(&settingsCtrl, &SettingsController::settingsSaved,
+                     w.myVideoRecorderPublic(), &VideoRecorder::receiveRecordOptions);
+    // 路径变化时同步给 UiController
+    auto syncPaths = [&](){
+        uiCtrl.setScreenshotPath(settingsCtrl.capturePath());
+        uiCtrl.setRecordSavePath(settingsCtrl.recordPath());
+    };
+    QObject::connect(&settingsCtrl, &SettingsController::settingsSaved, &uiCtrl, [&](const myRecordOptions&){ syncPaths(); });
+    syncPaths(); // 启动时初始化
+    QObject::connect(&uiCtrl, &UiController::requestOpenSettings, &settingsWin, [&settingsWin, &settingsCtrl](){
+        settingsCtrl.load(); settingsWin.show(); settingsWin.raise();
+    });
+
+    // 修改 IP 弹窗（QML 风格）
+    QQuickWidget ipWin;
+    ipWin.setWindowFlags(Qt::FramelessWindowHint | Qt::Window | Qt::Tool);
+    ipWin.setSource(QUrl("qrc:/qml/ChangeIpDialog.qml"));
+    ipWin.setResizeMode(QQuickWidget::SizeRootObjectToView);
+    ipWin.resize(400, 190);
+
+    // 连接弹窗信号（setSource 完成后 root 已存在）
+    {
+        QObject* root = qobject_cast<QObject*>(ipWin.rootObject());
+        if (root) {
+            QObject::connect(root, SIGNAL(confirmed(QString,QString)), &w,    SLOT(changeIp(QString,QString)));
+            QObject::connect(root, SIGNAL(cancelled()),                &ipWin, SLOT(hide()));
+            QObject::connect(root, SIGNAL(confirmed(QString,QString)), &ipWin, SLOT(hide()));
+        }
+    }
+
+    QObject::connect(&uiCtrl, &UiController::requestChangeIp, &ipWin, [&ipWin, &w](const QString& sn){
+        QString curIp = "192.168.0.100";
+        if (auto* mgr = w.deviceManager()) {
+            DeviceInfo dev;
+            if (mgr->getDevice(sn, dev)) curIp = dev.ip.toString();
+        }
+        if (auto* root = ipWin.rootObject()) {
+            root->setProperty("sn", sn);
+            root->setProperty("currentIp", curIp);
+        }
+        ipWin.show(); ipWin.raise();
+    });
 
     return a.exec();
 }

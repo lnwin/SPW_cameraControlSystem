@@ -1,4 +1,4 @@
-QT += core gui widgets network
+QT += core gui widgets network qml quick quickwidgets
 CONFIG += c++17
 QMAKE_CFLAGS += -utf-8
 QMAKE_CXXFLAGS += -utf-8
@@ -7,7 +7,6 @@ win32 {
     RC_ICONS = $$PWD/YS-camera-logo.ico
 }
 
-# ===================== Sources =====================
 SOURCES += \
     main.cpp \
     mainwindow.cpp \
@@ -15,8 +14,9 @@ SOURCES += \
     udpserver.cpp \
     videorecorder.cpp \
     restipclient.cpp \
-    systemsetting.cpp \
-    titlebar.cpp
+    uicontroller.cpp \
+    hudwindow.cpp \
+    settingscontroller.cpp
 
 HEADERS += \
     mainwindow.h \
@@ -24,17 +24,15 @@ HEADERS += \
     udpserver.h \
     videorecorder.h \
     restipclient.h \
-    systemsetting.h \
-    titlebar.h \
     myStruct.h \
-    ZoomPanImageView.h
+    ZoomPanImageView.h \
+    uicontroller.h \
+    hudwindow.h \
+    settingscontroller.h
 
-FORMS += \
-    mainwindow.ui \
-    systemsetting.ui \
-    titlebar.ui
+FORMS += mainwindow.ui
 
-RESOURCES += icons.qrc
+RESOURCES += icons.qrc qml.qrc
 
 # ===================== System =====================
 LIBS += -lIphlpapi -lWs2_32
@@ -42,26 +40,22 @@ DEFINES += _WIN32_WINNT=0x0601 WIN32_LEAN_AND_MEAN NOMINMAX
 
 # ===================== OpenCV =====================
 OPENCV_ROOT = E:/ThirdParty/opencv-4.7.0-NoCudda/opencv
-
 INCLUDEPATH += $$OPENCV_ROOT/build/include
 LIBS += -L$$OPENCV_ROOT/build/x64/vc16/lib -lopencv_world470
 
 # ===================== FFmpeg =====================
 FFMPEG_ROOT = E:/ThirdParty/ffmpeg-8.0-full_build-shared
-
 INCLUDEPATH += $$FFMPEG_ROOT/include
 LIBS += -L$$FFMPEG_ROOT/lib \
     -lavcodec -lavdevice -lavfilter -lavformat -lavutil -lswresample -lswscale
 
 # ===================== GStreamer (MSVC x86_64) =====================
 GST_ROOT = E:/ThirdParty/Gstreamer/1.0/msvc_x86_64
-
 INCLUDEPATH += \
     $$GST_ROOT/include \
     $$GST_ROOT/include/gstreamer-1.0 \
     $$GST_ROOT/include/glib-2.0 \
     $$GST_ROOT/lib/glib-2.0/include
-
 LIBS += \
     "$$GST_ROOT/lib/gstreamer-1.0.lib" \
     "$$GST_ROOT/lib/gstapp-1.0.lib" \

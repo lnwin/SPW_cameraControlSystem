@@ -1,5 +1,3 @@
-// mainwindow.h  (FULL REPLACEABLE)
-
 #pragma once
 
 #include <QMainWindow>
@@ -9,14 +7,12 @@
 #include <QSharedPointer>
 #include <QHash>
 #include <QDateTime>
-#include <QIcon>
 
-#include "udpserver.h"        // UdpDeviceManager / DeviceInfo
-#include "rtspviewerqt.h"     // RtspViewerQt
-#include "zoompanimageview.h" // ZoomPanImageView (你已有)
-#include "systemsetting.h"
+#include "udpserver.h"
+#include "rtspviewerqt.h"
+#include "ZoomPanImageView.h"
 #include "videorecorder.h"
-#include <QString>
+#include "uicontroller.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -28,7 +24,15 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
-    QString Localsn;
+
+    void bindUiController(UiController* ctrl);
+    ZoomPanImageView* videoView()             const { return view_; }
+    VideoRecorder*    myVideoRecorderPublic() const { return myVideoRecorder; }
+    UdpDeviceManager* deviceManager()         const { return mgr_; }
+
+public slots:
+    void changeIp(const QString& sn, const QString& newIp);
+
 protected:
     void closeEvent(QCloseEvent* event) override;
     bool eventFilter(QObject* obj, QEvent* event) override;
@@ -36,113 +40,60 @@ protected:
 signals:
     void sendFrame2Record(QSharedPointer<QImage> img);
     void sendFrame2Capture(QSharedPointer<QImage> img);
-
     void startRecord();
     void stopRecord();
     qint64 sendCameraExporeGain(const QString& sn, int exposureUs, double gainDb);
 
 private slots:
     void onCheckDeviceAlive();
-    void onTableSelectionChanged();
-
     void on_action_openCamera_triggered();
     void on_action_closeCamera_triggered();
     void on_action_grap_triggered();
     void on_action_startRecord_triggered();
     void on_action_stopRecord_triggered();
-    void on_action_triggered();
-
     void onSnUpdatedForIpChange(const QString& sn);
     void onIpChangeTimeout();
 
-    void on_brightSlider_valueChanged(int value);
-
 private:
-    // ===== 你原来已有的功能函数（这里只列出本文会用到的）=====
-    void titleForm();
     void startPreviewPullTimer();
     void stopPreviewPullTimer();
-
-    void updateSystemIP();
-    void upsertCameraSN(const QString& sn);
-    void updateTableDevice(const QString& sn);
-
-    void updateCameraButtons();
-    void updateDeviceInfoPanel(const DeviceInfo* dev, bool online);
-    void clearDeviceInfoPanel();
-
-    void changeCameraIpForSn(const QString& sn);
-    void finishIpChange(bool ok, const QString& msg);
-
     void doStopViewer();
     void shutdownAllThreads();
-
-    // ===== 新增：视频健康状态机（关键）=====
     bool openCameraForSelected(bool showMsgBox);
-
     bool isControlOnline(const QString& sn, DeviceInfo* outDev = nullptr) const;
+    void finishIpChange(bool ok, const QString& msg);
 
 private:
     Ui::MainWindow* ui = nullptr;
-
-    // view
     ZoomPanImageView* view_ = nullptr;
-
-    // UDP device manager
     UdpDeviceManager* mgr_ = nullptr;
-
-    // viewer
     RtspViewerQt* viewer_ = nullptr;
 
-    // timers
     QTimer* devAliveTimer_ = nullptr;
     QTimer* previewPullTimer_ = nullptr;
     QTimer* ipChangeTimer_ = nullptr;
 
-    // recorder
-    systemsetting* mysystemsetting = nullptr;
     VideoRecorder* myVideoRecorder = nullptr;
     QThread* recThread_ = nullptr;
-
-    // record indicator
-    QLabel* recIndicator_ = nullptr;
-    QTimer*  recBlinkTimer_ = nullptr;
-    bool     isRecording_ = false;
-    bool     iscapturing_ = false;
-
-    // selection
-    QString curSelectedSn_;
-    bool previewActive_ = false;
-
-    // ip change
-    bool ipChangeWaiting_ = false;
-    QString pendingIpSn_;
-    QString pendingIpNew_;
-    QProgressDialog* ipWaitDlg_  = nullptr;
     QProgressDialog* recSaveDlg_ = nullptr;
 
-    // online tracking
-    QHash<QString, qint64> camOnlineSinceMs_;
-    QHash<QString, int> offlineStrikes_;
+    bool    isRecording_ = false;
+    bool    iscapturing_ = false;
+    qint64  lastFrameMs_ = 0;
 
-    // ===== 新增：视频健康 tracking =====
-    qint64 lastFrameMs_ = 0;                    // 最近一帧（UI真正显示出来）的时间
-    QHash<QString, int> streamStrikes_;         // 连续“视频无帧”计数（按 SN）
-    QHash<QString, qint64> streamDownSinceMs_;  // 视频断流开始时间（按 SN）
-
-    // icons
-    QIcon iconOnline_;
-    QIcon iconOffline_;
-
-
-    // network
-    QString curBindIp_;
-    // 断网弹窗门禁：同一 SN 的一次断网只弹一次；恢复在线后清零
-    QHash<QString, bool> offlinePopupShown_;
-
-    // overlay
-    bool    overlayEnabled_ = false;
+    QString curSelectedSn_;
     QString overlayTopText_;
+    bool    overlayEnabled_ = false;
 
-    // === 你原有其它字段（ColorTune 参数、pathStates_、meanStride_ 等）请保留并放回这里 ===
+    bool    ipChangeWaiting_ = false;
+    QString pendingIpSn_;
+    QString pendingIpNew_;
+
+    QHash<QString, bool>   offlinePopupShown_;
+    QHash<QString, qint64> camOnlineSinceMs_;
+    UiController* uiCtrl_ = nullptr;
+
+    int    fpsFrameCount_  = 0;
+    qint64 fpsWindowStart_ = 0;
+    int    lastFps_        = 0;
 };

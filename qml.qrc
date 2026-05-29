@@ -1,0 +1,16 @@
+<RCC>
+    <qresource prefix="/">
+        <file>qml/Main.qml</file>
+        <file>qml/HudPanel.qml</file>
+        <file>qml/HudButton.qml</file>
+        <file>qml/SideNavButton.qml</file>
+        <file>qml/StatusItem.qml</file>
+        <file>qml/TopStatusBar.qml</file>
+        <file>qml/RecordStatusPanel.qml</file>
+        <file>qml/TopToolBar.qml</file>
+        <file>qml/DevicePanel.qml</file>
+        <file>qml/Settings.qml</file>
+        <file>qml/PathStatusItem.qml</file>
+        <file>qml/ChangeIpDialog.qml</file>
+    </qresource>
+</RCC>
