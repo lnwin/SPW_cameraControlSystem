@@ -438,6 +438,9 @@ void MainWindow::bindUiController(UiController* ctrl)
     connect(ctrl, &UiController::requestOpenFolder, this, [this](){
         QDesktopServices::openUrl(QUrl::fromLocalFile("D:/SP_camera_record"));
     });
+    connect(ctrl, &UiController::brightnessChanged, this, [this, ctrl](){
+        emit sendCameraExporeGain(curSelectedSn_, 0, ctrl->brightness());
+    });
 
     connect(myVideoRecorder, &VideoRecorder::recordingStarted, ctrl, [ctrl](const QString& path){
         ctrl->setRecording(true);
