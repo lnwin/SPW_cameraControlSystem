@@ -25,7 +25,7 @@ void systemsetting::loadSettings()
     ui->recordPath->setText(cfg().value("paths/recordPath", "D:/SP_camera_record").toString());
     ui->comboBox_captureType->setCurrentIndex(cfg().value("format/captureType", 0).toInt());
     ui->comboBox_recordType->setCurrentIndex(cfg().value("format/recordType", 0).toInt());
-    ui->checkBox_overlayEnabled->setChecked(cfg().value("overlay/enabled", false).toBool());
+    ui->checkBox_overlayEnabled->setChecked(cfg().value("overlay/enabled", true).toBool());
 }
 
 QString systemsetting::loadTopText()

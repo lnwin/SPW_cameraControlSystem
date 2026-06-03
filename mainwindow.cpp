@@ -88,8 +88,8 @@ MainWindow::MainWindow(QWidget* parent)
     // 恢复 overlay 设置
     {
         QSettings s("SPwater", "CameraControl");
-        overlayEnabled_ = s.value("overlay/enabled", false).toBool();
-        overlayTopText_ = tr("双击改动文字信息");
+        overlayEnabled_ = s.value("overlay/enabled", true).toBool();
+        overlayTopText_ = s.value("overlay/topText", tr("双击改动文字信息")).toString();
     }
 
     connect(this, &MainWindow::sendFrame2Capture, myVideoRecorder, &VideoRecorder::receiveFrame2Save);
@@ -185,6 +185,11 @@ MainWindow::MainWindow(QWidget* parent)
 MainWindow::~MainWindow() { shutdownAllThreads(); delete ui; }
 
 void MainWindow::closeEvent(QCloseEvent* e) { shutdownAllThreads(); e->accept(); }
+
+void MainWindow::applyRecordOptions(const myRecordOptions& opt)
+{
+    overlayEnabled_ = opt.overlayEnabled;
+}
 
 bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 {

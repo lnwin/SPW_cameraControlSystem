@@ -92,6 +92,8 @@ int main(int argc, char* argv[])
     QObject::connect(&settingsCtrl, &SettingsController::requestClose, &settingsWin, &QWidget::hide);
     QObject::connect(&settingsCtrl, &SettingsController::settingsSaved,
                      w.myVideoRecorderPublic(), &VideoRecorder::receiveRecordOptions);
+    QObject::connect(&settingsCtrl, &SettingsController::settingsSaved,
+                     &w, &MainWindow::applyRecordOptions);
     // 路径变化时同步给 UiController
     auto syncPaths = [&](){
         uiCtrl.setScreenshotPath(settingsCtrl.capturePath());

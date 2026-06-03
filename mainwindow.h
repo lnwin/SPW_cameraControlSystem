@@ -13,6 +13,7 @@
 #include "ZoomPanImageView.h"
 #include "videorecorder.h"
 #include "uicontroller.h"
+#include "myStruct.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -32,6 +33,7 @@ public:
 
 public slots:
     void changeIp(const QString& sn, const QString& newIp);
+    void applyRecordOptions(const myRecordOptions& opt);
 
 protected:
     void closeEvent(QCloseEvent* event) override;

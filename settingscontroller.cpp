@@ -22,7 +22,7 @@ void SettingsController::load()
     setRecordPath(stripDateSuffix(s.value("paths/recordPath",   "D:/SP_camera_record").toString()));
     setCaptureType(s.value("format/captureType", 0).toInt());
     setRecordType(s.value("format/recordType",   0).toInt());
-    setOverlayEnabled(s.value("overlay/enabled", false).toBool());
+    setOverlayEnabled(s.value("overlay/enabled", true).toBool());
 }
 
 void SettingsController::save()
