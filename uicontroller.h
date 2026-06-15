@@ -35,6 +35,7 @@ class UiController : public QObject
     // 连接中状态（防重复点击）
     Q_PROPERTY(bool     connecting         READ connecting         NOTIFY connectingChanged)
     Q_PROPERTY(int      brightness         READ brightness         WRITE setBrightness NOTIFY brightnessChanged)
+    Q_PROPERTY(bool     crosshairEnabled   READ crosshairEnabled   NOTIFY crosshairEnabledChanged)
 
 public:
     explicit UiController(QObject* parent = nullptr);
@@ -62,6 +63,7 @@ public:
     bool        toastSuccess()         const { return toastSuccess_; }
     bool        connecting()           const { return connecting_; }
     int         brightness()           const { return brightness_; }
+    bool        crosshairEnabled()     const { return crosshairEnabled_; }
 
 public slots:
     void setDeviceName(const QString& v)    { if (deviceName_ == v) return; deviceName_ = v; emit deviceNameChanged(); }
@@ -81,6 +83,8 @@ public slots:
     void setSelectedSn(const QString& v)   { if (selectedSn_ == v) return; selectedSn_ = v; emit selectedSnChanged(); }
     void setConnecting(bool v)             { if (connecting_ == v) return; connecting_ = v; emit connectingChanged(); }
     void setBrightness(int v)              { v = qBound(0,v,15); if (brightness_ == v) return; brightness_ = v; emit brightnessChanged(); }
+
+    Q_INVOKABLE void cmdToggleCrosshair() { crosshairEnabled_ = !crosshairEnabled_; emit crosshairEnabledChanged(); emit requestToggleCrosshair(crosshairEnabled_); }
 
     void notifyIpWaiting(const QString& msg) {
         ipWaiting_ = true; ipWaitingMsg_ = msg; emit ipWaitingChanged();
@@ -128,6 +132,7 @@ signals:
     void toastChanged();
     void connectingChanged();
     void brightnessChanged();
+    void crosshairEnabledChanged();
     void logAppended(const QString& msg);
 
     void requestOpenCamera();
@@ -140,6 +145,7 @@ signals:
     void requestChangeIp(const QString& sn);
     void requestOpenFolder();
     void requestOpenSettings();
+    void requestToggleCrosshair(bool en);
     void requestWinMinimize();
     void requestWinMaximize();
     void requestWinClose();
@@ -173,4 +179,5 @@ private:
     QTimer      toastTimer_;
     bool        connecting_          = false;
     int         brightness_          = 15;
+    bool        crosshairEnabled_    = false;
 };

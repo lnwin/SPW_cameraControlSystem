@@ -87,6 +87,14 @@ Rectangle {
             }
         }
 
+        // 切换按钮：十字准线
+        ToolBtn {
+            tip:         (uiCtrl && uiCtrl.crosshairEnabled) ? "关闭准线" : "显示准线"
+            cmd:         "crosshair"
+            active:      uiCtrl && uiCtrl.crosshairEnabled
+            activeColor: "#00ff99"
+        }
+
         Rectangle { width: 1; height: 24; color: "#00cc88"; opacity: 0.4 }
 
         // REC 指示
@@ -191,6 +199,10 @@ Rectangle {
                     ctx.moveTo(1,5); ctx.lineTo(1,14); ctx.lineTo(15,14)
                     ctx.lineTo(15,6); ctx.lineTo(7,6); ctx.lineTo(5,4)
                     ctx.lineTo(1,4); ctx.closePath(); ctx.stroke()
+                } else if (c === "crosshair") {
+                    ctx.beginPath(); ctx.moveTo(8,1); ctx.lineTo(8,15); ctx.stroke()
+                    ctx.beginPath(); ctx.moveTo(1,8); ctx.lineTo(15,8); ctx.stroke()
+                    ctx.beginPath(); ctx.arc(8,8,2.5,0,Math.PI*2); ctx.fill()
                 }
             }
         }
@@ -216,8 +228,9 @@ Rectangle {
                 else if (cmd === "recStop")  uiCtrl.cmdStopRecord()
                 else if (cmd === "snapshot") uiCtrl.cmdSnapshot()
                 else if (cmd === "refresh")  uiCtrl.cmdRefreshDevices()
-                else if (cmd === "folder")   uiCtrl.cmdOpenFolder()
-                else if (cmd === "settings") uiCtrl.cmdOpenSettings()
+                else if (cmd === "folder")     uiCtrl.cmdOpenFolder()
+                else if (cmd === "settings")   uiCtrl.cmdOpenSettings()
+                else if (cmd === "crosshair")  uiCtrl.cmdToggleCrosshair()
             }
         }
     }

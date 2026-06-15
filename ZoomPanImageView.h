@@ -27,6 +27,7 @@ public:
 
     // 显示裁剪（仅影响显示，不影响录像）
     void setDisplayCrop(int left, int right) { cropLeft_ = left; cropRight_ = right; updateGeometry(); update(); }
+    void setCrosshairEnabled(bool en) { crosshairEnabled_ = en; update(); }
 
     void setImage(const QImage& img)
     {
@@ -80,6 +81,16 @@ protected:
         const QPointF topLeft = baseTopLeft + pan_;
         const QRectF srcRect(cropLeft_, 0, cropW, img_.height());
         p.drawImage(QRectF(topLeft, drawSize), img_, srcRect);
+
+        // 十字准线 — 仅在屏幕绘制，不影响录像/截图数据
+        if (crosshairEnabled_) {
+            const QPointF c(vw.width() * 0.5, vw.height() * 0.5);
+            const double arm = 18.0;
+            p.setPen(QPen(QColor(0, 255, 153, 210), 1.5));
+            p.drawLine(c + QPointF(-arm, 0), c + QPointF(arm, 0));
+            p.drawLine(c + QPointF(0, -arm), c + QPointF(0, arm));
+            p.drawEllipse(c, 3.0, 3.0);
+        }
     }
 
     void wheelEvent(QWheelEvent* e) override
@@ -234,4 +245,5 @@ private:
 
     int     cropLeft_  = 0;
     int     cropRight_ = 0;
+    bool    crosshairEnabled_ = false;
 };

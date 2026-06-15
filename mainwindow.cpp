@@ -446,6 +446,9 @@ void MainWindow::bindUiController(UiController* ctrl)
     connect(ctrl, &UiController::brightnessChanged, this, [this, ctrl](){
         emit sendCameraExporeGain(curSelectedSn_, 0, ctrl->brightness());
     });
+    connect(ctrl, &UiController::requestToggleCrosshair, this, [this](bool en){
+        if (view_) view_->setCrosshairEnabled(en);
+    });
 
     connect(myVideoRecorder, &VideoRecorder::recordingStarted, ctrl, [ctrl](const QString& path){
         ctrl->setRecording(true);
