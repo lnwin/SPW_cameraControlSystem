@@ -14,7 +14,7 @@ Rectangle {
 
         Text {
             anchors.verticalCenter: parent.verticalCenter
-            text: "SPW 工业相机控制系统"
+            text: qsTr("SPW 工业相机控制系统")
             color: "#00ff99"
             font.pixelSize: 15
             font.bold: true
@@ -27,7 +27,7 @@ Rectangle {
             spacing: 24
 
             Text {
-                text: "设备：" + (uiCtrl ? uiCtrl.deviceName : "--")
+                text: qsTr("设备：") + (uiCtrl ? uiCtrl.deviceName : "--")
                 color: "#b0b0b0"
                 font.pixelSize: 12
                 font.family: "Microsoft YaHei UI"
@@ -46,7 +46,7 @@ Rectangle {
                     color: (uiCtrl && uiCtrl.rtspConnected) ? "#00ff99" : "#ff3040"
                 }
                 Text {
-                    text: (uiCtrl && uiCtrl.rtspConnected) ? "RTSP 已连接" : "RTSP 未连接"
+                    text: (uiCtrl && uiCtrl.rtspConnected) ? qsTr("RTSP 已连接") : qsTr("RTSP 未连接")
                     color: (uiCtrl && uiCtrl.rtspConnected) ? "#00ff99" : "#ff3040"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
@@ -67,7 +67,7 @@ Rectangle {
                     }
                 }
                 Text {
-                    text: "录像中"
+                    text: qsTr("录像中")
                     color: "#ff3040"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"

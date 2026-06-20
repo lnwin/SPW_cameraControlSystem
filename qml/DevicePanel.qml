@@ -7,9 +7,8 @@ HudPanel {
         anchors.margins: 10
         spacing: 6
 
-        // 标题
         Text {
-            text: "设备列表"
+            text: qsTr("设备列表")
             color: "#00cc88"
             font.pixelSize: 12
             font.bold: true
@@ -17,7 +16,6 @@ HudPanel {
         }
         Rectangle { Layout.fillWidth: true; height: 1; color: "#00cc88"; opacity: 0.4 }
 
-        // 设备列表
         Repeater {
             model: uiCtrl ? uiCtrl.deviceList : []
             delegate: Rectangle {
@@ -58,7 +56,7 @@ HudPanel {
         // 空列表提示
         Text {
             visible: !uiCtrl || uiCtrl.deviceList.length === 0
-            text: "未发现设备\n请检查网络连接"
+            text: qsTr("未发现设备") + "\n" + qsTr("请检查网络连接")
             color: "#808080"
             font.pixelSize: 11
             font.family: "Microsoft YaHei UI"
@@ -69,9 +67,8 @@ HudPanel {
 
         Rectangle { Layout.fillWidth: true; height: 1; color: "#00cc88"; opacity: 0.2 }
 
-        // 选中设备信息
         Text {
-            text: "设备信息"
+            text: qsTr("设备信息")
             color: "#00cc88"
             font.pixelSize: 12
             font.bold: true
@@ -79,34 +76,37 @@ HudPanel {
             visible: uiCtrl && uiCtrl.selectedSn !== ""
         }
 
-        StatusItem { label: "SN";   value: uiCtrl ? uiCtrl.selectedSn : ""; visible: uiCtrl && uiCtrl.selectedSn !== "" }
-        StatusItem { label: "IP";   value: uiCtrl ? uiCtrl.deviceIp : "--" }
+        StatusItem { label: "SN"; value: uiCtrl ? uiCtrl.selectedSn : ""; visible: uiCtrl && uiCtrl.selectedSn !== "" }
+        StatusItem { label: "IP"; value: uiCtrl ? uiCtrl.deviceIp : "--" }
 
-        // 状态行（离线时红色）
-        Row {
+        RowLayout {
+            Layout.fillWidth: true
             spacing: 8
-            Text { text: "状态"; width: 60; color: "#9aa0a6"; font.pixelSize: 12; font.family: "Microsoft YaHei UI" }
+            Text { text: qsTr("状态"); Layout.preferredWidth: 90; color: "#9aa0a6"; font.pixelSize: 12; font.family: "Microsoft YaHei UI"; elide: Text.ElideRight }
             Text {
-                text: (uiCtrl && uiCtrl.deviceOnline) ? "在线" : "离线"
+                Layout.fillWidth: true
+                text: (uiCtrl && uiCtrl.deviceOnline) ? qsTr("在线") : qsTr("离线")
                 color: (uiCtrl && uiCtrl.deviceOnline) ? "#00ff99" : "#ff3040"
                 font.pixelSize: 12; font.family: "Microsoft YaHei UI"
+                elide: Text.ElideRight
             }
         }
 
-        // 网络流行（未连接时红色）
-        Row {
+        RowLayout {
+            Layout.fillWidth: true
             spacing: 8
-            Text { text: "网络流"; width: 60; color: "#9aa0a6"; font.pixelSize: 12; font.family: "Microsoft YaHei UI" }
+            Text { text: qsTr("网络流"); Layout.preferredWidth: 90; color: "#9aa0a6"; font.pixelSize: 12; font.family: "Microsoft YaHei UI"; elide: Text.ElideRight }
             Text {
-                text: (uiCtrl && uiCtrl.rtspConnected) ? "已连接" : "未连接"
+                Layout.fillWidth: true
+                text: (uiCtrl && uiCtrl.rtspConnected) ? qsTr("已连接") : qsTr("未连接")
                 color: (uiCtrl && uiCtrl.rtspConnected) ? "#00ff99" : "#ff3040"
                 font.pixelSize: 12; font.family: "Microsoft YaHei UI"
+                elide: Text.ElideRight
             }
         }
 
         Item { Layout.fillHeight: true }
 
-        // 修改 IP 按钮
         Rectangle {
             Layout.fillWidth: true
             height: 28
@@ -117,7 +117,7 @@ HudPanel {
             border.width: 1
             Text {
                 anchors.centerIn: parent
-                text: "修改 IP"
+                text: qsTr("修改 IP")
                 color: ipma.containsMouse ? "#00ff99" : "#00cc88"
                 font.pixelSize: 12; font.family: "Microsoft YaHei UI"
             }

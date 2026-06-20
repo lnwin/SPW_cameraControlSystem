@@ -34,7 +34,7 @@ Rectangle {
         spacing: 4
 
         Text {
-            text: "TurbidCamera  浑水相机控制系统"
+            text: qsTr("TurbidCamera  浑水相机控制系统")
             color: "#00ff99"
             font.pixelSize: 14
             font.bold: true
@@ -44,18 +44,16 @@ Rectangle {
 
         Rectangle { width: 1; height: 24; color: "#00cc88"; opacity: 0.4 }
 
-        // 固定按钮：设置（去掉刷新，改为自动刷新）
         Repeater {
             model: [
-                { tip: "系统设置", cmd: "settings" }
+                { tip: qsTr("系统设置"), cmd: "settings" }
             ]
             delegate: ToolBtn { tip: modelData.tip; cmd: modelData.cmd }
         }
 
-        // 切换按钮：连接/断开（连接中禁用，断开时红色）
         ToolBtn {
-            tip:        (uiCtrl && uiCtrl.connecting) ? "连接中..." :
-                        (uiCtrl && uiCtrl.rtspConnected) ? "断开连接" : "连接相机"
+            tip:        (uiCtrl && uiCtrl.connecting) ? qsTr("连接中...") :
+                        (uiCtrl && uiCtrl.rtspConnected) ? qsTr("断开连接") : qsTr("连接相机")
             cmd:        (uiCtrl && uiCtrl.rtspConnected) ? "close" : "open"
             active:     uiCtrl && uiCtrl.rtspConnected
             activeColor: "#ff3040"
@@ -63,9 +61,8 @@ Rectangle {
             opacity:    (uiCtrl && uiCtrl.connecting) ? 0.5 : 1.0
         }
 
-        // 切换按钮：开始/停止录像（仅 rtspConnected 时可用）
         ToolBtn {
-            tip:        (uiCtrl && uiCtrl.recording) ? "停止录像" : "开始录像"
+            tip:        (uiCtrl && uiCtrl.recording) ? qsTr("停止录像") : qsTr("开始录像")
             cmd:        (uiCtrl && uiCtrl.recording) ? "recStop"  : "recStart"
             active:     uiCtrl && uiCtrl.recording
             activeColor: "#ff3040"
@@ -73,11 +70,10 @@ Rectangle {
             opacity:    enabled ? 1.0 : 0.35
         }
 
-        // 固定按钮：截图、文件夹
         Repeater {
             model: [
-                { tip: "截图",         cmd: "snapshot" },
-                { tip: "打开保存目录", cmd: "folder"   }
+                { tip: qsTr("截图"),         cmd: "snapshot" },
+                { tip: qsTr("打开保存目录"), cmd: "folder"   }
             ]
             delegate: ToolBtn {
                 tip:     modelData.tip
@@ -87,9 +83,8 @@ Rectangle {
             }
         }
 
-        // 切换按钮：十字准线
         ToolBtn {
-            tip:         (uiCtrl && uiCtrl.crosshairEnabled) ? "关闭准线" : "显示准线"
+            tip:         (uiCtrl && uiCtrl.crosshairEnabled) ? qsTr("关闭准线") : qsTr("显示准线")
             cmd:         "crosshair"
             active:      uiCtrl && uiCtrl.crosshairEnabled
             activeColor: "#00ff99"
@@ -97,7 +92,6 @@ Rectangle {
 
         Rectangle { width: 1; height: 24; color: "#00cc88"; opacity: 0.4 }
 
-        // REC 指示
         Row {
             spacing: 8
             leftPadding: 8
@@ -116,7 +110,6 @@ Rectangle {
             Text { text: "REC"; color: "#ff3040"; font.pixelSize: 13; font.bold: true; font.family: "Microsoft YaHei UI" }
         }
 
-        // LIVE 指示
         Row {
             spacing: 8
             leftPadding: 4
@@ -142,7 +135,6 @@ Rectangle {
         }
     }
 
-    // 内联按钮组件
     component ToolBtn: Rectangle {
         property string tip: ""
         property string cmd: ""
@@ -174,9 +166,6 @@ Rectangle {
                         ctx.moveTo(8+5.5*Math.cos(a),8+5.5*Math.sin(a))
                         ctx.lineTo(8+7*Math.cos(a),8+7*Math.sin(a)); ctx.stroke()
                     }
-                } else if (c === "refresh") {
-                    ctx.beginPath(); ctx.arc(8,8,5,0.4,Math.PI*2-0.4); ctx.stroke()
-                    ctx.beginPath(); ctx.moveTo(13,3); ctx.lineTo(13,7); ctx.lineTo(9,7); ctx.stroke()
                 } else if (c === "open") {
                     ctx.beginPath(); ctx.moveTo(5,2); ctx.lineTo(5,8); ctx.stroke()
                     ctx.beginPath(); ctx.moveTo(11,2); ctx.lineTo(11,8); ctx.stroke()
@@ -227,10 +216,9 @@ Rectangle {
                 else if (cmd === "recStart") uiCtrl.cmdStartRecord()
                 else if (cmd === "recStop")  uiCtrl.cmdStopRecord()
                 else if (cmd === "snapshot") uiCtrl.cmdSnapshot()
-                else if (cmd === "refresh")  uiCtrl.cmdRefreshDevices()
-                else if (cmd === "folder")     uiCtrl.cmdOpenFolder()
-                else if (cmd === "settings")   uiCtrl.cmdOpenSettings()
-                else if (cmd === "crosshair")  uiCtrl.cmdToggleCrosshair()
+                else if (cmd === "folder")   uiCtrl.cmdOpenFolder()
+                else if (cmd === "settings") uiCtrl.cmdOpenSettings()
+                else if (cmd === "crosshair")uiCtrl.cmdToggleCrosshair()
             }
         }
     }

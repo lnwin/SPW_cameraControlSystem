@@ -1,4 +1,7 @@
 <RCC>
+    <qresource prefix="/">
+        <file alias="icons/current/Slogo.png">release/icons/current/Slogo.png</file>
+    </qresource>
     <qresource prefix="/new/prefix1">
         <file>release/icons/current/03.png</file>
         <file>release/icons/current/04.png</file>

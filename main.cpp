@@ -1,4 +1,6 @@
 #include <QApplication>
+#include <QCoreApplication>
+#include <QDebug>
 #include <QDir>
 #include <QFileInfo>
 #include <QFont>
@@ -13,9 +15,11 @@
 #include "videorecorder.h"
 #include "udpserver.h"
 #include "myStruct.h"
+#include "languagemanager.h"
 #include <QQuickItem>
 #include <QQuickWidget>
 #include <QQmlContext>
+#include <QQmlEngine>
 
 static void setupGStreamerRuntime(const char* argv0)
 {
@@ -50,9 +54,11 @@ int main(int argc, char* argv[])
     QFont f; f.setFamily("Microsoft YaHei UI"); f.setPointSize(9);
     a.setFont(f);
 
-    // 系统弹窗（QMessageBox / QInputDialog）保持可读
-    a.setStyleSheet("QDialog, QMessageBox { background:#0b1120; color:#ffffff; }"
-                    "QMessageBox QLabel { color:#ffffff; }"
+    // 加载上次保存的语言（必须在任何 UI 创建之前）
+    LanguageManager::instance().loadSaved();
+
+    // 系统弹窗（QInputDialog 等）保持可读
+    a.setStyleSheet("QDialog { background:#0b1120; color:#ffffff; }"
                     "QPushButton { background:#111827; color:#ffffff; border-radius:3px; padding:4px 10px; }"
                     "QPushButton:hover { background:#1f2937; }"
                     "QLineEdit { color:#000000; background:#ffffff; }");
@@ -63,7 +69,11 @@ int main(int argc, char* argv[])
     UiController uiCtrl;
     w.bindUiController(&uiCtrl);
 
-    HudWindow hud(&uiCtrl, {});
+    const QString appIconDir = QUrl::fromLocalFile(
+        QCoreApplication::applicationDirPath() + "/icons/current/").toString();
+    qDebug() << "appIconDir =" << appIconDir;
+
+    HudWindow hud(&uiCtrl, {}, appIconDir);
     hud.setWindowIcon(QIcon(":/new/prefix1/release/icons/current/Slogo.png"));
     hud.show();
 
@@ -83,6 +93,7 @@ int main(int argc, char* argv[])
     QQuickWidget settingsWin;
     settingsWin.setWindowFlags(Qt::FramelessWindowHint | Qt::Window | Qt::Tool);
     settingsWin.rootContext()->setContextProperty("settingsCtrl", &settingsCtrl);
+    settingsWin.rootContext()->setContextProperty("langMgr", &LanguageManager::instance());
     settingsWin.setSource(QUrl("qrc:/qml/Settings.qml"));
     settingsWin.setResizeMode(QQuickWidget::SizeRootObjectToView);
     settingsWin.resize(480, 360);
@@ -133,6 +144,13 @@ int main(int argc, char* argv[])
             root->setProperty("currentIp", curIp);
         }
         ipWin.show(); ipWin.raise();
+    });
+
+    // 语言切换时刷新所有 QML 引擎中的 qsTr() 绑定
+    QObject::connect(&LanguageManager::instance(), &LanguageManager::languageChanged, [&](){
+        hud.engine()->retranslate();
+        settingsWin.engine()->retranslate();
+        ipWin.engine()->retranslate();
     });
 
     return a.exec();

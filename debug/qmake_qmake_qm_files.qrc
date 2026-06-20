@@ -1,0 +1,7 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="i18n">
+<file alias="app_zh_CN.qm">D:/SPwater_CODE/SPW_cameraControlSystem/debug/app_zh_CN.qm</file>
+<file alias="app_en_US.qm">D:/SPwater_CODE/SPW_cameraControlSystem/debug/app_en_US.qm</file>
+<file alias="app_ko_KR.qm">D:/SPwater_CODE/SPW_cameraControlSystem/debug/app_ko_KR.qm</file>
+</qresource>
+</RCC>

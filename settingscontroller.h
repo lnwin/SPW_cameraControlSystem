@@ -11,6 +11,7 @@ class SettingsController : public QObject
     Q_PROPERTY(int     captureType   READ captureType   WRITE setCaptureType   NOTIFY captureTypeChanged)
     Q_PROPERTY(int     recordType    READ recordType    WRITE setRecordType    NOTIFY recordTypeChanged)
     Q_PROPERTY(bool    overlayEnabled READ overlayEnabled WRITE setOverlayEnabled NOTIFY overlayEnabledChanged)
+    Q_PROPERTY(QString language      READ language                              NOTIFY languageChanged)
 
 public:
     explicit SettingsController(QObject* parent = nullptr);
@@ -20,6 +21,7 @@ public:
     int     captureType()    const { return captureType_; }
     int     recordType()     const { return recordType_; }
     bool    overlayEnabled() const { return overlayEnabled_; }
+    QString language()       const { return language_; }
 
     void setCapturePath(const QString& v)  { if (capturePath_ == v) return; capturePath_ = v; emit capturePathChanged(); }
     void setRecordPath(const QString& v)   { if (recordPath_ == v) return; recordPath_ = v; emit recordPathChanged(); }
@@ -33,6 +35,7 @@ public:
     Q_INVOKABLE void browseRecordDir();
     Q_INVOKABLE void cmdClose() { emit requestClose(); }
     Q_INVOKABLE void cmdDrag(int dx, int dy) { emit requestDrag(dx, dy); }
+    Q_INVOKABLE void setLanguage(const QString& locale);
 
 signals:
     void capturePathChanged();
@@ -40,6 +43,7 @@ signals:
     void captureTypeChanged();
     void recordTypeChanged();
     void overlayEnabledChanged();
+    void languageChanged();
     void settingsSaved(myRecordOptions opts);
     void requestClose();
     void requestDrag(int dx, int dy);
@@ -50,4 +54,5 @@ private:
     int     captureType_    = 0;
     int     recordType_     = 0;
     bool    overlayEnabled_ = false;
+    QString language_       = "zh_CN";
 };

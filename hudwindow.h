@@ -9,7 +9,7 @@ class HudWindow : public QQuickWidget
 {
     Q_OBJECT
 public:
-    explicit HudWindow(UiController* ctrl, const QString& greenLogoPath = {}, QWidget* parent = nullptr);
+    explicit HudWindow(UiController* ctrl, const QString& greenLogoPath = {}, const QString& appIconDir = {}, QWidget* parent = nullptr);
     void embedVideoWidget(QWidget* videoWidget);
 
 protected:

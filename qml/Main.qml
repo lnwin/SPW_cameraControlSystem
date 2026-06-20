@@ -37,7 +37,7 @@ Rectangle {
                 spacing: 8
 
                 Image {
-                    source: "qrc:/new/prefix1/release/icons/current/Slogo.png"
+                    source: appIconDir + "Slogo.png"
                     height: 20
                     width: height * (547/379)
                     fillMode: Image.PreserveAspectFit
@@ -45,7 +45,7 @@ Rectangle {
                 }
 
                 Text {
-                    text: "舟山渊视科技有限公司  V4.2.1"
+                    text: "舟山渊视科技有限公司  V4.2.2"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
@@ -141,7 +141,7 @@ Rectangle {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "视频显示区"
+                    text: qsTr("视频显示区")
                     color: "#00cc88"
                     font.pixelSize: 13
                     font.family: "Microsoft YaHei UI"
@@ -161,7 +161,7 @@ Rectangle {
                     spacing: 5
 
                     Text {
-                        text: "系统状态"
+                        text: qsTr("系统状态")
                         color: "#00cc88"
                         font.pixelSize: 12
                         font.bold: true
@@ -169,13 +169,13 @@ Rectangle {
                     }
                     Rectangle { Layout.fillWidth: true; height: 1; color: "#00cc88"; opacity: 0.4 }
 
-                    StatusItem { label: "分辨率"; value: uiCtrl ? uiCtrl.resolution : "1920x1080" }
-                    StatusItem { label: "帧率";   value: uiCtrl ? (uiCtrl.currentFps + " fps") : "0 fps" }
+                    StatusItem { label: qsTr("分辨率"); value: uiCtrl ? uiCtrl.resolution : "1920x1080" }
+                    StatusItem { label: qsTr("帧率");   value: uiCtrl ? (uiCtrl.currentFps + " fps") : "0 fps" }
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: "#00cc88"; opacity: 0.2 }
 
                     Text {
-                        text: "录像状态"
+                        text: qsTr("录像状态")
                         color: "#00cc88"
                         font.pixelSize: 12
                         font.bold: true
@@ -183,31 +183,31 @@ Rectangle {
                     }
                     Rectangle { Layout.fillWidth: true; height: 1; color: "#00cc88"; opacity: 0.4 }
 
-                    StatusItem { label: "状态";   value: (uiCtrl && uiCtrl.recording) ? "录像中" : "已停止" }
+                    StatusItem { label: qsTr("状态");   value: (uiCtrl && uiCtrl.recording) ? qsTr("录像中") : qsTr("已停止") }
                     // 文件名两行显示
                     Column {
                         spacing: 2
                         Layout.fillWidth: true
-                        Text { text: "文件名"; color: "#9aa0a6"; font.pixelSize: 12; font.family: "Microsoft YaHei UI" }
+                        Text { text: qsTr("文件名"); color: "#9aa0a6"; font.pixelSize: 12; font.family: "Microsoft YaHei UI" }
                         Text {
                             text: uiCtrl ? uiCtrl.recordFileName.replace(/^.*[/\\]/, '').replace(/\.[^.]+$/, '') : ""
                             color: "#00ff99"; font.pixelSize: 11; font.family: "Microsoft YaHei UI"
                             width: parent.width; wrapMode: Text.WrapAnywhere
                         }
                     }
-                    StatusItem { label: "分段";   value: uiCtrl ? String(uiCtrl.recordSegmentIndex) : "0" }
-                    StatusItem { label: "分段时长"; value: uiCtrl ? uiCtrl.recordSegmentElapsed : "00:00" }
-                    StatusItem { label: "总时长"; value: uiCtrl ? uiCtrl.recordTotalElapsed : "00:00" }
+                    StatusItem { label: qsTr("分段");   value: uiCtrl ? String(uiCtrl.recordSegmentIndex) : "0" }
+                    StatusItem { label: qsTr("分段时长"); value: uiCtrl ? uiCtrl.recordSegmentElapsed : "00:00" }
+                    StatusItem { label: qsTr("总时长"); value: uiCtrl ? uiCtrl.recordTotalElapsed : "00:00" }
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: "#00cc88"; opacity: 0.2 }
 
-                    PathStatusItem { label: "截图路径"; path: uiCtrl ? uiCtrl.screenshotPath : "" }
-                    PathStatusItem { label: "录像路径"; path: uiCtrl ? uiCtrl.recordSavePath : "" }
+                    PathStatusItem { label: qsTr("截图路径"); path: uiCtrl ? uiCtrl.screenshotPath : "" }
+                    PathStatusItem { label: qsTr("录像路径"); path: uiCtrl ? uiCtrl.recordSavePath : "" }
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: "#00cc88"; opacity: 0.2 }
 
                     // 亮度调节
-                    Text { text: "亮度"; color: (uiCtrl && uiCtrl.rtspConnected) ? "#9aa0a6" : "#3a4a42"; font.pixelSize: 12; font.family: "Microsoft YaHei UI" }
+                    Text { text: qsTr("亮度"); color: (uiCtrl && uiCtrl.rtspConnected) ? "#9aa0a6" : "#3a4a42"; font.pixelSize: 12; font.family: "Microsoft YaHei UI" }
                     RowLayout {
                         Layout.fillWidth: true
                         Slider {
@@ -255,7 +255,7 @@ Rectangle {
                 spacing: 2
 
                 Text {
-                    text: "系统日志"
+                    text: qsTr("系统日志")
                     color: "#00cc88"
                     font.pixelSize: 11
                     font.bold: true

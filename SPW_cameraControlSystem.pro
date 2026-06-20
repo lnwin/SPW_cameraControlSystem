@@ -1,10 +1,10 @@
 QT += core gui widgets network qml quick quickwidgets
-CONFIG += c++17
+CONFIG += c++17 lrelease embed_translations
 QMAKE_CFLAGS += -utf-8
 QMAKE_CXXFLAGS += -utf-8
 
 win32 {
-    RC_ICONS = $$PWD/YS-camera-logo.ico
+    RC_ICONS = $$PWD/release/icons/current/Slogo.ico
 }
 
 SOURCES += \
@@ -16,7 +16,9 @@ SOURCES += \
     restipclient.cpp \
     uicontroller.cpp \
     hudwindow.cpp \
-    settingscontroller.cpp
+    settingscontroller.cpp \
+    languagemanager.cpp \
+    themedmessagedialog.cpp
 
 HEADERS += \
     mainwindow.h \
@@ -28,11 +30,33 @@ HEADERS += \
     ZoomPanImageView.h \
     uicontroller.h \
     hudwindow.h \
-    settingscontroller.h
+    settingscontroller.h \
+    languagemanager.h \
+    themedmessagedialog.h
 
 FORMS += mainwindow.ui
 
 RESOURCES += icons.qrc qml.qrc
+
+TRANSLATIONS += \
+    translations/app_zh_CN.ts \
+    translations/app_en_US.ts \
+    translations/app_ko_KR.ts
+
+# lupdate 扫描 QML 文件
+DISTFILES += \
+    qml/Main.qml \
+    qml/Settings.qml \
+    qml/TopToolBar.qml \
+    qml/DevicePanel.qml \
+    qml/TopStatusBar.qml \
+    qml/HudPanel.qml \
+    qml/StatusItem.qml \
+    qml/PathStatusItem.qml \
+    qml/HudButton.qml \
+    qml/SideNavButton.qml \
+    qml/ChangeIpDialog.qml \
+    qml/RecordStatusPanel.qml
 
 # ===================== System =====================
 LIBS += -lIphlpapi -lWs2_32

@@ -7,7 +7,7 @@
 #include <QMouseEvent>
 #include <QCursor>
 
-HudWindow::HudWindow(UiController* ctrl, const QString& greenLogoPath, QWidget* parent)
+HudWindow::HudWindow(UiController* ctrl, const QString& greenLogoPath, const QString& appIconDir, QWidget* parent)
     : QQuickWidget(parent)
 {
     setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
@@ -15,6 +15,7 @@ HudWindow::HudWindow(UiController* ctrl, const QString& greenLogoPath, QWidget* 
     rootContext()->setContextProperty("uiCtrl", ctrl);
     rootContext()->setContextProperty("greenLogoUrl",
         greenLogoPath.isEmpty() ? QString() : QUrl::fromLocalFile(greenLogoPath).toString());
+    rootContext()->setContextProperty("appIconDir", appIconDir);
     setSource(QUrl("qrc:/qml/Main.qml"));
     setResizeMode(QQuickWidget::SizeRootObjectToView);
     setWindowTitle("SPW 工业相机控制系统 - HUD");

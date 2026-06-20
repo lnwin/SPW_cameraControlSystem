@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include "themedmessagedialog.h"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -10,7 +11,6 @@
 #include <QFileInfo>
 #include <QInputDialog>
 #include <QLineEdit>
-#include <QMessageBox>
 #include <QPainter>
 #include <QProgressDialog>
 #include <QRegularExpression>
@@ -242,17 +242,15 @@ void MainWindow::onCheckDeviceAlive()
         if (isRecording_) on_action_stopRecord_triggered();
         if (!offlinePopupShown_.value(curSelectedSn_, false)) {
             offlinePopupShown_[curSelectedSn_] = true;
-            QString dur = "未知";
+            QString dur = tr("未知");
             const qint64 t0 = g_streamStartMs.value(this, 0);
             if (t0 > 0) {
                 const qint64 m = (now - t0) / 60000;
-                dur = QStringLiteral("%1小时%2分钟").arg(m / 60).arg(m % 60);
+                dur = tr("%1小时%2分钟").arg(m / 60).arg(m % 60);
             }
-            auto* box = new QMessageBox(QMessageBox::Information, tr("提示"),
+            ThemedMessageDialog::openNonModal(this, tr("提示"),
                 tr("设备 [%1] 网络中断或视频断流。\n持续：%2。\n请检查网络后重新打开相机。")
-                    .arg(curSelectedSn_, dur), QMessageBox::Ok, this);
-            box->setAttribute(Qt::WA_DeleteOnClose);
-            box->open();
+                    .arg(curSelectedSn_, dur));
         }
     }
 }
@@ -275,12 +273,12 @@ bool MainWindow::openCameraForSelected(bool showMsgBox)
     if (viewer_) return true;
 
     if (curSelectedSn_.isEmpty()) {
-        if (showMsgBox) QMessageBox::warning(this, tr("提示"), tr("请先在列表中选择一台相机。"));
+        if (showMsgBox) ThemedMessageDialog::warning(this, tr("提示"), tr("请先在列表中选择一台相机。"));
         return false;
     }
     DeviceInfo dev;
     if (!isControlOnline(curSelectedSn_, &dev)) {
-        if (showMsgBox) QMessageBox::warning(this, tr("提示"), tr("设备离线，请确认心跳在线后再打开。"));
+        if (showMsgBox) ThemedMessageDialog::warning(this, tr("提示"), tr("设备离线，请确认心跳在线后再打开。"));
         return false;
     }
 
@@ -329,7 +327,7 @@ void MainWindow::on_action_startRecord_triggered()
 {
     if (isRecording_) return;
     if (!viewer_) {
-        QMessageBox::information(this, tr("提示"), tr("请先打开相机预览再开始录制。"));
+        ThemedMessageDialog::information(this, tr("提示"), tr("请先打开相机预览再开始录制。"));
         return;
     }
     isRecording_ = true;
@@ -359,13 +357,13 @@ void MainWindow::changeIp(const QString& sn, const QString& newIp)
 {
     static const QRegularExpression re(R"(^((25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(25[0-5]|2[0-4]\d|1?\d?\d)$)");
     if (!re.match(newIp).hasMatch()) {
-        QMessageBox::warning(nullptr, tr("错误"), tr("IP 地址格式不正确。"));
+        ThemedMessageDialog::warning(nullptr, tr("错误"), tr("IP 地址格式不正确。"));
         return;
     }
     if (curSelectedSn_ == sn && viewer_) doStopViewer();
 
     const qint64 n = mgr_->sendSetIp(sn, newIp, 16);
-    if (n <= 0) { QMessageBox::warning(nullptr, tr("错误"), tr("发送改 IP 命令失败。")); return; }
+    if (n <= 0) { ThemedMessageDialog::warning(nullptr, tr("错误"), tr("发送改 IP 命令失败。")); return; }
 
     pendingIpSn_ = sn; pendingIpNew_ = newIp; ipChangeWaiting_ = true;
 
