@@ -27,7 +27,7 @@ public:
 
         VideoOptions()
             : container(VideoContainer::MP4),
-            fps(22),
+            fps(25),
             bitrateKbps(8000),
             enableAudio(false)
         {}
