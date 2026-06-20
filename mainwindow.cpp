@@ -448,6 +448,27 @@ void MainWindow::bindUiController(UiController* ctrl)
         if (view_) view_->setCrosshairEnabled(en);
     });
 
+    connect(ctrl, &UiController::requestSetLed, this, [this, ctrl](bool en){
+        if (curSelectedSn_.isEmpty() || !isControlOnline(curSelectedSn_)) {
+            ThemedMessageDialog::warning(this, tr("提示"), tr("设备未连接，无法下发控制命令。"));
+            return;
+        }
+        const qint64 n = mgr_->sendSetLed(curSelectedSn_, en);
+        ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ")
+            + tr("LED %1").arg(en ? tr("开") : tr("关")) + QString(" bytes=%1").arg(n));
+    });
+
+    connect(ctrl, &UiController::requestSetTrigger, this, [this, ctrl](int mode){
+        if (curSelectedSn_.isEmpty() || !isControlOnline(curSelectedSn_)) {
+            ThemedMessageDialog::warning(this, tr("提示"), tr("设备未连接，无法下发控制命令。"));
+            return;
+        }
+        const QString modeStr = (mode == 0) ? "software" : "hardware";
+        const qint64 n = mgr_->sendSetTrigger(curSelectedSn_, modeStr);
+        ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ")
+            + tr("触发模式: %1").arg(modeStr) + QString(" bytes=%1").arg(n));
+    });
+
     connect(myVideoRecorder, &VideoRecorder::recordingStarted, ctrl, [ctrl](const QString& path){
         ctrl->setRecording(true);
         ctrl->setRecordFileName(QFileInfo(path).fileName());

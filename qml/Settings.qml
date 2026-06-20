@@ -4,7 +4,7 @@ import QtQuick.Layouts 1.15
 Rectangle {
     id: root
     width: 480
-    height: 400
+    height: 460
     color: "#020806"
     border.color: "#00cc88"
     border.width: 1

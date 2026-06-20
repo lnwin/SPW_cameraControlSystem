@@ -28,6 +28,11 @@
     <message><source>相机连接成功，视频流已建立</source><translation>카메라 연결됨, 비디오 스트림이 설정되었습니다</translation></message>
     <message><source>开始录像：</source><translation>녹화 시작: </translation></message>
     <message><source>录像已保存：</source><translation>녹화 저장됨: </translation></message>
+    <message><source>设备未连接，无法下发控制命令。</source><translation>장치가 연결되지 않아 제어 명령을 전송할 수 없습니다.</translation></message>
+    <message><source>LED %1</source><translation>LED %1</translation></message>
+    <message><source>开</source><translation>켜짐</translation></message>
+    <message><source>关</source><translation>꺼짐</translation></message>
+    <message><source>触发模式: %1</source><translation>트리거 모드: %1</translation></message>
 </context>
 <context>
     <name>ThemedMessageDialog</name>
@@ -50,9 +55,33 @@
     <message><source>界面语言</source><translation>언어</translation></message>
     <message><source>确定</source><translation>확인</translation></message>
     <message><source>取消</source><translation>취소</translation></message>
+    <message><source>相机触发模式</source><translation>카메라 트리거 모드</translation></message>
+    <message><source>软件触发</source><translation>소프트웨어 트리거</translation></message>
+    <message><source>硬件触发</source><translation>하드웨어 트리거</translation></message>
 </context>
 <context>
     <name>Main</name>
+    <message><source>LED灯</source><translation>LED 조명</translation></message>
+    <message><source>硬件触发</source><translation>하드웨어 트리거</translation></message>
+    <message><source>当前：硬件触发</source><translation>현재: 하드웨어 트리거</translation></message>
+    <message><source>当前：软件触发</source><translation>현재: 소프트웨어 트리거</translation></message>
+    <message><source>开</source><translation>켜짐</translation></message>
+    <message><source>关</source><translation>꺼짐</translation></message>
+    <message><source>系统状态</source><translation>시스템 상태</translation></message>
+    <message><source>录像状态</source><translation>녹화 상태</translation></message>
+    <message><source>状态</source><translation>상태</translation></message>
+    <message><source>录像中</source><translation>녹화 중</translation></message>
+    <message><source>已停止</source><translation>정지됨</translation></message>
+    <message><source>文件名</source><translation>파일명</translation></message>
+    <message><source>分段</source><translation>분절</translation></message>
+    <message><source>分段时长</source><translation>분절 시간</translation></message>
+    <message><source>总时长</source><translation>총 시간</translation></message>
+    <message><source>截图路径</source><translation>스크린샷 경로</translation></message>
+    <message><source>录像路径</source><translation>녹화 경로</translation></message>
+    <message><source>亮度</source><translation>밝기</translation></message>
+    <message><source>系统日志</source><translation>시스템 로그</translation></message>
+    <message><source>分辨率</source><translation>해상도</translation></message>
+    <message><source>帧率</source><translation>프레임 속도</translation></message>
     <message><source>视频显示区</source><translation>비디오 영역</translation></message>
     <message><source>系统状态</source><translation>시스템 상태</translation></message>
     <message><source>录像状态</source><translation>녹화 상태</translation></message>

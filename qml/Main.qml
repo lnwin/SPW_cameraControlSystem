@@ -45,7 +45,7 @@ Rectangle {
                 }
 
                 Text {
-                    text: "舟山渊视科技有限公司  V4.2.2"
+                    text: "舟山渊视科技有限公司  V4.2.3"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
@@ -152,7 +152,7 @@ Rectangle {
 
             // 右侧状态面板（只显示状态，不放按钮）
             HudPanel {
-                width: 190
+                width: 260
                 Layout.fillHeight: true
 
                 ColumnLayout {
@@ -234,6 +234,68 @@ Rectangle {
                             color: "#00ff99"; font.pixelSize: 11; font.family: "Microsoft YaHei UI"
                             width: 28; horizontalAlignment: Text.AlignRight
                         }
+                    }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: "#00cc88"; opacity: 0.2 }
+
+                    // LED 灯开关
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text { text: qsTr("LED灯"); Layout.fillWidth: true; elide: Text.ElideRight; color: "#9aa0a6"; font.pixelSize: 12; font.family: "Microsoft YaHei UI" }
+                        Rectangle {
+                            width: 42; height: 20; radius: 10
+                            color: (uiCtrl && uiCtrl.ledEnabled) ? "#0d2a1e" : "transparent"
+                            border.color: (uiCtrl && uiCtrl.ledEnabled) ? "#00ff99" : "#2a4a3a"
+                            border.width: 1
+                            Rectangle {
+                                width: 14; height: 14; radius: 7
+                                anchors.verticalCenter: parent.verticalCenter
+                                x: (uiCtrl && uiCtrl.ledEnabled) ? parent.width - width - 3 : 3
+                                color: (uiCtrl && uiCtrl.ledEnabled) ? "#00ff99" : "#3a5a4a"
+                                Behavior on x { NumberAnimation { duration: 120 } }
+                            }
+                            MouseArea { anchors.fill: parent; onClicked: if (uiCtrl) uiCtrl.cmdSetLed(!(uiCtrl.ledEnabled)) }
+                        }
+                        Text {
+                            text: (uiCtrl && uiCtrl.ledEnabled) ? qsTr("开") : qsTr("关")
+                            color: (uiCtrl && uiCtrl.ledEnabled) ? "#00ff99" : "#3a5a4a"
+                            font.pixelSize: 11; font.family: "Microsoft YaHei UI"; width: 24
+                        }
+                    }
+
+                    // 硬件触发开关（OFF=软件触发，ON=硬件触发）
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text { text: qsTr("硬件触发"); Layout.fillWidth: true; elide: Text.ElideRight; color: "#9aa0a6"; font.pixelSize: 12; font.family: "Microsoft YaHei UI" }
+                        Rectangle {
+                            width: 42; height: 20; radius: 10
+                            color: (uiCtrl && uiCtrl.triggerMode === 1) ? "#0d2a1e" : "transparent"
+                            border.color: (uiCtrl && uiCtrl.triggerMode === 1) ? "#00ff99" : "#2a4a3a"
+                            border.width: 1
+                            Rectangle {
+                                width: 14; height: 14; radius: 7
+                                anchors.verticalCenter: parent.verticalCenter
+                                x: (uiCtrl && uiCtrl.triggerMode === 1) ? parent.width - width - 3 : 3
+                                color: (uiCtrl && uiCtrl.triggerMode === 1) ? "#00ff99" : "#3a5a4a"
+                                Behavior on x { NumberAnimation { duration: 120 } }
+                            }
+                            MouseArea { anchors.fill: parent; onClicked: if (uiCtrl) uiCtrl.cmdSetTrigger(uiCtrl.triggerMode === 1 ? 0 : 1) }
+                        }
+                        Text {
+                            text: (uiCtrl && uiCtrl.triggerMode === 1) ? qsTr("开") : qsTr("关")
+                            color: (uiCtrl && uiCtrl.triggerMode === 1) ? "#00ff99" : "#3a5a4a"
+                            font.pixelSize: 11; font.family: "Microsoft YaHei UI"; width: 24
+                        }
+                    }
+
+                    // 当前触发模式提示
+                    Text {
+                        Layout.fillWidth: true
+                        text: (uiCtrl && uiCtrl.triggerMode === 1) ? qsTr("当前：硬件触发") : qsTr("当前：软件触发")
+                        color: (uiCtrl && uiCtrl.triggerMode === 1) ? "#00ff99" : "#5a8a6a"
+                        font.pixelSize: 11; font.family: "Microsoft YaHei UI"
+                        wrapMode: Text.WordWrap
+                        horizontalAlignment: Text.AlignRight
                     }
 
                     Item { Layout.fillHeight: true }

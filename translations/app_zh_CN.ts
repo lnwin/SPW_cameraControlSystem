@@ -28,6 +28,11 @@
     <message><source>相机连接成功，视频流已建立</source><translation>相机连接成功，视频流已建立</translation></message>
     <message><source>开始录像：</source><translation>开始录像：</translation></message>
     <message><source>录像已保存：</source><translation>录像已保存：</translation></message>
+    <message><source>设备未连接，无法下发控制命令。</source><translation>设备未连接，无法下发控制命令。</translation></message>
+    <message><source>LED %1</source><translation>LED %1</translation></message>
+    <message><source>开</source><translation>开</translation></message>
+    <message><source>关</source><translation>关</translation></message>
+    <message><source>触发模式: %1</source><translation>触发模式: %1</translation></message>
 </context>
 <context>
     <name>ThemedMessageDialog</name>
@@ -50,9 +55,18 @@
     <message><source>界面语言</source><translation>界面语言</translation></message>
     <message><source>确定</source><translation>确定</translation></message>
     <message><source>取消</source><translation>取消</translation></message>
+    <message><source>相机触发模式</source><translation>相机触发模式</translation></message>
+    <message><source>软件触发</source><translation>软件触发</translation></message>
+    <message><source>硬件触发</source><translation>硬件触发</translation></message>
 </context>
 <context>
     <name>Main</name>
+    <message><source>LED灯</source><translation>LED灯</translation></message>
+    <message><source>硬件触发</source><translation>硬件触发</translation></message>
+    <message><source>当前：硬件触发</source><translation>当前：硬件触发</translation></message>
+    <message><source>当前：软件触发</source><translation>当前：软件触发</translation></message>
+    <message><source>开</source><translation>开</translation></message>
+    <message><source>关</source><translation>关</translation></message>
     <message><source>视频显示区</source><translation>视频显示区</translation></message>
     <message><source>系统状态</source><translation>系统状态</translation></message>
     <message><source>录像状态</source><translation>录像状态</translation></message>

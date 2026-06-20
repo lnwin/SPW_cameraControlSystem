@@ -28,6 +28,11 @@
     <message><source>相机连接成功，视频流已建立</source><translation>Camera connected, video stream established</translation></message>
     <message><source>开始录像：</source><translation>Recording started: </translation></message>
     <message><source>录像已保存：</source><translation>Recording saved: </translation></message>
+    <message><source>设备未连接，无法下发控制命令。</source><translation>Device not connected. Cannot send control command.</translation></message>
+    <message><source>LED %1</source><translation>LED %1</translation></message>
+    <message><source>开</source><translation>ON</translation></message>
+    <message><source>关</source><translation>OFF</translation></message>
+    <message><source>触发模式: %1</source><translation>Trigger mode: %1</translation></message>
 </context>
 <context>
     <name>ThemedMessageDialog</name>
@@ -50,6 +55,9 @@
     <message><source>界面语言</source><translation>Language</translation></message>
     <message><source>确定</source><translation>OK</translation></message>
     <message><source>取消</source><translation>Cancel</translation></message>
+    <message><source>相机触发模式</source><translation>Camera Trigger Mode</translation></message>
+    <message><source>软件触发</source><translation>Software Trigger</translation></message>
+    <message><source>硬件触发</source><translation>Hardware Trigger</translation></message>
 </context>
 <context>
     <name>Main</name>
@@ -69,6 +77,12 @@
     <message><source>系统日志</source><translation>System Log</translation></message>
     <message><source>分辨率</source><translation>Resolution</translation></message>
     <message><source>帧率</source><translation>Frame Rate</translation></message>
+    <message><source>LED灯</source><translation>LED Light</translation></message>
+    <message><source>硬件触发</source><translation>Hardware Trigger</translation></message>
+    <message><source>当前：硬件触发</source><translation>Current: Hardware Trigger</translation></message>
+    <message><source>当前：软件触发</source><translation>Current: Software Trigger</translation></message>
+    <message><source>开</source><translation>ON</translation></message>
+    <message><source>关</source><translation>OFF</translation></message>
 </context>
 <context>
     <name>TopToolBar</name>

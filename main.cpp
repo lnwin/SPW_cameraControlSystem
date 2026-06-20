@@ -94,9 +94,10 @@ int main(int argc, char* argv[])
     settingsWin.setWindowFlags(Qt::FramelessWindowHint | Qt::Window | Qt::Tool);
     settingsWin.rootContext()->setContextProperty("settingsCtrl", &settingsCtrl);
     settingsWin.rootContext()->setContextProperty("langMgr", &LanguageManager::instance());
+    settingsWin.rootContext()->setContextProperty("uiCtrl", &uiCtrl);
     settingsWin.setSource(QUrl("qrc:/qml/Settings.qml"));
     settingsWin.setResizeMode(QQuickWidget::SizeRootObjectToView);
-    settingsWin.resize(480, 360);
+    settingsWin.resize(480, 420);
 
     QObject::connect(&settingsCtrl, &SettingsController::requestDrag, &settingsWin,
                      [&settingsWin](int dx, int dy){ settingsWin.move(settingsWin.x()+dx, settingsWin.y()+dy); });

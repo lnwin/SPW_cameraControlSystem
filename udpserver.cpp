@@ -413,3 +413,29 @@ qint64 UdpDeviceManager::sendSetCameraParams(const QString& sn, int exposureUs, 
                      .arg(dstPort));
     return n;
 }
+
+qint64 UdpDeviceManager::sendSetLed(const QString& sn, bool enable)
+{
+    const QByteArray payload = "CMD_SET_LED sn=" + sn.toUtf8()
+                               + " enable=" + (enable ? "1" : "0");
+    DeviceInfo dev;
+    if (!getDevice(sn, dev)) { emit logLine("[UDP-Mgr] set-led fail: SN not found"); return -1; }
+    if (!sock_)              { emit logLine("[UDP-Mgr] set-led fail: socket not started"); return -2; }
+    const qint64 n = sock_->writeDatagram(payload, dev.ip, listenPort_);
+    emit logLine(QString("[UDP-Mgr] CMD_SET_LED SN=%1 enable=%2 bytes=%3 -> %4:%5")
+                     .arg(sn).arg(enable).arg(n).arg(dev.ip.toString()).arg(listenPort_));
+    return n;
+}
+
+qint64 UdpDeviceManager::sendSetTrigger(const QString& sn, const QString& mode)
+{
+    const QByteArray payload = "CMD_SET_TRIGGER sn=" + sn.toUtf8()
+                               + " mode=" + mode.toUtf8();
+    DeviceInfo dev;
+    if (!getDevice(sn, dev)) { emit logLine("[UDP-Mgr] set-trigger fail: SN not found"); return -1; }
+    if (!sock_)              { emit logLine("[UDP-Mgr] set-trigger fail: socket not started"); return -2; }
+    const qint64 n = sock_->writeDatagram(payload, dev.ip, listenPort_);
+    emit logLine(QString("[UDP-Mgr] CMD_SET_TRIGGER SN=%1 mode=%2 bytes=%3 -> %4:%5")
+                     .arg(sn, mode).arg(n).arg(dev.ip.toString()).arg(listenPort_));
+    return n;
+}

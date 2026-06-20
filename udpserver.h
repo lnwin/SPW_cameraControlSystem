@@ -40,6 +40,8 @@ public:
     quint16 defaultCmdPort() const { return defaultCmdPort_; }
 
     qint64 sendSetIp(const QString& sn, const QString& ip, int mask, const QString& iface = QString());
+    qint64 sendSetLed(const QString& sn, bool enable);
+    qint64 sendSetTrigger(const QString& sn, const QString& mode); // "software" or "hardware"
 public slots:
     qint64 sendSetCameraParams(const QString& sn, int exposureUs, double gainDb);
 

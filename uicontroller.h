@@ -36,6 +36,8 @@ class UiController : public QObject
     Q_PROPERTY(bool     connecting         READ connecting         NOTIFY connectingChanged)
     Q_PROPERTY(int      brightness         READ brightness         WRITE setBrightness NOTIFY brightnessChanged)
     Q_PROPERTY(bool     crosshairEnabled   READ crosshairEnabled   NOTIFY crosshairEnabledChanged)
+    Q_PROPERTY(bool     ledEnabled         READ ledEnabled         NOTIFY ledEnabledChanged)
+    Q_PROPERTY(int      triggerMode        READ triggerMode        NOTIFY triggerModeChanged) // 0=software 1=hardware
 
 public:
     explicit UiController(QObject* parent = nullptr);
@@ -64,6 +66,8 @@ public:
     bool        connecting()           const { return connecting_; }
     int         brightness()           const { return brightness_; }
     bool        crosshairEnabled()     const { return crosshairEnabled_; }
+    bool        ledEnabled()           const { return ledEnabled_; }
+    int         triggerMode()          const { return triggerMode_; }
 
 public slots:
     void setDeviceName(const QString& v)    { if (deviceName_ == v) return; deviceName_ = v; emit deviceNameChanged(); }
@@ -85,6 +89,8 @@ public slots:
     void setBrightness(int v)              { v = qBound(0,v,15); if (brightness_ == v) return; brightness_ = v; emit brightnessChanged(); }
 
     Q_INVOKABLE void cmdToggleCrosshair() { crosshairEnabled_ = !crosshairEnabled_; emit crosshairEnabledChanged(); emit requestToggleCrosshair(crosshairEnabled_); }
+    Q_INVOKABLE void cmdSetLed(bool en);
+    Q_INVOKABLE void cmdSetTrigger(int mode); // 0=software, 1=hardware
 
     void notifyIpWaiting(const QString& msg) {
         ipWaiting_ = true; ipWaitingMsg_ = msg; emit ipWaitingChanged();
@@ -133,6 +139,8 @@ signals:
     void connectingChanged();
     void brightnessChanged();
     void crosshairEnabledChanged();
+    void ledEnabledChanged();
+    void triggerModeChanged();
     void logAppended(const QString& msg);
 
     void requestOpenCamera();
@@ -146,6 +154,8 @@ signals:
     void requestOpenFolder();
     void requestOpenSettings();
     void requestToggleCrosshair(bool en);
+    void requestSetLed(bool en);
+    void requestSetTrigger(int mode);
     void requestWinMinimize();
     void requestWinMaximize();
     void requestWinClose();
@@ -180,4 +190,6 @@ private:
     bool        connecting_          = false;
     int         brightness_          = 15;
     bool        crosshairEnabled_    = false;
+    bool        ledEnabled_          = false;
+    int         triggerMode_         = 0;  // 0=software, 1=hardware
 };
