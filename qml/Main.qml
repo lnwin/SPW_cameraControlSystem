@@ -45,7 +45,7 @@ Rectangle {
                 }
 
                 Text {
-                    text: "舟山渊视科技有限公司  V4.2.3"
+                    text: "舟山渊视科技有限公司  V4.2.4"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
@@ -125,7 +125,7 @@ Rectangle {
 
             // 左侧设备面板
             DevicePanel {
-                width: 200
+                width: 240
                 Layout.fillHeight: true
             }
 
