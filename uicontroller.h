@@ -4,6 +4,7 @@
 #include <QString>
 #include <QDateTime>
 #include <QTimer>
+#include <QJsonObject>
 
 class UiController : public QObject
 {
@@ -36,8 +37,10 @@ class UiController : public QObject
     Q_PROPERTY(bool     connecting         READ connecting         NOTIFY connectingChanged)
     Q_PROPERTY(int      brightness         READ brightness         WRITE setBrightness NOTIFY brightnessChanged)
     Q_PROPERTY(bool     crosshairEnabled   READ crosshairEnabled   NOTIFY crosshairEnabledChanged)
-    Q_PROPERTY(bool     ledEnabled         READ ledEnabled         NOTIFY ledEnabledChanged)
-    Q_PROPERTY(int      triggerMode        READ triggerMode        NOTIFY triggerModeChanged) // 0=software 1=hardware
+    Q_PROPERTY(bool     ledEnabled           READ ledEnabled           NOTIFY ledEnabledChanged)
+    Q_PROPERTY(int      triggerMode          READ triggerMode          NOTIFY triggerModeChanged) // 0=software 1=hardware
+    Q_PROPERTY(bool     triggerSwitchLocked  READ triggerSwitchLocked  NOTIFY triggerSwitchLockedChanged)
+    Q_PROPERTY(QString  triggerStatusMsg     READ triggerStatusMsg     NOTIFY triggerStatusMsgChanged)
 
 public:
     explicit UiController(QObject* parent = nullptr);
@@ -68,6 +71,9 @@ public:
     bool        crosshairEnabled()     const { return crosshairEnabled_; }
     bool        ledEnabled()           const { return ledEnabled_; }
     int         triggerMode()          const { return triggerMode_; }
+    bool        triggerSwitchLocked()  const { return triggerSwitchLocked_; }
+    QString     triggerStatusMsg()     const { return triggerStatusMsg_; }
+    bool        triggerWaitingAck()    const { return triggerUiState_ == TriggerUiState::WaitingAck; }
 
 public slots:
     void setDeviceName(const QString& v)    { if (deviceName_ == v) return; deviceName_ = v; emit deviceNameChanged(); }
@@ -90,7 +96,11 @@ public slots:
 
     Q_INVOKABLE void cmdToggleCrosshair() { crosshairEnabled_ = !crosshairEnabled_; emit crosshairEnabledChanged(); emit requestToggleCrosshair(crosshairEnabled_); }
     Q_INVOKABLE void cmdSetLed(bool en);
-    Q_INVOKABLE void cmdSetTrigger(int mode); // 0=software, 1=hardware
+    Q_INVOKABLE void cmdSetTrigger(int mode); // 0=software, 1=hardware — user click only
+
+    // called by MainWindow when TRIGGER_STATUS arrives or 5s timeout fires
+    void handleTriggerStatus(const QJsonObject& json);
+    void handleTriggerTimeout();
 
     void notifyIpWaiting(const QString& msg) {
         ipWaiting_ = true; ipWaitingMsg_ = msg; emit ipWaitingChanged();
@@ -141,6 +151,9 @@ signals:
     void crosshairEnabledChanged();
     void ledEnabledChanged();
     void triggerModeChanged();
+    void triggerSwitchLockedChanged();
+    void triggerStatusMsgChanged();
+    void noHardwareTriggerFallback(); // fallback=true 时由 MainWindow 显示弹窗
     void logAppended(const QString& msg);
 
     void requestOpenCamera();
@@ -192,4 +205,13 @@ private:
     bool        crosshairEnabled_    = false;
     bool        ledEnabled_          = false;
     int         triggerMode_         = 0;  // 0=software, 1=hardware
+
+    // 触发模式状态闭环
+    enum class TriggerUiState { Idle, WaitingAck };
+    int              stableTriggerMode_   = 0;           // 最后一次确认成功的模式
+    int              requestedTriggerMode_ = 0;          // 用户刚请求的模式
+    TriggerUiState   triggerUiState_      = TriggerUiState::Idle;
+    bool             triggerSwitchLocked_ = false;       // 锁定开关（禁止交互）
+    QString          triggerStatusMsg_    = "当前：软件触发";
+    bool             updatingTriggerUi_   = false;       // 防止程序回退再次触发命令
 };

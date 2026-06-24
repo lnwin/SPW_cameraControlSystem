@@ -74,6 +74,7 @@ private:
     QTimer* devAliveTimer_ = nullptr;
     QTimer* previewPullTimer_ = nullptr;
     QTimer* ipChangeTimer_ = nullptr;
+    QTimer* triggerAckTimer_ = nullptr;
 
     VideoRecorder* myVideoRecorder = nullptr;
     QThread* recThread_ = nullptr;

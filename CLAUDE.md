@@ -79,3 +79,17 @@ constexpr int CAMERA_FPS = 25;
 **编译结果：** 通过
 **运行验证：** 测试通过
 **风险点：** 无
+
+---
+### [2026-06-24] V4.2.5 硬件触发状态闭环 + 系统日志告警
+**修改目标：**
+1. 硬件触发切换严格状态闭环：点击后锁定开关，等待下位机 TRIGGER_STATUS 确认，收到 fallback 自动退回软件触发，5秒超时保护。
+2. 修复 TRIGGER_STATUS 仅在 port 8888 (HB socket) 到达时被丢弃的问题（onReadyReadHb 补充 emit datagramReceived）。
+3. 修复硬件触发切换期间视频中断弹窗误弹（WaitingAck 状态下抑制）。
+4. 系统日志区域橙红色加粗告警：fallback 时输出【硬件触发不可用】，超时时输出【硬件触发状态未知】。
+5. datagramReceived lambda 改为 appendLog 输出 [UDP_RAW]，确保 JSON 包是否到达在 UI 可见。
+
+**涉及文件：** uicontroller.h/cpp、mainwindow.h/cpp、qml/Main.qml、udpserver.cpp
+**编译结果：** 通过
+**运行验证：** 测试通过
+**风险点：** 无

@@ -13,6 +13,8 @@
 #include <QLineEdit>
 #include <QPainter>
 #include <QProgressDialog>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QRegularExpression>
 #include <QSettings>
 #include <QUrl>
@@ -239,6 +241,11 @@ void MainWindow::onCheckDeviceAlive()
                                    && viewerStartMs > 0 && (now - viewerStartMs) > 8000;
 
     if (viewerRunning && (everGotFrame || neverGotFrameTimeout) && !uiOnline) {
+        // 硬件触发切换期间无帧是预期行为，不弹视频中断
+        if (uiCtrl_ && uiCtrl_->triggerWaitingAck()) {
+            qInfo("[TRIGGER_UI] suppress video lost dialog during trigger switching");
+            return;
+        }
         if (isRecording_) on_action_stopRecord_triggered();
         if (!offlinePopupShown_.value(curSelectedSn_, false)) {
             offlinePopupShown_[curSelectedSn_] = true;
@@ -461,12 +468,49 @@ void MainWindow::bindUiController(UiController* ctrl)
     connect(ctrl, &UiController::requestSetTrigger, this, [this, ctrl](int mode){
         if (curSelectedSn_.isEmpty() || !isControlOnline(curSelectedSn_)) {
             ThemedMessageDialog::warning(this, tr("提示"), tr("设备未连接，无法下发控制命令。"));
+            ctrl->handleTriggerTimeout(); // 解锁 UI
             return;
         }
         const QString modeStr = (mode == 0) ? "software" : "hardware";
         const qint64 n = mgr_->sendSetTrigger(curSelectedSn_, modeStr);
         ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ")
             + tr("触发模式: %1").arg(modeStr) + QString(" bytes=%1").arg(n));
+        if (triggerAckTimer_) triggerAckTimer_->start(5000); // 5s 超时保护
+    });
+
+    connect(ctrl, &UiController::noHardwareTriggerFallback, this, [this](){
+        qDebug("[TRIGGER_UI] show no hardware trigger dialog");
+        ThemedMessageDialog::warning(this, tr("提示"), tr("当前相机不具备硬件触发功能，已退回软件触发。"));
+    });
+
+    // 触发模式确认定时器（5s 超时保护）
+    triggerAckTimer_ = new QTimer(this);
+    triggerAckTimer_->setSingleShot(true);
+    connect(triggerAckTimer_, &QTimer::timeout, this, [ctrl](){
+        ctrl->handleTriggerTimeout();
+    });
+
+    // 解析下位机回传的 TRIGGER_STATUS
+    connect(mgr_, &UdpDeviceManager::datagramReceived, this,
+            [this, ctrl](const QString&, const QHostAddress& ip, quint16 port, const QByteArray& payload){
+        // 只把 JSON 类报文转发到 UI 日志，心跳文本包跳过，避免日志刷屏
+        if (payload.trimmed().startsWith('{')) {
+            ctrl->appendLog(QString("[UDP_RAW] from=%1:%2 size=%3 data=%4")
+                .arg(ip.toString()).arg(port).arg(payload.size())
+                .arg(QString::fromUtf8(payload.left(100)).trimmed()));
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(payload);
+        if (!doc.isObject()) return;
+        const QJsonObject json = doc.object();
+        if (json.value("cmd").toString() != "TRIGGER_STATUS") return;
+
+        ctrl->appendLog(QString("[TRIGGER_UI] TRIGGER_STATUS: requested=%1 current=%2 fallback=%3")
+            .arg(json["requested_mode"].toString(), json["current_mode"].toString())
+            .arg(json["fallback"].toBool() ? "true" : "false"));
+
+        if (triggerAckTimer_) triggerAckTimer_->stop();
+        offlinePopupShown_[curSelectedSn_] = false;
+        ctrl->handleTriggerStatus(json);
     });
 
     connect(myVideoRecorder, &VideoRecorder::recordingStarted, ctrl, [ctrl](const QString& path){

@@ -121,13 +121,17 @@ void UdpDeviceManager::onReadyReadHb()
         static const QRegularExpression kSnRe(R"(\bsn=([^\s]+))",
                                               QRegularExpression::CaseInsensitiveOption);
         const QRegularExpressionMatch m = kSnRe.match(msg);
+        QString sn;
         if (m.hasMatch()) {
-            const QString sn = m.captured(1).trimmed();
+            sn = m.captured(1).trimmed();
             if (!sn.isEmpty()) {
                 upsertDevice(sn, peer, peerPort, msg);
                 emit snDiscoveredOrUpdated(sn);
             }
         }
+
+        // forward raw payload so MainWindow can parse JSON status packets (e.g. TRIGGER_STATUS)
+        emit datagramReceived(sn, peer, peerPort, buf);
 
         // optional ACK for HB_PING
         if (msg.startsWith("HB_PING", Qt::CaseInsensitive)) {

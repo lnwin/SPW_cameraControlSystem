@@ -45,7 +45,7 @@ Rectangle {
                 }
 
                 Text {
-                    text: "舟山渊视科技有限公司  V4.2.4"
+                    text: "舟山渊视科技有限公司  V4.2.5"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
@@ -266,6 +266,8 @@ Rectangle {
                     // 硬件触发开关（OFF=软件触发，ON=硬件触发）
                     RowLayout {
                         Layout.fillWidth: true
+                        opacity: (uiCtrl && uiCtrl.triggerSwitchLocked) ? 0.45 : 1.0
+                        Behavior on opacity { NumberAnimation { duration: 150 } }
                         Text { text: qsTr("硬件触发"); Layout.fillWidth: true; elide: Text.ElideRight; color: "#9aa0a6"; font.pixelSize: 12; font.family: "Microsoft YaHei UI" }
                         Rectangle {
                             width: 42; height: 20; radius: 10
@@ -279,7 +281,11 @@ Rectangle {
                                 color: (uiCtrl && uiCtrl.triggerMode === 1) ? "#00ff99" : "#3a5a4a"
                                 Behavior on x { NumberAnimation { duration: 120 } }
                             }
-                            MouseArea { anchors.fill: parent; onClicked: if (uiCtrl) uiCtrl.cmdSetTrigger(uiCtrl.triggerMode === 1 ? 0 : 1) }
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: uiCtrl && !uiCtrl.triggerSwitchLocked
+                                onClicked: if (uiCtrl) uiCtrl.cmdSetTrigger(uiCtrl.triggerMode === 1 ? 0 : 1)
+                            }
                         }
                         Text {
                             text: (uiCtrl && uiCtrl.triggerMode === 1) ? qsTr("开") : qsTr("关")
@@ -291,7 +297,7 @@ Rectangle {
                     // 当前触发模式提示
                     Text {
                         Layout.fillWidth: true
-                        text: (uiCtrl && uiCtrl.triggerMode === 1) ? qsTr("当前：硬件触发") : qsTr("当前：软件触发")
+                        text: uiCtrl ? uiCtrl.triggerStatusMsg : qsTr("当前：软件触发")
                         color: (uiCtrl && uiCtrl.triggerMode === 1) ? "#00ff99" : "#5a8a6a"
                         font.pixelSize: 11; font.family: "Microsoft YaHei UI"
                         wrapMode: Text.WordWrap
@@ -334,10 +340,11 @@ Rectangle {
                     delegate: Text {
                         width: logView.width
                         text: modelData
-                        color: "#9aa0a6"
-                        font.pixelSize: 11
+                        color: modelData.indexOf("⚠") >= 0 ? "#ff6600" : "#9aa0a6"
+                        font.pixelSize: modelData.indexOf("⚠") >= 0 ? 12 : 11
+                        font.bold: modelData.indexOf("⚠") >= 0
                         font.family: "Microsoft YaHei UI"
-                        elide: Text.ElideRight
+                        wrapMode: Text.WordWrap
                     }
                 }
             }
