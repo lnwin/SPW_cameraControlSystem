@@ -49,6 +49,7 @@ signals:
     void snDiscoveredOrUpdated(const QString& sn);
     void datagramReceived(const QString& sn, const QHostAddress& ip, quint16 port, const QByteArray& payload);
     void logLine(const QString& line);
+    void setIpAckReceived(const QString& sn, const QString& status);
 
 private slots:
     void onReadyRead();

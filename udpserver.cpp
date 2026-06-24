@@ -193,7 +193,21 @@ void UdpDeviceManager::onReadyRead()
         emit logLine(QString("[UDP-Mgr] <-- RECV '%1' from %2:%3")
                          .arg(msg, peer.toString()).arg(peerPort));
 
-        // ① discover request -> reply
+        // ① CMD_SET_IP_ACK — pre-ack from device (sent before IP switch)
+        if (msg.startsWith("CMD_SET_IP_ACK", Qt::CaseInsensitive)) {
+            static const QRegularExpression reStatus(R"(\bstatus\s*=\s*(\S+))",
+                                                     QRegularExpression::CaseInsensitiveOption);
+            const QRegularExpressionMatch ms = reStatus.match(msg);
+            const QString status = ms.hasMatch() ? ms.captured(1).trimmed() : QStringLiteral("unknown");
+            const QString ackSn  = parseSn(msg);
+            emit logLine(QString("[IPCFG-PC] ack received from %1:%2 status=%3 sn=%4")
+                             .arg(peer.toString()).arg(peerPort).arg(status, ackSn));
+            emit setIpAckReceived(ackSn, status);
+            emit datagramReceived(ackSn, peer, peerPort, buf);
+            continue;
+        }
+
+        // ② discover request -> reply
         if (msg.startsWith("DISCOVER_REQUEST", Qt::CaseInsensitive)) {
 
             QHostAddress local = pickLocalIpSameSubnet(peer);
@@ -367,23 +381,74 @@ qint64 UdpDeviceManager::sendSetIp(const QString& sn, const QString& ip, int mas
 
     DeviceInfo dev;
     if (!getDevice(sn, dev)) {
-        emit logLine(QString("[UDP-Mgr] setip fail: SN '%1' not found in devices_").arg(sn));
+        emit logLine(QString("[IPCFG-PC] setip fail: SN '%1' not found in devices_").arg(sn));
         return -1;
     }
     if (!sock_) {
-        emit logLine("[UDP-Mgr] setip fail: DISC socket not started");
+        emit logLine("[IPCFG-PC] setip fail: DISC socket not started");
         return -2;
     }
 
     const QHostAddress dstIp   = dev.ip;
-    const quint16      dstPort = listenPort_; // 7777
+    const quint16      dstPort = listenPort_;
+    const quint32      dstIpV4 = dstIp.toIPv4Address();
 
+    // --- 路由诊断：检查是否有本地接口在同网段 ---
+    bool    hasDirectRoute = false;
+    QString localIpStr, ifaceName;
+    for (const auto& nic : QNetworkInterface::allInterfaces()) {
+        if (!(nic.flags() & QNetworkInterface::IsUp) ||
+            !(nic.flags() & QNetworkInterface::IsRunning)) continue;
+        for (const auto& e : nic.addressEntries()) {
+            if (e.ip().protocol() != QAbstractSocket::IPv4Protocol) continue;
+            const quint32 lip  = e.ip().toIPv4Address();
+            const quint32 nmask = e.netmask().isNull() ? 0u : e.netmask().toIPv4Address();
+            if (nmask && ((lip & nmask) == (dstIpV4 & nmask))) {
+                hasDirectRoute = true;
+                localIpStr     = e.ip().toString();
+                ifaceName      = nic.name();
+                break;
+            }
+        }
+        if (hasDirectRoute) break;
+    }
+    if (!hasDirectRoute) {
+        // fallback: pick any non-loopback IPv4 for logging
+        for (const auto& nic : QNetworkInterface::allInterfaces()) {
+            for (const auto& e : nic.addressEntries()) {
+                if (e.ip().protocol() == QAbstractSocket::IPv4Protocol &&
+                    !e.ip().isLoopback()) {
+                    localIpStr = e.ip().toString();
+                    ifaceName  = nic.name();
+                    break;
+                }
+            }
+            if (!localIpStr.isEmpty()) break;
+        }
+    }
+
+    emit logLine(QString("[IPCFG-PC] device current_ip=%1").arg(dstIp.toString()));
+    emit logLine(QString("[IPCFG-PC] selected iface=%1 local_ip=%2").arg(ifaceName, localIpStr));
+    emit logLine(QString("[IPCFG-PC] target new_ip=%1 mask=%2").arg(ip).arg(mask));
+    if (!hasDirectRoute)
+        emit logLine("[IPCFG-PC] warning: no local route to device subnet, direct unicast may fail");
+
+    // 单播发送（同网段直达；跨网段时 OS 可能丢包）
     const qint64 n = sock_->writeDatagram(payload, dstIp, dstPort);
+    emit logLine(QString("[IPCFG-PC] send CMD_SET_IP to %1:%2 from local=%3 iface=%4")
+                     .arg(dstIp.toString()).arg(dstPort).arg(localIpStr, ifaceName));
+    emit logLine(QString("[IPCFG-PC] datagram bytes=%1 send result=%2")
+                     .arg(payload.size()).arg(n));
 
-    emit logLine(QString("[UDP-Mgr] CMD_SET_IP(unicast via DISC) SN=%1 -> %2:%3 bytes=%4")
-                     .arg(sn, dstIp.toString())
-                     .arg(dstPort)
-                     .arg(static_cast<qlonglong>(n)));
+    // 跨网段广播回退：Windows 下 255.255.255.255 从 AnyIPv4 socket 发出会走所有网卡
+    // 设备在同 L2 二层上均可收到；ACK 回包源端口为 7777，sock_ 正常接收
+    if (!hasDirectRoute) {
+        const qint64 nb = sock_->writeDatagram(payload, QHostAddress::Broadcast, dstPort);
+        emit logLine(QString("[IPCFG-PC] broadcast fallback to 255.255.255.255:%1 bytes=%2")
+                         .arg(dstPort).arg(nb));
+    }
+
+    emit logLine(QString("[IPCFG-PC] waiting pre-ack timeout=15000ms"));
     return n;
 }
 

@@ -55,6 +55,7 @@ private slots:
     void on_action_stopRecord_triggered();
     void onSnUpdatedForIpChange(const QString& sn);
     void onIpChangeTimeout();
+    void onSetIpAckReceived(const QString& sn, const QString& status);
 
 private:
     void startPreviewPullTimer();
@@ -88,7 +89,8 @@ private:
     QString overlayTopText_;
     bool    overlayEnabled_ = false;
 
-    bool    ipChangeWaiting_ = false;
+    bool    ipChangeWaiting_  = false;
+    bool    ipAckAccepted_    = false;
     QString pendingIpSn_;
     QString pendingIpNew_;
 

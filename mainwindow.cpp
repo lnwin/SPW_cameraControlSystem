@@ -112,6 +112,7 @@ MainWindow::MainWindow(QWidget* parent)
         }, Qt::QueuedConnection);
     });
     connect(mgr_, &UdpDeviceManager::snDiscoveredOrUpdated, this, &MainWindow::onSnUpdatedForIpChange);
+    connect(mgr_, &UdpDeviceManager::setIpAckReceived, this, &MainWindow::onSetIpAckReceived);
     connect(this, &MainWindow::sendCameraExporeGain, mgr_, &UdpDeviceManager::sendSetCameraParams);
 
     // 设备存活定时器
@@ -391,12 +392,49 @@ void MainWindow::onSnUpdatedForIpChange(const QString& sn)
 
 void MainWindow::onIpChangeTimeout()
 {
-    finishIpChange(false, tr("等待设备 [%1] 使用新 IP [%2] 上线超时。").arg(pendingIpSn_, pendingIpNew_));
+    const QString finalMsg = ipAckAccepted_
+        ? tr("设备 [%1] 已接受 IP 修改，但使用新 IP [%2] 重连超时，请检查网线或网段配置。").arg(pendingIpSn_, pendingIpNew_)
+        : tr("等待设备 [%1] 使用新 IP [%2] 上线超时。").arg(pendingIpSn_, pendingIpNew_);
+    if (uiCtrl_)
+        uiCtrl_->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ")
+                           + QString("[IPCFG-PC] final state=fail reason=%1")
+                                 .arg(ipAckAccepted_ ? "reconnect_timeout" : "no_ack"));
+    finishIpChange(false, finalMsg);
+}
+
+void MainWindow::onSetIpAckReceived(const QString& sn, const QString& status)
+{
+    if (!ipChangeWaiting_ || sn != pendingIpSn_) return;
+    if (uiCtrl_)
+        uiCtrl_->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ")
+                           + QString("[IPCFG-PC] ack received sn=%1 status=%2").arg(sn, status));
+
+    if (status == QLatin1String("accepted") || status == QLatin1String("applying")) {
+        ipAckAccepted_ = true;
+        // 设备已接受指令并开始切换IP，延长等待至20秒供设备重启网络
+        if (ipChangeTimer_) ipChangeTimer_->start(20000);
+        if (uiCtrl_) {
+            uiCtrl_->notifyIpWaiting(tr("设备已接受 IP 修改请求，正在切换网络..."));
+            uiCtrl_->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ")
+                               + QString("[IPCFG-PC] accepted, begin reconnect by new_ip=%1").arg(pendingIpNew_));
+        }
+    } else if (status == QLatin1String("success")) {
+        if (uiCtrl_)
+            uiCtrl_->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ")
+                               + "[IPCFG-PC] final state=success");
+        finishIpChange(true, tr("设备 [%1] IP 修改成功：%2").arg(sn, pendingIpNew_));
+    } else if (status == QLatin1String("failed")) {
+        if (uiCtrl_)
+            uiCtrl_->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ")
+                               + "[IPCFG-PC] final state=fail reason=device_rejected");
+        finishIpChange(false, tr("设备 [%1] IP 修改失败（下位机返回 failed）。").arg(sn));
+    }
 }
 
 void MainWindow::finishIpChange(bool ok, const QString& msg)
 {
     ipChangeWaiting_ = false;
+    ipAckAccepted_   = false;
     if (ipChangeTimer_) ipChangeTimer_->stop();
     if (uiCtrl_) {
         uiCtrl_->notifyIpDone(msg, ok);
