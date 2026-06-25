@@ -21,21 +21,54 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 
+// ---------- 文件日志 ----------
+#include <QDateTime>
+#include <QTextStream>
+static QFile* g_logFile = nullptr;
+static void fileLogHandler(QtMsgType type, const QMessageLogContext&, const QString& msg)
+{
+    if (!g_logFile || !g_logFile->isOpen()) return;
+    const char* lv = (type==QtDebugMsg)?"D":(type==QtInfoMsg)?"I":(type==QtWarningMsg)?"W":"E";
+    QTextStream(g_logFile)
+        << QDateTime::currentDateTime().toString("MM-dd hh:mm:ss.zzz ")
+        << "[" << lv << "] " << msg << "\n";
+    g_logFile->flush();
+}
+
 static void setupGStreamerRuntime(const char* argv0)
 {
 #ifdef Q_OS_WIN
-    const QString appDir  = QFileInfo(QString::fromLocal8Bit(argv0)).absolutePath();
-    const QString gstRoot = QDir(appDir).filePath("gstreamer");
-    const QString gstBin  = QDir(gstRoot).filePath("bin");
-    const QString gstPlug = QDir(gstRoot).filePath("lib/gstreamer-1.0");
+    const QString appDir   = QFileInfo(QString::fromLocal8Bit(argv0)).absolutePath();
+    const QString gstRoot  = QDir(appDir).filePath("gstreamer");
+    const QString gstBin   = QDir(gstRoot).filePath("bin");
+    const QString gstPlug  = QDir(gstRoot).filePath("lib/gstreamer-1.0");
+    const QString gstScan  = QDir(gstRoot).filePath("libexec/gstreamer-1.0/gst-plugin-scanner.exe");
+    const QString gstReg   = QDir(appDir).filePath("logs/gst-registry.bin");
 
+    // 确保 logs 目录存在（GST_REGISTRY 需要可写目录）
+    QDir(appDir).mkpath("logs");
+
+    // 将 gstreamer/bin 和 gstreamer/libexec 前置加入 PATH
     QString path = qEnvironmentVariable("PATH");
-    if (!path.startsWith(gstBin + ";")) path = gstBin + ";" + path;
-    qputenv("PATH", path.toLocal8Bit());
-    qputenv("GST_PLUGIN_PATH",        gstPlug.toLocal8Bit());
-    qputenv("GST_PLUGIN_SYSTEM_PATH", gstPlug.toLocal8Bit());
+    const QString inject = gstBin + ";" + QDir(gstRoot).filePath("libexec/gstreamer-1.0");
+    if (!path.contains(gstBin)) path = inject + ";" + path;
+    qputenv("PATH",                      path.toLocal8Bit());
+    qputenv("GST_PLUGIN_PATH",           gstPlug.toLocal8Bit());
+    qputenv("GST_PLUGIN_SYSTEM_PATH",    gstPlug.toLocal8Bit());
+    qputenv("GST_PLUGIN_SYSTEM_PATH_1_0",gstPlug.toLocal8Bit());  // GStreamer 1.x 专用
+    qputenv("GST_PLUGIN_SCANNER",        gstScan.toLocal8Bit());   // 避免扫描器找不到崩溃
+    qputenv("GST_REGISTRY",              gstReg.toLocal8Bit());    // 写本地避免权限问题
     qputenv("GSETTINGS_SCHEMA_DIR",
             QDir(gstRoot).filePath("share/glib-2.0/schemas").toLocal8Bit());
+
+    // 启动诊断（文件日志还未安装，先用 stderr，稍后 qInfo 会进文件）
+    fprintf(stderr, "[STARTUP] appDir        = %s\n", appDir.toLocal8Bit().constData());
+    fprintf(stderr, "[STARTUP] GST_PLUGIN_PATH     = %s\n", gstPlug.toLocal8Bit().constData());
+    fprintf(stderr, "[STARTUP] GST_PLUGIN_SCANNER  = %s | exists=%d\n",
+            gstScan.toLocal8Bit().constData(), QFileInfo(gstScan).exists());
+    fprintf(stderr, "[STARTUP] GST_REGISTRY        = %s\n", gstReg.toLocal8Bit().constData());
+    fprintf(stderr, "[STARTUP] gstreamer/bin exists = %d\n", QDir(gstBin).exists());
+    fprintf(stderr, "[STARTUP] plugin dir exists    = %d\n", QDir(gstPlug).exists());
 #endif
 }
 
@@ -49,6 +82,25 @@ int main(int argc, char* argv[])
 #endif
 
     setupGStreamerRuntime(argv[0]);
+
+    // 安装文件日志（在 QApplication 之前即可，QFile 不依赖 QApplication）
+    {
+        const QString appDir = QFileInfo(QString::fromLocal8Bit(argv[0])).absolutePath();
+        g_logFile = new QFile(appDir + "/logs/runtime.log");
+        g_logFile->open(QIODevice::Append | QIODevice::Text);
+        qInstallMessageHandler(fileLogHandler);
+
+        qInfo("[STARTUP] ========== 程序启动 ==========");
+        qInfo().noquote() << "[STARTUP] appDir            =" << appDir;
+        qInfo().noquote() << "[STARTUP] GST_PLUGIN_PATH   =" << qEnvironmentVariable("GST_PLUGIN_PATH");
+        qInfo().noquote() << "[STARTUP] GST_PLUGIN_SYSTEM_PATH_1_0 =" << qEnvironmentVariable("GST_PLUGIN_SYSTEM_PATH_1_0");
+        qInfo().noquote() << "[STARTUP] GST_PLUGIN_SCANNER=" << qEnvironmentVariable("GST_PLUGIN_SCANNER");
+        qInfo().noquote() << "[STARTUP] GST_REGISTRY      =" << qEnvironmentVariable("GST_REGISTRY");
+        qInfo() << "[STARTUP] gstreamer/bin exists     =" << QDir(appDir + "/gstreamer/bin").exists();
+        qInfo() << "[STARTUP] plugin dir exists        =" << QDir(appDir + "/gstreamer/lib/gstreamer-1.0").exists();
+        qInfo() << "[STARTUP] gst-plugin-scanner exists=" << QFileInfo(appDir + "/gstreamer/libexec/gstreamer-1.0/gst-plugin-scanner.exe").exists();
+        qInfo() << "[STARTUP] Qt5Core.dll exists       =" << QFileInfo(appDir + "/Qt5Core.dll").exists();
+    }
 
     QApplication a(argc, argv);
     QFont f; f.setFamily("Microsoft YaHei UI"); f.setPointSize(9);

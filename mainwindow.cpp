@@ -276,34 +276,50 @@ bool MainWindow::isControlOnline(const QString& sn, DeviceInfo* outDev) const
 
 bool MainWindow::openCameraForSelected(bool showMsgBox)
 {
-    g_noFrameStreak[this] = 0; g_lastNewFrameMs[this] = 0;
-    g_streamStartMs[this] = 0; g_viewerStartMs[this]  = 0;
-    if (viewer_) return true;
+    try {
+        g_noFrameStreak[this] = 0; g_lastNewFrameMs[this] = 0;
+        g_streamStartMs[this] = 0; g_viewerStartMs[this]  = 0;
+        if (viewer_) return true;
 
-    if (curSelectedSn_.isEmpty()) {
-        if (showMsgBox) ThemedMessageDialog::warning(this, tr("提示"), tr("请先在列表中选择一台相机。"));
+        if (curSelectedSn_.isEmpty()) {
+            if (showMsgBox) ThemedMessageDialog::warning(this, tr("提示"), tr("请先在列表中选择一台相机。"));
+            return false;
+        }
+        DeviceInfo dev;
+        if (!isControlOnline(curSelectedSn_, &dev)) {
+            if (showMsgBox) ThemedMessageDialog::warning(this, tr("提示"), tr("设备离线，请确认心跳在线后再打开。"));
+            return false;
+        }
+
+        const QString url = QString("rtsp://%1:8554/%2").arg(dev.ip.toString(), curSelectedSn_);
+        qInfo().noquote() << "[UI] open rtsp url =" << url;
+
+        viewer_ = new RtspViewerQt(this);
+        lastFrameMs_ = 0;
+        g_noFrameStreak[this] = 0; g_lastNewFrameMs[this] = 0;
+        g_dropUntilMs[this]   = QDateTime::currentMSecsSinceEpoch() + 800;
+        g_viewerStartMs[this] = QDateTime::currentMSecsSinceEpoch();
+
+        connect(viewer_, &RtspViewerQt::logLine, this, [](const QString& s){ qInfo().noquote() << s; });
+        viewer_->setUrl(url);
+        viewer_->start();
+        startPreviewPullTimer();
+        return true;
+    } catch (const std::exception& e) {
+        qCritical() << "[UI] openCameraForSelected exception:" << e.what();
+        viewer_ = nullptr;
+        if (showMsgBox)
+            ThemedMessageDialog::warning(this, tr("错误"),
+                tr("连接相机失败：%1\n请检查相机网络、GStreamer 运行库和发布包完整性。").arg(e.what()));
+        return false;
+    } catch (...) {
+        qCritical() << "[UI] openCameraForSelected unknown exception";
+        viewer_ = nullptr;
+        if (showMsgBox)
+            ThemedMessageDialog::warning(this, tr("错误"),
+                tr("连接相机时发生未知异常，请检查发布包完整性并查看 logs/runtime.log。"));
         return false;
     }
-    DeviceInfo dev;
-    if (!isControlOnline(curSelectedSn_, &dev)) {
-        if (showMsgBox) ThemedMessageDialog::warning(this, tr("提示"), tr("设备离线，请确认心跳在线后再打开。"));
-        return false;
-    }
-
-    const QString url = QString("rtsp://%1:8554/%2").arg(dev.ip.toString(), curSelectedSn_);
-    qInfo().noquote() << "[UI] open rtsp url =" << url;
-
-    viewer_ = new RtspViewerQt(this);
-    lastFrameMs_ = 0;
-    g_noFrameStreak[this] = 0; g_lastNewFrameMs[this] = 0;
-    g_dropUntilMs[this]   = QDateTime::currentMSecsSinceEpoch() + 800;
-    g_viewerStartMs[this] = QDateTime::currentMSecsSinceEpoch();
-
-    connect(viewer_, &RtspViewerQt::logLine, this, [](const QString& s){ qInfo().noquote() << s; });
-    viewer_->setUrl(url);
-    viewer_->start();
-    startPreviewPullTimer();
-    return true;
 }
 
 void MainWindow::doStopViewer()
