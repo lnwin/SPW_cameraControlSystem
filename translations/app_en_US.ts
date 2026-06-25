@@ -120,4 +120,10 @@
     <message><source>未连接</source><translation>Disconnected</translation></message>
     <message><source>修改 IP</source><translation>Change IP</translation></message>
 </context>
+<context>
+    <name>TriggerStatus</name>
+    <message><source>Current: Software Trigger</source><translation>Current: Software Trigger</translation></message>
+    <message><source>Current: Hardware Trigger</source><translation>Current: Hardware Trigger</translation></message>
+    <message><source>Waiting for camera confirmation...</source><translation>Waiting for camera confirmation...</translation></message>
+</context>
 </TS>

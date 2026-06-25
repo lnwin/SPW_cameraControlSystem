@@ -201,9 +201,11 @@ int main(int argc, char* argv[])
 
     // 语言切换时刷新所有 QML 引擎中的 qsTr() 绑定
     QObject::connect(&LanguageManager::instance(), &LanguageManager::languageChanged, [&](){
+        qInfo() << "[LANG] languageChanged received, retranslate trigger status";
         hud.engine()->retranslate();
         settingsWin.engine()->retranslate();
         ipWin.engine()->retranslate();
+        uiCtrl.retranslateTriggerStatus();
     });
 
     return a.exec();

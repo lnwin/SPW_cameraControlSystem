@@ -1,9 +1,18 @@
 #include "uicontroller.h"
+#include <QCoreApplication>
 #include <QTimer>
 #include <QSettings>
 
+// Stable trigger-status translation helper — context "TriggerStatus" exists in all3 .ts files
+static QString triggerText(bool hardware) {
+    return QCoreApplication::translate("TriggerStatus",
+        hardware ? "Current: Hardware Trigger" : "Current: Software Trigger");
+}
+
 UiController::UiController(QObject* parent) : QObject(parent)
 {
+    triggerStatusMsg_ = triggerText(false);
+
     auto* timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &UiController::tickTime);
     timer->start(1000);
@@ -40,7 +49,7 @@ void UiController::cmdSetTrigger(int mode)
 
     triggerSwitchLocked_ = true;
     triggerUiState_      = TriggerUiState::WaitingAck;
-    triggerStatusMsg_    = tr("等待相机确认...");
+    triggerStatusMsg_    = QCoreApplication::translate("TriggerStatus", "Waiting for camera confirmation...");
     emit triggerSwitchLockedChanged();
     emit triggerStatusMsgChanged();
     qDebug("[TRIGGER_UI] lock trigger switch, waiting device status");
@@ -64,12 +73,12 @@ void UiController::handleTriggerStatus(const QJsonObject& json)
     if (!fallback && currentMode == "hardware") {
         stableTriggerMode_ = 1;
         triggerMode_       = 1;
-        triggerStatusMsg_  = tr("当前：硬件触发");
+        triggerStatusMsg_  = triggerText(true);
         qDebug("[TRIGGER_UI] hardware trigger confirmed");
     } else {
         stableTriggerMode_ = 0;
         triggerMode_       = 0;
-        triggerStatusMsg_  = tr("当前：软件触发");
+        triggerStatusMsg_  = triggerText(false);
         if (fallback) {
             qDebug("[TRIGGER_UI] no hardware signal, rollback to software");
             qDebug("[TRIGGER_UI] append prominent system log: hardware trigger unavailable");
@@ -90,13 +99,20 @@ void UiController::handleTriggerStatus(const QJsonObject& json)
     emit triggerStatusMsgChanged();
 }
 
+void UiController::retranslateTriggerStatus()
+{
+    triggerStatusMsg_ = triggerText(stableTriggerMode_ == 1);
+    qInfo().noquote() << "[LANG] triggerStatusMsg =" << triggerStatusMsg_;
+    emit triggerStatusMsgChanged();
+}
+
 void UiController::handleTriggerTimeout()
 {
     qDebug("[TRIGGER_UI] wait trigger status timeout");
     updatingTriggerUi_ = true;
 
     triggerMode_         = stableTriggerMode_;
-    triggerStatusMsg_    = (stableTriggerMode_ == 1) ? tr("当前：硬件触发") : tr("当前：软件触发");
+    triggerStatusMsg_    = triggerText(stableTriggerMode_ == 1);
     triggerUiState_      = TriggerUiState::Idle;
     triggerSwitchLocked_ = false;
     updatingTriggerUi_   = false;

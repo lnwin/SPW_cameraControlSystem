@@ -101,6 +101,8 @@ public slots:
     // called by MainWindow when TRIGGER_STATUS arrives or 5s timeout fires
     void handleTriggerStatus(const QJsonObject& json);
     void handleTriggerTimeout();
+    // called on language switch to refresh translated trigger status text
+    void retranslateTriggerStatus();
 
     void notifyIpWaiting(const QString& msg) {
         ipWaiting_ = true; ipWaitingMsg_ = msg; emit ipWaitingChanged();
@@ -212,6 +214,6 @@ private:
     int              requestedTriggerMode_ = 0;          // 用户刚请求的模式
     TriggerUiState   triggerUiState_      = TriggerUiState::Idle;
     bool             triggerSwitchLocked_ = false;       // 锁定开关（禁止交互）
-    QString          triggerStatusMsg_    = "当前：软件触发";
+    QString          triggerStatusMsg_;
     bool             updatingTriggerUi_   = false;       // 防止程序回退再次触发命令
 };

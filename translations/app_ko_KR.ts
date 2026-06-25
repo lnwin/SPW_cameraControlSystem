@@ -135,4 +135,10 @@
     <message><source>未连接</source><translation>연결 안 됨</translation></message>
     <message><source>修改 IP</source><translation>IP 변경</translation></message>
 </context>
+<context>
+    <name>TriggerStatus</name>
+    <message><source>Current: Software Trigger</source><translation>현재: 소프트웨어 트리거</translation></message>
+    <message><source>Current: Hardware Trigger</source><translation>현재: 하드웨어 트리거</translation></message>
+    <message><source>Waiting for camera confirmation...</source><translation>카메라 확인 대기중...</translation></message>
+</context>
 </TS>

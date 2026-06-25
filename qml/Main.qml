@@ -45,7 +45,7 @@ Rectangle {
                 }
 
                 Text {
-                    text: "舟山渊视科技有限公司  V4.2.7"
+                    text: "舟山渊视科技有限公司  V4.2.8"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
