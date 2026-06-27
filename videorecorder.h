@@ -47,6 +47,7 @@ public slots:
 signals:
     void recordingStarted(const QString& filePath);
     void recordingStopped(const QString& filePath);
+    void recordingFailed(const QString& reason);   // encoder init failed → MainWindow resets isRecording_
     void snapshotSaved(const QString& filePath);
     void sendMSG2ui(const QString&);
 

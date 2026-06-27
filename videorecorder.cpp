@@ -104,7 +104,10 @@ void VideoRecorder::receiveFrame2Record(QSharedPointer<QImage> img)
         if (!openEncoderLockedForImage(*img)) {
             recording_ = false;
             encoderOpened_ = false;
-            emit sendMSG2ui(QStringLiteral("[VideoRecorder] 视频录制初始化失败"));
+            const QString r = QStringLiteral("视频录制初始化失败（编码器打开失败，请检查路径/磁盘/H264支持）");
+            qWarning() << "[REC-START-FAIL]" << r;
+            emit sendMSG2ui(QStringLiteral("[VideoRecorder] ") + r);
+            emit recordingFailed(r);   // ← notify MainWindow to reset isRecording_
             return;
         }
 
@@ -241,19 +244,25 @@ void VideoRecorder::startRecording()
 {
     QMutexLocker lk(&mutex_);
 
+    qInfo() << "[REC-STATE] startRecording called: recording_=" << recording_
+            << "encoderOpened_=" << encoderOpened_
+            << "videoRootDir_=" << videoRootDir_;
+
     if (videoRootDir_.isEmpty()) {
-        emit sendMSG2ui(QStringLiteral("[VideoRecorder] 视频根目录未设置"));
+        const QString r = QStringLiteral("视频根目录未设置");
+        qWarning() << "[REC-START-FAIL]" << r;
+        emit sendMSG2ui(QStringLiteral("[VideoRecorder] ") + r);
+        emit recordingFailed(r);
         return;
     }
     if (recording_) {
+        qWarning() << "[REC-START-FAIL] already recording, ignore";
         emit sendMSG2ui(QStringLiteral("[VideoRecorder] 当前已在录制中"));
         return;
     }
 
     currentOptions_.container = myRecordType;
 
-    // 强烈建议：为避免 AVI+H264 在 PC 上黑屏/时长异常，默认强制 MP4
-    // 如果你必须支持 AVI，请在 openEncoderLockedForImage() 里用 MPEG4 代替 H264
     if (currentOptions_.container == VideoContainer::AVI) {
         emit sendMSG2ui(QStringLiteral("[VideoRecorder] AVI 容器兼容性较差，已自动切换为 MP4"));
         currentOptions_.container = VideoContainer::MP4;
@@ -263,6 +272,7 @@ void VideoRecorder::startRecording()
     encoderOpened_ = false;
     currentRecordingPath_.clear();
 
+    qInfo() << "[REC-STATE] startRecording done: recording_=true, waiting first frame to open encoder";
     emit sendMSG2ui(QStringLiteral("[VideoRecorder] startRecording"));
 }
 

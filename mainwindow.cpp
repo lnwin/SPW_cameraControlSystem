@@ -349,7 +349,12 @@ void MainWindow::on_action_grap_triggered() { iscapturing_ = true; }
 
 void MainWindow::on_action_startRecord_triggered()
 {
-    if (isRecording_) return;
+    qInfo() << "[REC-UI] record button clicked isRecording_=" << isRecording_
+            << "viewer=" << (viewer_ != nullptr);
+    if (isRecording_) {
+        qWarning() << "[REC-START-FAIL] isRecording_ already true, ignoring click";
+        return;
+    }
     if (!viewer_) {
         ThemedMessageDialog::information(this, tr("提示"), tr("请先打开相机预览再开始录制。"));
         return;
@@ -579,6 +584,11 @@ void MainWindow::bindUiController(UiController* ctrl)
         ctrl->setRecordSegmentElapsed("00:00");
         ctrl->setRecordTotalElapsed("00:00");
         ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + "录像已保存：" + QFileInfo(path).fileName());
+    });
+    // Reset isRecording_ when encoder init fails so the user can retry
+    connect(myVideoRecorder, &VideoRecorder::recordingFailed, this, [this](const QString& reason){
+        qWarning() << "[REC-STATE] recordingFailed, resetting isRecording_. reason=" << reason;
+        isRecording_ = false;
     });
     connect(myVideoRecorder, &VideoRecorder::sendMSG2ui, ctrl, [ctrl](const QString& msg){
         ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + msg);
