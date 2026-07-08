@@ -101,4 +101,9 @@ private:
     int    fpsFrameCount_  = 0;
     qint64 fpsWindowStart_ = 0;
     int    lastFps_        = 0;
+
+    // overlay 复用缓冲区（避免每帧分配 8-16MB 导致长时内存碎片化）
+    // 3 槽：防止 update() 异步 paint 仍在读某槽时被下一帧 memcpy 覆盖
+    QImage overlayDispBuf_[3];              // 显示 overlay 三缓冲
+    int    overlayDispIdx_ = 0;
 };

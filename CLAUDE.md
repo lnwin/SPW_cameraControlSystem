@@ -109,6 +109,32 @@ constexpr int CAMERA_FPS = 25;
 **风险点：** 无
 
 ---
+### [2026-07-08] 长时拉流卡顿治理：内存碎片化 + 队列背压 + 编码降频
+**修改目标：** 排查并修复「RTSP 连续拉流 10+ 小时后画面延迟/卡顿/越来越慢」。按概率定位到三类根因并修复。
+
+1. **UI 热路径每帧堆分配（主因，内存碎片化）**
+   - 原 overlay 叠字每帧对 1080p ARGB32（约 8MB）做深拷贝，录像开启时每帧分配两次（约 16MB），25fps 下每秒 ~400MB alloc/free，长时导致 Windows 堆碎片化、malloc 延迟劣化。
+   - 新增 `applyOverlayInto(dst, src, text)`：复用外部缓冲 memcpy + 叠字，替代每帧 `src.copy()`。
+   - 显示走双缓冲、录像走双缓冲（`use_count==1` 判定避免跨线程覆盖，占用时降级临时分配）；截图为冷路径保持单次分配。稳态下 UI 线程每帧堆分配降为零。
+
+2. **GStreamer 队列无界背压（次因，延迟累积）**
+   - 两条中间 queue 由 `max-size-buffers=0 leaky=no`（无上限+满则反压上游）改为 `max-size-buffers=4 leaky=downstream`（限深+丢旧不反压），消除网络抖动→解码变慢→积压→背压→rtspsrc 停拉的恶性循环。
+   - `kDropOnLatency` 由 `false` 改 `true`，防止 jitter buffer 延迟单调增长。
+   - 帧池 3 槽扩到 5 槽；选槽跳过消费者仍持有（`use_count>1`）的槽，全占用则临时分配，消除写读竞争导致的偶发花屏。
+
+3. **录像全 I 帧编码 CPU 长时降频**
+   - `gop_size` 由 `1`（全 I 帧）改为 `25`，大幅降低 1080p@25 编码 CPU 负荷，避免热累积降频拖慢录像线程。
+
+**涉及文件：** rtspviewerqt.cpp、mainwindow.cpp、mainwindow.h、videorecorder.cpp
+**编译结果：** 待 Qt Creator qmake clean + rebuild 验证（Qt 5.15.2；用到 sizeInBytes/constBits/use_count 均兼容）
+**运行验证：** 待长时压测（建议 ≥12h）：进程提交内存应平稳不增；`[PERF]` 日志 p99/gt120/stall_max 长时稳定不攀升；录像回放时长正确无变慢。
+**风险点：**
+- 帧池临时分配仅在消费者持续落后时触发，属降级保护，不影响正确性。
+- `gop_size=25` 在传输端丢包时最坏一个 GOP（1 秒）内可能残留马赛克；马赛克根因在传输而非编码，观感应无明显变化；若要求录像零马赛克可折中回退（如 12）。
+- 录像双缓冲依赖 `use_count` 为保守估计，只会多分配、不会误覆盖，线程安全。
+**下一步：** 长时压测确认后，视情况优化 `calcNextPullIntervalMs` 自适应降速的轻微正反馈。
+
+---
 
 ## 代码与商业机密保密规则
 

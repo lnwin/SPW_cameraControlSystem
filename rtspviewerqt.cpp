@@ -108,15 +108,18 @@ static void pump_bus(GstElement* pipeline,
 
 // -------------------------- Pipeline Builders (UDP) --------------------------
 static constexpr int  kUdpRcvBufBytes = 16 * 1024 * 1024; // 16MB
-static constexpr bool kDropOnLatency  = false;
+// drop-on-latency 作用于 rtspjitterbuffer（RTP 域，按整帧丢弃，解码安全）
+// 用于抑制长时延迟累积；如仍怀疑启动异常可临时置 false 回退。
+static constexpr bool kDropOnLatency  = true;
 
-// Isolation queue right after rtspsrc (RTP pad only via "src.")
+// 压缩域队列：绝不能 leaky（丢压缩帧会破坏 H264 参考链 → 绿屏/花屏）。
+// leaky=no + 时间上限，满时对上游产生背压由 jitterbuffer 的 drop-on-latency 兜底。
 static const char* kPostSrcQueue =
-    "queue max-size-time=300000000 max-size-buffers=0 max-size-bytes=0 leaky=no";
+    "queue max-size-time=200000000 max-size-buffers=0 max-size-bytes=0 leaky=no";
 
-// Pre-decode queue (bounded)
+// Pre-decode queue（同为压缩域，leaky=no）
 static const char* kPreDecodeQueue =
-    "queue max-size-time=300000000 max-size-buffers=0 max-size-bytes=0 min-threshold-time=0 leaky=no";
+    "queue max-size-time=200000000 max-size-buffers=0 max-size-bytes=0 min-threshold-time=0 leaky=no";
 
 static QString build_hw_d3d11_pipeline_udp(const QString& url, int latencyMs)
 {
@@ -372,17 +375,19 @@ RECONNECT:
     int  no_sample_cnt = 0;
     bool printedCaps = false;
     int  busPumpTick = 0;
+    int  warmupSkip = 2;   // 丢弃前 2 帧，规避解码器首帧未初始化（绿帧）
 
-    std::array<QSharedPointer<QImage>, 3> pool;
+    std::array<QSharedPointer<QImage>, 5> pool;
     int poolIdx = 0;
     int poolW = 0, poolH = 0;
 
     auto ensurePool = [&](int w, int h) {
-        if (w == poolW && h == poolH && pool[0] && pool[1] && pool[2]) return;
+        bool ok = (w == poolW && h == poolH);
+        if (ok) for (auto& p : pool) if (!p) { ok = false; break; }
+        if (ok) return;
         poolW = w; poolH = h;
-        for (int i = 0; i < 3; ++i) {
-            pool[i] = QSharedPointer<QImage>::create(poolW, poolH, QImage::Format_ARGB32);
-        }
+        for (auto& p : pool)
+            p = QSharedPointer<QImage>::create(poolW, poolH, QImage::Format_ARGB32);
         poolIdx = 0;
         emit logLine(QString("[GST] QImage pool recreated: %1x%2").arg(poolW).arg(poolH));
     };
@@ -474,7 +479,15 @@ RECONNECT:
         if (!printedCaps) {
             printedCaps = true;
             emit logLine(QString("[GST] negotiated caps: %1").arg(capsToString(caps)));
-            emit logLine(QString("[GST] w=%1 h=%2 stride=%3").arg(w).arg(h).arg(srcStride));
+            emit logLine(QString("[GST] w=%1 h=%2 srcStride=%3 rowBytes=%4")
+                             .arg(w).arg(h).arg(srcStride).arg(w * 4));
+        }
+
+        // 预热：丢弃解码器首几帧（IDR 到达前可能输出未初始化绿帧）
+        if (warmupSkip > 0) {
+            --warmupSkip;
+            gst_sample_unref(sample);
+            continue;
         }
 
         ensurePool(w, h);
@@ -486,6 +499,8 @@ RECONNECT:
 #ifndef QT_NO_DEBUG
             QElapsedTimer tCopy; tCopy.start();
 #endif
+            // 5 槽轮转：回绕间隔约 5 帧(~200ms)，远大于 UI 读帧耗时，
+            // 消费者读取期间不会被覆盖写（无需引用计数）
             QSharedPointer<QImage> img = pool[poolIdx];
             poolIdx = (poolIdx + 1) % (int)pool.size();
 

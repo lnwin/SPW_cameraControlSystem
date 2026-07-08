@@ -386,7 +386,7 @@ bool VideoRecorder::openEncoderLockedForImage(const QImage &img)
     codecCtx_->time_base = AVRational{1, 1000}; // 1 tick = 1ms
     codecCtx_->framerate = AVRational{(int)encFps_, 1};
 
-    codecCtx_->gop_size = 1;   // 全 I 帧，彻底消除马赛克
+    codecCtx_->gop_size = 25;  // 每 25 帧一个 I 帧（降低 CPU 负荷，防止长时降频）
     codecCtx_->max_b_frames = 0;
 
     if (codecCtx_->codec_id == AV_CODEC_ID_H264) {

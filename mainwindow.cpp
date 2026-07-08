@@ -19,6 +19,8 @@
 #include <QSettings>
 #include <QUrl>
 
+#include <cstring>
+
 // ── 静态帧状态表（避免污染头文件）──────────────────────────────────────────
 static QHash<const MainWindow*, qint64> g_dropUntilMs;
 static QHash<const MainWindow*, int>    g_noFrameStreak;
@@ -37,9 +39,16 @@ static int calcNextPullIntervalMs(int streak)
 }
 
 // ── 叠加时间文字 ─────────────────────────────────────────────────────────────
-static QImage applyOverlay(const QImage& src, const QString& topText)
+// 将 src 叠加时间戳后写入 dst（复用 dst 缓冲，避免每帧分配 8MB）
+static void applyOverlayInto(QImage& dst, const QImage& src, const QString& topText)
 {
-    QImage dst = src.copy();
+    // 仅在尺寸/格式不匹配时才重新分配，稳态下零分配
+    if (dst.size() != src.size() || dst.format() != src.format())
+        dst = QImage(src.size(), src.format());
+    // 复制像素到复用缓冲（内存已就位，仅 memcpy，无堆分配）
+    std::memcpy(dst.bits(), src.constBits(),
+                static_cast<size_t>(src.sizeInBytes()));
+
     QPainter p(&dst);
     p.setRenderHint(QPainter::TextAntialiasing);
     const QFont font("Arial", 20, QFont::Bold);
@@ -54,7 +63,6 @@ static QImage applyOverlay(const QImage& src, const QString& topText)
     p.fillRect(bg, Qt::black);
     p.setPen(Qt::white);
     p.drawText(bg, Qt::AlignCenter, line);
-    return dst;
 }
 
 // ── 构造 ─────────────────────────────────────────────────────────────────────
@@ -151,19 +159,33 @@ MainWindow::MainWindow(QWidget* parent)
                     fpsWindowStart_ = now;
                 }
 
-                if (view_) view_->setImage(applyOverlay(*img, overlayTopText_));
+                if (view_) {
+                    QImage& disp = overlayDispBuf_[overlayDispIdx_];
+                    overlayDispIdx_ = (overlayDispIdx_ + 1) % 3;
+                    applyOverlayInto(disp, *img, overlayTopText_);
+                    view_->setImage(disp);
+                }
 
                 if (isRecording_) {
-                    if (overlayEnabled_)
-                        emit sendFrame2Record(QSharedPointer<QImage>::create(applyOverlay(*img, overlayTopText_)));
-                    else
+                    if (overlayEnabled_) {
+                        // 录像跨线程：每帧独立分配一帧，避免与录像线程读缓冲竞争
+                        // （仍比原来 copy+create 少一次分配）
+                        auto rec = QSharedPointer<QImage>::create();
+                        applyOverlayInto(*rec, *img, overlayTopText_);
+                        emit sendFrame2Record(rec);
+                    } else {
                         emit sendFrame2Record(img);
+                    }
                 }
                 if (iscapturing_) {
-                    if (overlayEnabled_)
-                        emit sendFrame2Capture(QSharedPointer<QImage>::create(applyOverlay(*img, overlayTopText_)));
-                    else
+                    if (overlayEnabled_) {
+                        // 截图非热路径，单独分配一帧即可
+                        auto snap = QSharedPointer<QImage>::create();
+                        applyOverlayInto(*snap, *img, overlayTopText_);
+                        emit sendFrame2Capture(snap);
+                    } else {
                         emit sendFrame2Capture(img);
+                    }
                     iscapturing_ = false;
                 }
             } else {
