@@ -304,6 +304,86 @@ Rectangle {
                         horizontalAlignment: Text.AlignRight
                     }
 
+                    // 输出频率选择（独立功能，不与硬件触发状态绑定）
+                    RowLayout {
+                        Layout.fillWidth: true
+                        opacity: (uiCtrl && uiCtrl.freqSwitchLocked) ? 0.45 : 1.0
+                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                        Text {
+                            text: qsTr("输出频率")
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                            color: "#9aa0a6"
+                            font.pixelSize: 12; font.family: "Microsoft YaHei UI"
+                        }
+                        Rectangle {
+                            id: freqDropBtn
+                            width: 80; height: 22; radius: 3
+                            color: "#0a1a0a"
+                            border.color: "#2a4a3a"; border.width: 1
+                            // outputFreq -1 = 未知，UI 默认显示 50 Hz
+                            property int displayFreq: (uiCtrl && uiCtrl.outputFreq > 0) ? uiCtrl.outputFreq : 50
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 4
+                                Text {
+                                    text: freqDropBtn.displayFreq + " Hz"
+                                    color: "#c8d8c8"
+                                    font.pixelSize: 11; font.family: "Microsoft YaHei UI"
+                                    height: freqDropBtn.height
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                Text {
+                                    text: "▾"; color: "#5a8a6a"; font.pixelSize: 9
+                                    height: freqDropBtn.height
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: uiCtrl && !uiCtrl.freqSwitchLocked
+                                onClicked: { freqMenu.x = 0; freqMenu.y = freqDropBtn.height; freqMenu.open() }
+                            }
+                            Menu {
+                                id: freqMenu
+                                background: Rectangle {
+                                    implicitWidth: freqDropBtn.width
+                                    color: "#0a1a0a"; border.color: "#2a4a3a"; border.width: 1; radius: 3
+                                }
+                                MenuItem {
+                                    id: freqItem50; implicitWidth: freqDropBtn.width
+                                    contentItem: Text {
+                                        text: "50 Hz"; leftPadding: 8; verticalAlignment: Text.AlignVCenter
+                                        color: (freqDropBtn.displayFreq === 50 || freqItem50.highlighted) ? "#00ff99" : "#c8d8c8"
+                                        font.pixelSize: 11; font.family: "Microsoft YaHei UI"
+                                    }
+                                    background: Rectangle { color: freqItem50.highlighted ? "#1a3a1a" : (freqDropBtn.displayFreq === 50 ? "#152b15" : "transparent") }
+                                    onTriggered: if (uiCtrl) uiCtrl.cmdSetFreq(50)
+                                }
+                                MenuItem {
+                                    id: freqItem133; implicitWidth: freqDropBtn.width
+                                    contentItem: Text {
+                                        text: "133 Hz"; leftPadding: 8; verticalAlignment: Text.AlignVCenter
+                                        color: (freqDropBtn.displayFreq === 133 || freqItem133.highlighted) ? "#00ff99" : "#c8d8c8"
+                                        font.pixelSize: 11; font.family: "Microsoft YaHei UI"
+                                    }
+                                    background: Rectangle { color: freqItem133.highlighted ? "#1a3a1a" : (freqDropBtn.displayFreq === 133 ? "#152b15" : "transparent") }
+                                    onTriggered: if (uiCtrl) uiCtrl.cmdSetFreq(133)
+                                }
+                                MenuItem {
+                                    id: freqItem377; implicitWidth: freqDropBtn.width
+                                    contentItem: Text {
+                                        text: "377 Hz"; leftPadding: 8; verticalAlignment: Text.AlignVCenter
+                                        color: (freqDropBtn.displayFreq === 377 || freqItem377.highlighted) ? "#00ff99" : "#c8d8c8"
+                                        font.pixelSize: 11; font.family: "Microsoft YaHei UI"
+                                    }
+                                    background: Rectangle { color: freqItem377.highlighted ? "#1a3a1a" : (freqDropBtn.displayFreq === 377 ? "#152b15" : "transparent") }
+                                    onTriggered: if (uiCtrl) uiCtrl.cmdSetFreq(377)
+                                }
+                            }
+                        }
+                    }
+
                     Item { Layout.fillHeight: true }
                 }
             }
