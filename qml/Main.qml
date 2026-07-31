@@ -37,15 +37,14 @@ Rectangle {
                 spacing: 8
 
                 Image {
-                    source: appIconDir + "Slogo.png"
+                    source: "qrc:/new/prefix1/release/icons/UI/tongsheng.jpg"
                     height: 20
-                    width: height * (547/379)
                     fillMode: Image.PreserveAspectFit
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
                 Text {
-                    text: "舟山渊视科技有限公司  V4.2.11"
+                    text: "宁波同盛海洋科技有限公司  V4.2.12"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"

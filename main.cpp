@@ -126,7 +126,7 @@ int main(int argc, char* argv[])
     qDebug() << "appIconDir =" << appIconDir;
 
     HudWindow hud(&uiCtrl, {}, appIconDir);
-    hud.setWindowIcon(QIcon(":/new/prefix1/release/icons/current/Slogo.png"));
+    hud.setWindowIcon(QIcon(":/new/prefix1/release/icons/UI/tongsheng.jpg"));
     hud.show();
 
     QObject::connect(&uiCtrl, &UiController::requestWinMinimize, &hud, &QWidget::showMinimized);
