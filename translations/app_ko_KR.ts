@@ -67,6 +67,12 @@
     <message><source>当前：软件触发</source><translation>현재: 소프트웨어 트리거</translation></message>
     <message><source>开</source><translation>켜짐</translation></message>
     <message><source>关</source><translation>꺼짐</translation></message>
+    <message><source>曝光时间</source><translation>노출 시간</translation></message>
+    <message><source>短</source><translation>짧게</translation></message>
+    <message><source>较短</source><translation>약간 짧게</translation></message>
+    <message><source>中</source><translation>보통</translation></message>
+    <message><source>较长</source><translation>약간 길게</translation></message>
+    <message><source>长</source><translation>길게</translation></message>
     <message><source>系统状态</source><translation>시스템 상태</translation></message>
     <message><source>录像状态</source><translation>녹화 상태</translation></message>
     <message><source>状态</source><translation>상태</translation></message>

@@ -530,7 +530,10 @@ void MainWindow::bindUiController(UiController* ctrl)
         QDesktopServices::openUrl(QUrl::fromLocalFile("D:/SP_camera_record"));
     });
     connect(ctrl, &UiController::brightnessChanged, this, [this, ctrl](){
-        emit sendCameraExporeGain(curSelectedSn_, 0, ctrl->brightness());
+        emit sendCameraExporeGain(curSelectedSn_, ctrl->exposureUs(), ctrl->brightness());
+    });
+    connect(ctrl, &UiController::exposureUsChanged, this, [this, ctrl](){
+        emit sendCameraExporeGain(curSelectedSn_, ctrl->exposureUs(), ctrl->brightness());
     });
     connect(ctrl, &UiController::requestToggleCrosshair, this, [this](bool en){
         if (view_) view_->setCrosshairEnabled(en);

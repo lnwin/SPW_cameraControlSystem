@@ -36,6 +36,7 @@ class UiController : public QObject
     // 连接中状态（防重复点击）
     Q_PROPERTY(bool     connecting         READ connecting         NOTIFY connectingChanged)
     Q_PROPERTY(int      brightness         READ brightness         WRITE setBrightness NOTIFY brightnessChanged)
+    Q_PROPERTY(int      exposureUs         READ exposureUs         WRITE setExposureUs NOTIFY exposureUsChanged)
     Q_PROPERTY(bool     crosshairEnabled   READ crosshairEnabled   NOTIFY crosshairEnabledChanged)
     Q_PROPERTY(bool     ledEnabled           READ ledEnabled           NOTIFY ledEnabledChanged)
     Q_PROPERTY(int      triggerMode          READ triggerMode          NOTIFY triggerModeChanged) // 0=software 1=hardware
@@ -68,6 +69,7 @@ public:
     bool        toastSuccess()         const { return toastSuccess_; }
     bool        connecting()           const { return connecting_; }
     int         brightness()           const { return brightness_; }
+    int         exposureUs()           const { return exposureUs_; }
     bool        crosshairEnabled()     const { return crosshairEnabled_; }
     bool        ledEnabled()           const { return ledEnabled_; }
     int         triggerMode()          const { return triggerMode_; }
@@ -93,6 +95,7 @@ public slots:
     void setSelectedSn(const QString& v)   { if (selectedSn_ == v) return; selectedSn_ = v; emit selectedSnChanged(); }
     void setConnecting(bool v)             { if (connecting_ == v) return; connecting_ = v; emit connectingChanged(); }
     void setBrightness(int v)              { v = qBound(0,v,15); if (brightness_ == v) return; brightness_ = v; emit brightnessChanged(); }
+    void setExposureUs(int v)              { v = qBound(10000,v,30000); if (exposureUs_ == v) return; exposureUs_ = v; emit exposureUsChanged(); }
 
     Q_INVOKABLE void cmdToggleCrosshair() { crosshairEnabled_ = !crosshairEnabled_; emit crosshairEnabledChanged(); emit requestToggleCrosshair(crosshairEnabled_); }
     Q_INVOKABLE void cmdSetLed(bool en);
@@ -150,6 +153,7 @@ signals:
     void toastChanged();
     void connectingChanged();
     void brightnessChanged();
+    void exposureUsChanged();
     void crosshairEnabledChanged();
     void ledEnabledChanged();
     void triggerModeChanged();
@@ -204,6 +208,7 @@ private:
     QTimer      toastTimer_;
     bool        connecting_          = false;
     int         brightness_          = 15;
+    int         exposureUs_          = 20000;
     bool        crosshairEnabled_    = false;
     bool        ledEnabled_          = false;
     int         triggerMode_         = 0;  // 0=software, 1=hardware
