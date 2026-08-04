@@ -83,6 +83,12 @@
     <message><source>当前：软件触发</source><translation>Current: Software Trigger</translation></message>
     <message><source>开</source><translation>ON</translation></message>
     <message><source>关</source><translation>OFF</translation></message>
+    <message><source>曝光时间</source><translation>Exposure</translation></message>
+    <message><source>短</source><translation>Short</translation></message>
+    <message><source>较短</source><translation>Short+</translation></message>
+    <message><source>中</source><translation>Medium</translation></message>
+    <message><source>较长</source><translation>Long+</translation></message>
+    <message><source>长</source><translation>Long</translation></message>
 </context>
 <context>
     <name>TopToolBar</name>

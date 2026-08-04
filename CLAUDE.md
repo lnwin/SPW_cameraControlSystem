@@ -136,6 +136,25 @@ constexpr int CAMERA_FPS = 25;
 
 ---
 
+### [2026-08-04] V4.2.12 新增相机曝光时间控制
+**修改目标：**
+1. 在右侧状态面板新增曝光时间滑块（range 10000~30000 µs，step 1000），操作方式与增益（亮度）一致。
+2. 曝光滑块右侧不显示数值，改用 短/较短/中/较长/长 五档描述文字，实际发送数值不变。
+3. 接入多语言切换：标签 "曝光时间" 及五档文字均使用 `qsTr()`，语言切换时自动 retranslate。
+
+**涉及文件：**
+- `uicontroller.h`（新增 `exposureUs` Q_PROPERTY、`setExposureUs` 槽、`exposureUsChanged` 信号、`exposureUs_` 成员，默认 20000）
+- `mainwindow.cpp`（`brightnessChanged` lambda 补传 `exposureUs`；新增 `exposureUsChanged` lambda 触发发送）
+- `qml/Main.qml`（亮度滑块下方新增曝光滑块；右侧显示五档标签；版本号 → V4.2.12）
+- `translations/app_en_US.ts`（`Main` context 新增：Exposure / Short / Short+ / Medium / Long+ / Long）
+- `translations/app_ko_KR.ts`（`Main` context 新增：노출 시간 / 짧게 / 약간 짧게 / 보통 / 약간 길게 / 길게）
+
+**编译结果：** 待 Qt Creator qmake → Rebuild + lrelease 验证
+**运行验证：** 连接设备后拖动曝光滑块，日志区应出现 `CMD_SET_CAMERA exposure_us=xxxxx` 发送记录；切换语言后标签同步变化
+**风险点：** 无
+
+---
+
 ## 代码与商业机密保密规则
 
 > **最高优先级规则，适用于本工程及后续所有工程。**

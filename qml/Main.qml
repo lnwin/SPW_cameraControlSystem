@@ -45,7 +45,7 @@ Rectangle {
                 }
 
                 Text {
-                    text: "舟山渊视科技有限公司  V4.2.11"
+                    text: "舟山渊视科技有限公司  V4.2.12"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
@@ -233,6 +233,45 @@ Rectangle {
                             text: uiCtrl ? uiCtrl.brightness : 100
                             color: "#00ff99"; font.pixelSize: 11; font.family: "Microsoft YaHei UI"
                             width: 28; horizontalAlignment: Text.AlignRight
+                        }
+                    }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: "#00cc88"; opacity: 0.2 }
+
+                    // 曝光时间调节（10000~30000 µs，右侧显示短/较短/中/较长/长）
+                    Text { text: qsTr("曝光时间"); color: (uiCtrl && uiCtrl.rtspConnected) ? "#9aa0a6" : "#3a4a42"; font.pixelSize: 12; font.family: "Microsoft YaHei UI" }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Slider {
+                            Layout.fillWidth: true
+                            from: 10000; to: 30000; stepSize: 1000
+                            value: uiCtrl ? uiCtrl.exposureUs : 20000
+                            enabled: uiCtrl && uiCtrl.rtspConnected
+                            onMoved: if (uiCtrl) uiCtrl.exposureUs = value
+                            background: Rectangle {
+                                x: parent.leftPadding; y: parent.topPadding + parent.availableHeight / 2 - height / 2
+                                width: parent.availableWidth; height: 3; radius: 1
+                                color: "#0a1a12"
+                                Rectangle { width: parent.parent.visualPosition * parent.width; height: parent.height; radius: 1; color: "#00cc88" }
+                            }
+                            handle: Rectangle {
+                                x: parent.leftPadding + parent.visualPosition * parent.availableWidth - width / 2
+                                y: parent.topPadding + parent.availableHeight / 2 - height / 2
+                                width: 10; height: 10; radius: 5
+                                color: parent.pressed ? "#00ff99" : "#00cc88"
+                            }
+                        }
+                        Text {
+                            text: {
+                                var v = uiCtrl ? uiCtrl.exposureUs : 20000
+                                if (v <= 13000) return qsTr("短")
+                                if (v <= 17000) return qsTr("较短")
+                                if (v <= 22000) return qsTr("中")
+                                if (v <= 26000) return qsTr("较长")
+                                return qsTr("长")
+                            }
+                            color: "#00ff99"; font.pixelSize: 11; font.family: "Microsoft YaHei UI"
+                            width: 36; horizontalAlignment: Text.AlignRight
                         }
                     }
 
