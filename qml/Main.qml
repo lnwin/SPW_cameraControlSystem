@@ -37,7 +37,7 @@ Rectangle {
                 spacing: 8
 
                 Image {
-                    source: appIconDir + "Slogo.png"
+                    source: "qrc:/new/prefix1/release/icons/UI/naisi.jpg"
                     height: 20
                     width: height * (547/379)
                     fillMode: Image.PreserveAspectFit
@@ -45,7 +45,7 @@ Rectangle {
                 }
 
                 Text {
-                    text: "舟山渊视科技有限公司  V4.2.12"
+                    text: "奈斯（天津）科技发展有限责任公司  V4.2.12"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"

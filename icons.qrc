@@ -46,6 +46,7 @@
         <file>release/icons/UI/stopRecord.png</file>
         <file>release/icons/UI/grap.png</file>
         <file>release/icons/UI/setting.png</file>
+        <file>release/icons/UI/naisi.jpg</file>
         <file>YS-camera-logo.ico</file>
     </qresource>
 </RCC>
