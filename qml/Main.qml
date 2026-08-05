@@ -38,14 +38,14 @@ Rectangle {
 
                 Image {
                     source: "qrc:/new/prefix1/release/icons/UI/CILAB.png"
-                    height: 20
-                    width: height * (547/379)
+                    height: 32
+                    width: height * 3
                     fillMode: Image.PreserveAspectFit
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
                 Text {
-                    text: "舟山渊视科技有限公司  V4.2.12"
+                    text: "Cilab Creative Idea Lab  V4.2.12"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
