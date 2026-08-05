@@ -37,7 +37,7 @@ Rectangle {
                 spacing: 8
 
                 Image {
-                    source: appIconDir + "Slogo.png"
+                    source: "qrc:/new/prefix1/release/icons/UI/CILAB.png"
                     height: 20
                     width: height * (547/379)
                     fillMode: Image.PreserveAspectFit
