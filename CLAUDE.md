@@ -155,6 +155,36 @@ constexpr int CAMERA_FPS = 25;
 
 ---
 
+### [2026-09-03] V4.3 视频区全屏切换按钮 + 全屏态拖动/四角缩放窗口
+**修改目标：**
+1. 视频显示区右上角新增全屏切换按钮，点击后视频 widget 铺满整个主界面（标题栏/工具栏/侧栏/日志区全部被覆盖），图像比例不变；再次点击恢复原布局。
+2. 全屏态下按 Esc 亦可恢复。
+3. 全屏态下标题栏被视频盖住，改为在视频上左键拖动移动窗口：仅在图像未放大（zoom==1，此时左键本无平移功能）时生效；已放大时左键拖动仍为平移图像。与标题栏一致，最大化状态下不移动。
+4. 全屏态下鼠标拖拽视频四角（16px 热区）缩放窗口：左/上侧的角同时移动窗口位置，固定对角不动；最小尺寸 640×400 与原右下角 resize 一致；悬停四角时光标变为对角箭头；四角判定优先于窗口拖动。
+
+**实现要点：**
+- 视频是原生 `ZoomPanImageView`（QWidget）叠在 QQuickWidget 之上，QML 内绘制的按钮会被遮挡，因此按钮做在 C++ 侧，作为视频 widget 的子 `QToolButton`，始终浮在图像上方。
+- `HudWindow::syncVideoGeometry()` 增加全屏分支：`videoFullscreen_` 为真时 `setGeometry(rect())`，否则照旧对齐 QML `videoArea`。
+- `ZoomPanImageView::paintEvent` 本身按 fit 比例绘制（`sFit = min(w/iw, h/ih)`），铺满窗口后自动保持比例，无需改动绘制逻辑；不涉及任何帧数据处理。
+- 图标由 `QPainter` 程序绘制（四角括号，expand 朝外 / restore 朝内），配色 `#00cc88` / hover `#00ff99`，与 HUD 风格一致。
+- 对视频 widget 安装 eventFilter：`Resize` → 重排按钮位置；全屏态 `Esc` → 退出全屏；全屏态左键 Press/Move/Release → 先用 `cornerAt()` 判定四角热区，命中则按 globalPos 增量 `setGeometry()` 缩放窗口（左/上角移动 left/top 边，最小尺寸只回收移动边）；未命中则通过 `qobject_cast<ZoomPanImageView*>` 读取 `zoom()`，未放大时 `move()` 窗口。悬停仅在无按键时接管光标，不干扰平移手形光标；退出全屏时复位全部状态。进入全屏时把焦点交给视频 widget，保证 Esc 直接可用。
+- 按钮边距 8 → 18，避开右上角缩放热区。
+
+**涉及文件：**
+- `hudwindow.h`（新增 `setVideoFullscreen/isVideoFullscreen`、`eventFilter`、`layoutFullscreenButton`、`updateFullscreenButtonUi`；成员 `fsBtn_`、`videoFullscreen_`）
+- `hudwindow.cpp`（`embedVideoWidget` 创建按钮并安装过滤器；`syncVideoGeometry` 全屏分支；新增上述函数与图标绘制辅助）
+- `translations/app_zh_CN.ts`、`app_en_US.ts`、`app_ko_KR.ts`、`app_nl_NL.ts`（新增 `HudWindow` context：全屏显示 / 恢复布局 (Esc)）
+- `qml/Main.qml`（版本号 → V4.3）
+
+**编译结果：** 通过（MSVC2019_64 + Qt 5.15.2 Release，jom 全量构建，exe 已重新链接；lrelease 106 条全部 finished）。第一轮修复了 `QPolygonF` 在 Qt 5.15 下不支持初始化列表构造的问题。
+**运行验证：** 待用户验证：拉流后点击视频区右上角按钮 → 视频铺满窗口且比例正确；再点击或按 Esc → 恢复；全屏态未放大时左键拖动视频 → 窗口跟随移动；滚轮放大后左键拖动 → 平移图像（不移动窗口）；全屏态鼠标移到四角光标变对角箭头，拖动 → 窗口缩放、视频随之铺满、比例不变，缩到 640×400 不再变小。
+**风险点：**
+- 全屏态下 QML 的 Toast / IP 等待遮罩会被原生视频 widget 盖住，不可见（恢复布局后正常）。
+- 全屏态覆盖了自绘标题栏，最小化/关闭需先恢复布局。
+- 按钮 tooltip 用 C++ `tr()`，运行时切换语言后需切换一次全屏状态才刷新文案（QML 部分不受影响）。
+
+---
+
 ## 代码与商业机密保密规则
 
 > **最高优先级规则，适用于本工程及后续所有工程。**

@@ -35,6 +35,11 @@
     <message><source>触发模式: %1</source><translation>触发模式: %1</translation></message>
 </context>
 <context>
+    <name>HudWindow</name>
+    <message><source>全屏显示</source><translation>全屏显示</translation></message>
+    <message><source>恢复布局 (Esc)</source><translation>恢复布局 (Esc)</translation></message>
+</context>
+<context>
     <name>ThemedMessageDialog</name>
     <message><source>确定</source><translation>确定</translation></message>
 </context>

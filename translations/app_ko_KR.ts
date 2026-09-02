@@ -35,6 +35,11 @@
     <message><source>触发模式: %1</source><translation>트리거 모드: %1</translation></message>
 </context>
 <context>
+    <name>HudWindow</name>
+    <message><source>全屏显示</source><translation>전체 화면</translation></message>
+    <message><source>恢复布局 (Esc)</source><translation>레이아웃 복원 (Esc)</translation></message>
+</context>
+<context>
     <name>ThemedMessageDialog</name>
     <message><source>确定</source><translation>확인</translation></message>
 </context>
