@@ -37,15 +37,15 @@ Rectangle {
                 spacing: 8
 
                 Image {
-                    source: appIconDir + "Slogo.png"
-                    height: 20
-                    width: height * (547/379)
+                    source: "qrc:/new/prefix1/release/icons/current/SGP-logo.png"
+                    height: 24
+                    width: height * (2048/689)
                     fillMode: Image.PreserveAspectFit
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
                 Text {
-                    text: "舟山渊视科技有限公司  V4.3.1"
+                    text: "SGP  V4.3.1"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
