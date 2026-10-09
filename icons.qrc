@@ -1,6 +1,6 @@
 <RCC>
     <qresource prefix="/">
-        <file alias="icons/current/Slogo.png">release/icons/current/Slogo.png</file>
+        <file alias="icons/current/Slogo.png">release/icons/current/SGP-logo.png</file>
     </qresource>
     <qresource prefix="/new/prefix1">
         <file>release/icons/current/03.png</file>
@@ -36,6 +36,8 @@
         <file>release/icons/current/sensor-false.svg</file>
         <file>release/icons/current/sensor-true.svg</file>
         <file>release/icons/current/set.svg</file>
+        <file>release/icons/current/SGP-logo.png</file>
+        <file>release/icons/current/SGP-logo.ico</file>
         <file>release/icons/current/Slogo.png</file>
         <file>release/icons/current/system-calibrate.svg</file>
         <file>release/icons/current/TH Tech1.png</file>
