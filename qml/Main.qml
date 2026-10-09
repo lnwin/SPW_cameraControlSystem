@@ -45,7 +45,7 @@ Rectangle {
                 }
 
                 Text {
-                    text: "SGP  V4.3.1"
+                    text: "OCEANIS ROBOTICS  V4.3.1"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
