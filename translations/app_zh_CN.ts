@@ -33,6 +33,7 @@
     <message><source>开</source><translation>开</translation></message>
     <message><source>关</source><translation>关</translation></message>
     <message><source>触发模式: %1</source><translation>触发模式: %1</translation></message>
+    <message><source>未连接</source><translation>未连接</translation></message>
 </context>
 <context>
     <name>HudWindow</name>
@@ -88,6 +89,17 @@
     <message><source>系统日志</source><translation>系统日志</translation></message>
     <message><source>分辨率</source><translation>分辨率</translation></message>
     <message><source>帧率</source><translation>帧率</translation></message>
+    <message><source>当前文件</source><translation>当前文件</translation></message>
+    <message><source>分段编号</source><translation>分段编号</translation></message>
+    <message><source>最小化</source><translation>最小化</translation></message>
+    <message><source>最大化</source><translation>最大化</translation></message>
+    <message><source>关闭</source><translation>关闭</translation></message>
+    <message><source>曝光时间</source><translation>曝光时间</translation></message>
+    <message><source>短</source><translation>短</translation></message>
+    <message><source>较短</source><translation>较短</translation></message>
+    <message><source>中</source><translation>中</translation></message>
+    <message><source>较长</source><translation>较长</translation></message>
+    <message><source>长</source><translation>长</translation></message>
 </context>
 <context>
     <name>TopToolBar</name>
@@ -130,5 +142,23 @@
     <message><source>Current: Software Trigger</source><translation>当前：软件触发</translation></message>
     <message><source>Current: Hardware Trigger</source><translation>当前：硬件触发</translation></message>
     <message><source>Waiting for camera confirmation...</source><translation>等待相机确认...</translation></message>
+</context>
+<context>
+    <name>UiController</name>
+    <message><source>⚠ 【硬件触发不可用】当前相机不具备硬件触发功能，已退回软件触发。</source><translation>⚠ 【硬件触发不可用】当前相机不具备硬件触发功能，已退回软件触发。</translation></message>
+    <message><source>相机未返回触发状态，已恢复到上一次模式。</source><translation>相机未返回触发状态，已恢复到上一次模式。</translation></message>
+    <message><source>⚠【硬件触发状态未知】相机未返回硬件触发确认，已恢复到软件触发。请检查相机是否支持硬件触发或硬件触发信号是否接入。</source><translation>⚠【硬件触发状态未知】相机未返回硬件触发确认，已恢复到软件触发。请检查相机是否支持硬件触发或硬件触发信号是否接入。</translation></message>
+</context>
+<context>
+    <name>ChangeIpDialog</name>
+    <message><source>修改相机 IP</source><translation>修改相机 IP</translation></message>
+    <message><source>设备：%1　当前 IP：%2</source><translation>设备：%1　当前 IP：%2</translation></message>
+    <message><source>确定</source><translation>确定</translation></message>
+    <message><source>取消</source><translation>取消</translation></message>
+</context>
+<context>
+    <name>VideoRecorder</name>
+    <message><source>视频根目录未设置</source><translation>视频根目录未设置</translation></message>
+    <message><source>视频录制初始化失败（编码器打开失败，请检查路径/磁盘/H264支持）</source><translation>视频录制初始化失败（编码器打开失败，请检查路径/磁盘/H264支持）</translation></message>
 </context>
 </TS>

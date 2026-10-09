@@ -33,6 +33,7 @@
     <message><source>开</source><translation>ON</translation></message>
     <message><source>关</source><translation>OFF</translation></message>
     <message><source>触发模式: %1</source><translation>Trigger mode: %1</translation></message>
+    <message><source>未连接</source><translation>Not connected</translation></message>
 </context>
 <context>
     <name>HudWindow</name>
@@ -82,6 +83,11 @@
     <message><source>系统日志</source><translation>System Log</translation></message>
     <message><source>分辨率</source><translation>Resolution</translation></message>
     <message><source>帧率</source><translation>Frame Rate</translation></message>
+    <message><source>当前文件</source><translation>Current File</translation></message>
+    <message><source>分段编号</source><translation>Segment No.</translation></message>
+    <message><source>最小化</source><translation>Minimize</translation></message>
+    <message><source>最大化</source><translation>Maximize</translation></message>
+    <message><source>关闭</source><translation>Close</translation></message>
     <message><source>LED灯</source><translation>LED Light</translation></message>
     <message><source>硬件触发</source><translation>Hardware Trigger</translation></message>
     <message><source>当前：硬件触发</source><translation>Current: Hardware Trigger</translation></message>
@@ -136,5 +142,23 @@
     <message><source>Current: Software Trigger</source><translation>Current: Software Trigger</translation></message>
     <message><source>Current: Hardware Trigger</source><translation>Current: Hardware Trigger</translation></message>
     <message><source>Waiting for camera confirmation...</source><translation>Waiting for camera confirmation...</translation></message>
+</context>
+<context>
+    <name>UiController</name>
+    <message><source>⚠ 【硬件触发不可用】当前相机不具备硬件触发功能，已退回软件触发。</source><translation>⚠ [Hardware Trigger Unavailable] This camera does not support hardware trigger. Reverted to software trigger.</translation></message>
+    <message><source>相机未返回触发状态，已恢复到上一次模式。</source><translation>Camera did not return trigger status. Restored to previous mode.</translation></message>
+    <message><source>⚠【硬件触发状态未知】相机未返回硬件触发确认，已恢复到软件触发。请检查相机是否支持硬件触发或硬件触发信号是否接入。</source><translation>⚠ [Hardware Trigger Status Unknown] Camera did not confirm hardware trigger. Reverted to software trigger. Please check hardware trigger support or signal connection.</translation></message>
+</context>
+<context>
+    <name>ChangeIpDialog</name>
+    <message><source>修改相机 IP</source><translation>Change Camera IP</translation></message>
+    <message><source>设备：%1　当前 IP：%2</source><translation>Device: %1   Current IP: %2</translation></message>
+    <message><source>确定</source><translation>OK</translation></message>
+    <message><source>取消</source><translation>Cancel</translation></message>
+</context>
+<context>
+    <name>VideoRecorder</name>
+    <message><source>视频根目录未设置</source><translation>Video root directory not set</translation></message>
+    <message><source>视频录制初始化失败（编码器打开失败，请检查路径/磁盘/H264支持）</source><translation>Recording init failed (encoder open failed — check path, disk space, and H264 support)</translation></message>
 </context>
 </TS>

@@ -33,6 +33,7 @@
     <message><source>开</source><translation>켜짐</translation></message>
     <message><source>关</source><translation>꺼짐</translation></message>
     <message><source>触发模式: %1</source><translation>트리거 모드: %1</translation></message>
+    <message><source>未连接</source><translation>연결되지 않음</translation></message>
 </context>
 <context>
     <name>HudWindow</name>
@@ -94,6 +95,11 @@
     <message><source>分辨率</source><translation>해상도</translation></message>
     <message><source>帧率</source><translation>프레임 속도</translation></message>
     <message><source>视频显示区</source><translation>비디오 영역</translation></message>
+    <message><source>当前文件</source><translation>현재 파일</translation></message>
+    <message><source>分段编号</source><translation>분절 번호</translation></message>
+    <message><source>最小化</source><translation>최소화</translation></message>
+    <message><source>最大化</source><translation>최대화</translation></message>
+    <message><source>关闭</source><translation>닫기</translation></message>
     <message><source>系统状态</source><translation>시스템 상태</translation></message>
     <message><source>录像状态</source><translation>녹화 상태</translation></message>
     <message><source>状态</source><translation>상태</translation></message>
@@ -151,5 +157,23 @@
     <message><source>Current: Software Trigger</source><translation>현재: 소프트웨어 트리거</translation></message>
     <message><source>Current: Hardware Trigger</source><translation>현재: 하드웨어 트리거</translation></message>
     <message><source>Waiting for camera confirmation...</source><translation>카메라 확인 대기중...</translation></message>
+</context>
+<context>
+    <name>UiController</name>
+    <message><source>⚠ 【硬件触发不可用】当前相机不具备硬件触发功能，已退回软件触发。</source><translation>⚠ 【하드웨어 트리거 사용 불가】현재 카메라는 하드웨어 트리거를 지원하지 않습니다. 소프트웨어 트리거로 복귀했습니다.</translation></message>
+    <message><source>相机未返回触发状态，已恢复到上一次模式。</source><translation>카메라가 트리거 상태를 반환하지 않았습니다. 이전 모드로 복원되었습니다.</translation></message>
+    <message><source>⚠【硬件触发状态未知】相机未返回硬件触发确认，已恢复到软件触发。请检查相机是否支持硬件触发或硬件触发信号是否接入。</source><translation>⚠ 【하드웨어 트리거 상태 알 수 없음】카메라가 하드웨어 트리거를 확인하지 않았습니다. 소프트웨어 트리거로 복귀했습니다. 하드웨어 트리거 지원 여부 또는 신호 연결을 확인하세요.</translation></message>
+</context>
+<context>
+    <name>ChangeIpDialog</name>
+    <message><source>修改相机 IP</source><translation>카메라 IP 변경</translation></message>
+    <message><source>设备：%1　当前 IP：%2</source><translation>장치: %1   현재 IP: %2</translation></message>
+    <message><source>确定</source><translation>확인</translation></message>
+    <message><source>取消</source><translation>취소</translation></message>
+</context>
+<context>
+    <name>VideoRecorder</name>
+    <message><source>视频根目录未设置</source><translation>비디오 루트 디렉토리가 설정되지 않았습니다</translation></message>
+    <message><source>视频录制初始化失败（编码器打开失败，请检查路径/磁盘/H264支持）</source><translation>녹화 초기화 실패 (인코더 열기 실패 — 경로, 디스크 공간, H264 지원을 확인하세요)</translation></message>
 </context>
 </TS>

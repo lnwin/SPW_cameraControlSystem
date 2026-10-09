@@ -1,0 +1,36 @@
+# CMake generated Testfile for 
+# Source directory: D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests
+# Build directory: D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/tests
+# 
+# This file includes the relevant testing commands required for 
+# testing this directory and lists subdirectories to be tested as well.
+if(CTEST_CONFIGURATION_TYPE MATCHES "^([Dd][Ee][Bb][Uu][Gg])$")
+  add_test([=[abi_smoke]=] "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/bin/Debug/test_abi.exe")
+  set_tests_properties([=[abi_smoke]=] PROPERTIES  _BACKTRACE_TRIPLES "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests/CMakeLists.txt;20;add_test;D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests/CMakeLists.txt;0;")
+elseif(CTEST_CONFIGURATION_TYPE MATCHES "^([Rr][Ee][Ll][Ee][Aa][Ss][Ee])$")
+  add_test([=[abi_smoke]=] "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/bin/Release/test_abi.exe")
+  set_tests_properties([=[abi_smoke]=] PROPERTIES  _BACKTRACE_TRIPLES "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests/CMakeLists.txt;20;add_test;D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests/CMakeLists.txt;0;")
+elseif(CTEST_CONFIGURATION_TYPE MATCHES "^([Mm][Ii][Nn][Ss][Ii][Zz][Ee][Rr][Ee][Ll])$")
+  add_test([=[abi_smoke]=] "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/bin/MinSizeRel/test_abi.exe")
+  set_tests_properties([=[abi_smoke]=] PROPERTIES  _BACKTRACE_TRIPLES "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests/CMakeLists.txt;20;add_test;D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests/CMakeLists.txt;0;")
+elseif(CTEST_CONFIGURATION_TYPE MATCHES "^([Rr][Ee][Ll][Ww][Ii][Tt][Hh][Dd][Ee][Bb][Ii][Nn][Ff][Oo])$")
+  add_test([=[abi_smoke]=] "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/bin/RelWithDebInfo/test_abi.exe")
+  set_tests_properties([=[abi_smoke]=] PROPERTIES  _BACKTRACE_TRIPLES "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests/CMakeLists.txt;20;add_test;D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests/CMakeLists.txt;0;")
+else()
+  add_test([=[abi_smoke]=] NOT_AVAILABLE)
+endif()
+if(CTEST_CONFIGURATION_TYPE MATCHES "^([Dd][Ee][Bb][Uu][Gg])$")
+  add_test([=[init_deinit]=] "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/bin/Debug/test_init.exe")
+  set_tests_properties([=[init_deinit]=] PROPERTIES  _BACKTRACE_TRIPLES "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests/CMakeLists.txt;33;add_test;D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests/CMakeLists.txt;0;")
+elseif(CTEST_CONFIGURATION_TYPE MATCHES "^([Rr][Ee][Ll][Ee][Aa][Ss][Ee])$")
+  add_test([=[init_deinit]=] "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/bin/Release/test_init.exe")
+  set_tests_properties([=[init_deinit]=] PROPERTIES  _BACKTRACE_TRIPLES "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests/CMakeLists.txt;33;add_test;D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests/CMakeLists.txt;0;")
+elseif(CTEST_CONFIGURATION_TYPE MATCHES "^([Mm][Ii][Nn][Ss][Ii][Zz][Ee][Rr][Ee][Ll])$")
+  add_test([=[init_deinit]=] "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/bin/MinSizeRel/test_init.exe")
+  set_tests_properties([=[init_deinit]=] PROPERTIES  _BACKTRACE_TRIPLES "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests/CMakeLists.txt;33;add_test;D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests/CMakeLists.txt;0;")
+elseif(CTEST_CONFIGURATION_TYPE MATCHES "^([Rr][Ee][Ll][Ww][Ii][Tt][Hh][Dd][Ee][Bb][Ii][Nn][Ff][Oo])$")
+  add_test([=[init_deinit]=] "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/bin/RelWithDebInfo/test_init.exe")
+  set_tests_properties([=[init_deinit]=] PROPERTIES  _BACKTRACE_TRIPLES "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests/CMakeLists.txt;33;add_test;D:/SPwater_CODE/SPW_cameraControlSystem/sdk/tests/CMakeLists.txt;0;")
+else()
+  add_test([=[init_deinit]=] NOT_AVAILABLE)
+endif()

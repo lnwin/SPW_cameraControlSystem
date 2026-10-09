@@ -104,7 +104,7 @@ void VideoRecorder::receiveFrame2Record(QSharedPointer<QImage> img)
         if (!openEncoderLockedForImage(*img)) {
             recording_ = false;
             encoderOpened_ = false;
-            const QString r = QStringLiteral("视频录制初始化失败（编码器打开失败，请检查路径/磁盘/H264支持）");
+            const QString r = tr("视频录制初始化失败（编码器打开失败，请检查路径/磁盘/H264支持）");
             qWarning() << "[REC-START-FAIL]" << r;
             emit sendMSG2ui(QStringLiteral("[VideoRecorder] ") + r);
             emit recordingFailed(r);   // ← notify MainWindow to reset isRecording_
@@ -249,7 +249,7 @@ void VideoRecorder::startRecording()
             << "videoRootDir_=" << videoRootDir_;
 
     if (videoRootDir_.isEmpty()) {
-        const QString r = QStringLiteral("视频根目录未设置");
+        const QString r = tr("视频根目录未设置");
         qWarning() << "[REC-START-FAIL]" << r;
         emit sendMSG2ui(QStringLiteral("[VideoRecorder] ") + r);
         emit recordingFailed(r);

@@ -1,0 +1,114 @@
+{
+	"AUTOGEN_COMMAND_LINE_LENGTH_MAX" : 32000,
+	"BUILD_DIR" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_cpp_raii_autogen",
+	"CMAKE_BINARY_DIR" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build",
+	"CMAKE_CURRENT_BINARY_DIR" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples",
+	"CMAKE_CURRENT_SOURCE_DIR" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/examples",
+	"CMAKE_EXECUTABLE" : "C:/Program Files/CMake/bin/cmake.exe",
+	"CMAKE_LIST_FILES" : [ "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/examples/CMakeLists.txt" ],
+	"CMAKE_SOURCE_DIR" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk",
+	"CROSS_CONFIG" : false,
+	"DEP_FILE" : "",
+	"DEP_FILE_RULE_NAME" : "",
+	"HEADERS" : [],
+	"HEADER_EXTENSIONS" : [ "h", "hh", "h++", "hm", "hpp", "hxx", "in", "txx" ],
+	"INCLUDE_DIR" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_cpp_raii_autogen/include",
+	"INCLUDE_DIR_Debug" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_cpp_raii_autogen/include_Debug",
+	"INCLUDE_DIR_MinSizeRel" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_cpp_raii_autogen/include_MinSizeRel",
+	"INCLUDE_DIR_RelWithDebInfo" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_cpp_raii_autogen/include_RelWithDebInfo",
+	"INCLUDE_DIR_Release" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_cpp_raii_autogen/include_Release",
+	"MOC_COMPILATION_FILE" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_cpp_raii_autogen/mocs_compilation.cpp",
+	"MOC_COMPILATION_FILE_Debug" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_cpp_raii_autogen/mocs_compilation_Debug.cpp",
+	"MOC_COMPILATION_FILE_MinSizeRel" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_cpp_raii_autogen/mocs_compilation_MinSizeRel.cpp",
+	"MOC_COMPILATION_FILE_RelWithDebInfo" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_cpp_raii_autogen/mocs_compilation_RelWithDebInfo.cpp",
+	"MOC_COMPILATION_FILE_Release" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_cpp_raii_autogen/mocs_compilation_Release.cpp",
+	"MOC_DEFINITIONS" : [],
+	"MOC_DEFINITIONS_Debug" : [ "WIN32", "_CRT_SECURE_NO_WARNINGS" ],
+	"MOC_DEFINITIONS_MinSizeRel" : [ "WIN32", "_CRT_SECURE_NO_WARNINGS" ],
+	"MOC_DEFINITIONS_RelWithDebInfo" : [ "WIN32", "_CRT_SECURE_NO_WARNINGS" ],
+	"MOC_DEFINITIONS_Release" : [ "WIN32", "_CRT_SECURE_NO_WARNINGS" ],
+	"MOC_DEPEND_FILTERS" : 
+	[
+		[
+			"Q_PLUGIN_METADATA",
+			"[\n][ \t]*Q_PLUGIN_METADATA[ \t]*\\([^\\)]*FILE[ \t]*\"([^\"]+)\""
+		]
+	],
+	"MOC_INCLUDES" : [],
+	"MOC_INCLUDES_Debug" : 
+	[
+		"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/include",
+		"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/include"
+	],
+	"MOC_INCLUDES_MinSizeRel" : 
+	[
+		"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/include",
+		"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/include"
+	],
+	"MOC_INCLUDES_RelWithDebInfo" : 
+	[
+		"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/include",
+		"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/include"
+	],
+	"MOC_INCLUDES_Release" : 
+	[
+		"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/include",
+		"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/include"
+	],
+	"MOC_MACRO_NAMES" : 
+	[
+		"Q_OBJECT",
+		"Q_GADGET",
+		"Q_GADGET_EXPORT",
+		"Q_NAMESPACE",
+		"Q_NAMESPACE_EXPORT"
+	],
+	"MOC_OPTIONS" : [],
+	"MOC_PATH_PREFIX" : false,
+	"MOC_PREDEFS_CMD" : [],
+	"MOC_PREDEFS_FILE" : "",
+	"MOC_RELAXED_MODE" : false,
+	"MOC_SKIP" : 
+	[
+		"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_c_basic_autogen/mocs_compilation_Debug.cpp",
+		"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_c_basic_autogen/mocs_compilation_MinSizeRel.cpp",
+		"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_c_basic_autogen/mocs_compilation_RelWithDebInfo.cpp",
+		"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_c_basic_autogen/mocs_compilation_Release.cpp"
+	],
+	"MULTI_CONFIG" : true,
+	"PARALLEL" : 14,
+	"PARSE_CACHE_FILE" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/CMakeFiles/example_cpp_raii_autogen.dir/ParseCache.txt",
+	"PARSE_CACHE_FILE_Debug" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/CMakeFiles/example_cpp_raii_autogen.dir/ParseCache_Debug.txt",
+	"PARSE_CACHE_FILE_MinSizeRel" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/CMakeFiles/example_cpp_raii_autogen.dir/ParseCache_MinSizeRel.txt",
+	"PARSE_CACHE_FILE_RelWithDebInfo" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/CMakeFiles/example_cpp_raii_autogen.dir/ParseCache_RelWithDebInfo.txt",
+	"PARSE_CACHE_FILE_Release" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/CMakeFiles/example_cpp_raii_autogen.dir/ParseCache_Release.txt",
+	"QT_MOC_EXECUTABLE" : "C:/Qt/6.4.3/msvc2019_64/./bin/moc.exe",
+	"QT_UIC_EXECUTABLE" : "",
+	"QT_VERSION_MAJOR" : 6,
+	"QT_VERSION_MINOR" : 4,
+	"SETTINGS_FILE" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/CMakeFiles/example_cpp_raii_autogen.dir/AutogenUsed.txt",
+	"SETTINGS_FILE_Debug" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/CMakeFiles/example_cpp_raii_autogen.dir/AutogenUsed_Debug.txt",
+	"SETTINGS_FILE_MinSizeRel" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/CMakeFiles/example_cpp_raii_autogen.dir/AutogenUsed_MinSizeRel.txt",
+	"SETTINGS_FILE_RelWithDebInfo" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/CMakeFiles/example_cpp_raii_autogen.dir/AutogenUsed_RelWithDebInfo.txt",
+	"SETTINGS_FILE_Release" : "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/CMakeFiles/example_cpp_raii_autogen.dir/AutogenUsed_Release.txt",
+	"SOURCES" : 
+	[
+		[
+			"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/examples/cpp/example_raii.cpp",
+			"MU",
+			null
+		]
+	],
+	"UIC_OPTIONS" : [],
+	"UIC_SEARCH_PATHS" : [],
+	"UIC_SKIP" : 
+	[
+		"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_c_basic_autogen/mocs_compilation_Debug.cpp",
+		"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_c_basic_autogen/mocs_compilation_MinSizeRel.cpp",
+		"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_c_basic_autogen/mocs_compilation_RelWithDebInfo.cpp",
+		"D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/examples/example_c_basic_autogen/mocs_compilation_Release.cpp"
+	],
+	"UIC_UI_FILES" : [],
+	"USE_BETTER_GRAPH" : false,
+	"VERBOSITY" : 0
+}

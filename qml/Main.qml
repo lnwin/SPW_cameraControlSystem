@@ -45,7 +45,7 @@ Rectangle {
                 }
 
                 Text {
-                    text: "舟山渊视科技有限公司  V4.3"
+                    text: "舟山渊视科技有限公司  V4.3.1"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
@@ -61,9 +61,9 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { act: "min",   tip: "最小化" },
-                        { act: "max",   tip: "最大化" },
-                        { act: "close", tip: "关闭"   }
+                        { act: "min",   tip: qsTr("最小化") },
+                        { act: "max",   tip: qsTr("最大化") },
+                        { act: "close", tip: qsTr("关闭")   }
                     ]
                     delegate: Rectangle {
                         width: 32; height: 32

@@ -1,0 +1,10 @@
+D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/CMakeFiles/spwcam_sdk.dir
+D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/CMakeFiles/RUN_TESTS.dir
+D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/CMakeFiles/INSTALL.dir
+D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/CMakeFiles/ALL_BUILD.dir
+D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/CMakeFiles/ZERO_CHECK.dir
+D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/tests/CMakeFiles/test_abi.dir
+D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/tests/CMakeFiles/test_init.dir
+D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/tests/CMakeFiles/RUN_TESTS.dir
+D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/tests/CMakeFiles/INSTALL.dir
+D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/tests/CMakeFiles/ALL_BUILD.dir

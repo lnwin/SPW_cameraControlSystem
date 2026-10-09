@@ -34,7 +34,7 @@ Rectangle {
             Text {
                 anchors.left: parent.left; anchors.leftMargin: 10
                 anchors.verticalCenter: parent.verticalCenter
-                text: "修改相机 IP"
+                text: qsTr("修改相机 IP")
                 color: "#00cc88"; font.pixelSize: 12; font.family: "Microsoft YaHei UI"
             }
             Rectangle {
@@ -52,7 +52,7 @@ Rectangle {
             spacing: 10
 
             Text {
-                text: "设备：" + root.sn + "　当前 IP：" + root.currentIp
+                text: qsTr("设备：%1　当前 IP：%2").arg(root.sn).arg(root.currentIp)
                 color: "#9aa0a6"; font.pixelSize: 12; font.family: "Microsoft YaHei UI"
             }
 
@@ -75,7 +75,7 @@ Rectangle {
                 Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
                 Repeater {
-                    model: [{ t: "确定", act: "ok" }, { t: "取消", act: "cancel" }]
+                    model: [{ t: qsTr("确定"), act: "ok" }, { t: qsTr("取消"), act: "cancel" }]
                     delegate: Rectangle {
                         width: 72; height: 28; radius: 2
                         color: bma.containsMouse ? "#0d2a1e" : "transparent"

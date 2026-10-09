@@ -33,6 +33,7 @@
     <message><source>开</source><translation>AAN</translation></message>
     <message><source>关</source><translation>UIT</translation></message>
     <message><source>触发模式: %1</source><translation>Triggermodus: %1</translation></message>
+    <message><source>未连接</source><translation>Niet verbonden</translation></message>
 </context>
 <context>
     <name>HudWindow</name>
@@ -94,6 +95,11 @@
     <message><source>中</source><translation>Gemiddeld</translation></message>
     <message><source>较长</source><translation>Lang+</translation></message>
     <message><source>长</source><translation>Lang</translation></message>
+    <message><source>当前文件</source><translation>Huidig bestand</translation></message>
+    <message><source>分段编号</source><translation>Segmentnummer</translation></message>
+    <message><source>最小化</source><translation>Minimaliseren</translation></message>
+    <message><source>最大化</source><translation>Maximaliseren</translation></message>
+    <message><source>关闭</source><translation>Sluiten</translation></message>
 </context>
 <context>
     <name>TopToolBar</name>
@@ -136,5 +142,23 @@
     <message><source>Current: Software Trigger</source><translation>Huidig: softwaretrigger</translation></message>
     <message><source>Current: Hardware Trigger</source><translation>Huidig: hardwaretrigger</translation></message>
     <message><source>Waiting for camera confirmation...</source><translation>Wachten op camerabevestiging...</translation></message>
+</context>
+<context>
+    <name>UiController</name>
+    <message><source>⚠ 【硬件触发不可用】当前相机不具备硬件触发功能，已退回软件触发。</source><translation>⚠ [Hardwaretrigger niet beschikbaar] Deze camera ondersteunt geen hardwaretrigger. Teruggeschakeld naar softwaretrigger.</translation></message>
+    <message><source>相机未返回触发状态，已恢复到上一次模式。</source><translation>Camera heeft triggerstatus niet teruggegeven. Hersteld naar vorige modus.</translation></message>
+    <message><source>⚠【硬件触发状态未知】相机未返回硬件触发确认，已恢复到软件触发。请检查相机是否支持硬件触发或硬件触发信号是否接入。</source><translation>⚠ [Hardwaretriggerstatus onbekend] Camera heeft hardwaretrigger niet bevestigd. Teruggeschakeld naar softwaretrigger. Controleer of de camera hardwaretrigger ondersteunt of het signaal is aangesloten.</translation></message>
+</context>
+<context>
+    <name>ChangeIpDialog</name>
+    <message><source>修改相机 IP</source><translation>Camera-IP wijzigen</translation></message>
+    <message><source>设备：%1　当前 IP：%2</source><translation>Apparaat: %1   Huidig IP: %2</translation></message>
+    <message><source>确定</source><translation>OK</translation></message>
+    <message><source>取消</source><translation>Annuleren</translation></message>
+</context>
+<context>
+    <name>VideoRecorder</name>
+    <message><source>视频根目录未设置</source><translation>Videohoofddirectory niet ingesteld</translation></message>
+    <message><source>视频录制初始化失败（编码器打开失败，请检查路径/磁盘/H264支持）</source><translation>Opname-initialisatie mislukt (encoder openen mislukt — controleer pad, schijfruimte en H264-ondersteuning)</translation></message>
 </context>
 </TS>

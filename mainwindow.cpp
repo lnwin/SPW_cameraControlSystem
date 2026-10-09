@@ -272,14 +272,16 @@ void MainWindow::onCheckDeviceAlive()
         if (isRecording_) on_action_stopRecord_triggered();
         if (!offlinePopupShown_.value(curSelectedSn_, false)) {
             offlinePopupShown_[curSelectedSn_] = true;
-            QString dur = tr("未知");
+            QString dur = QStringLiteral("Unknown");
             const qint64 t0 = g_streamStartMs.value(this, 0);
             if (t0 > 0) {
                 const qint64 m = (now - t0) / 60000;
-                dur = tr("%1小时%2分钟").arg(m / 60).arg(m % 60);
+                dur = QString("%1h %2m").arg(m / 60).arg(m % 60);
             }
-            ThemedMessageDialog::openNonModal(this, tr("提示"),
-                tr("设备 [%1] 网络中断或视频断流。\n持续：%2。\n请检查网络后重新打开相机。")
+            ThemedMessageDialog::openNonModal(this, QStringLiteral("Notice"),
+                QString("Device [%1] lost its network connection or video stream.\n\n"
+                        "Duration: %2.\n\n"
+                        "Please check the network connection and reopen the camera.")
                     .arg(curSelectedSn_, dur));
         }
     }
@@ -502,20 +504,20 @@ void MainWindow::bindUiController(UiController* ctrl)
 
     connect(ctrl, &UiController::requestOpenCamera, this, [this, ctrl](){
         ctrl->setConnecting(true);
-        ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + "正在连接相机...");
+        ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + tr("正在连接相机..."));
         on_action_openCamera_triggered();
         // 30 秒超时：若仍未收到第一帧则复原
         QTimer::singleShot(30000, this, [this, ctrl](){
             if (ctrl->connecting()) {
                 ctrl->setConnecting(false);
-                ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + "连接超时，请检查设备和网络");
+                ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + tr("连接超时，请检查设备和网络"));
                 doStopViewer();
             }
         });
     });
     connect(ctrl, &UiController::requestCloseCamera, this, [this, ctrl](){
         ctrl->setConnecting(false);
-        ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + "断开相机连接");
+        ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + tr("断开相机连接"));
         on_action_closeCamera_triggered();
     });
     connect(ctrl, &UiController::requestStartRecord,   this, &MainWindow::on_action_startRecord_triggered);
@@ -601,14 +603,14 @@ void MainWindow::bindUiController(UiController* ctrl)
         ctrl->setRecording(true);
         ctrl->setRecordFileName(QFileInfo(path).fileName());
         ctrl->setRecordSegmentIndex(ctrl->recordSegmentIndex() + 1);
-        ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + "开始录像：" + QFileInfo(path).fileName());
+        ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + tr("开始录像：") + QFileInfo(path).fileName());
     });
     connect(myVideoRecorder, &VideoRecorder::recordingStopped, ctrl, [ctrl](const QString& path){
         ctrl->setRecording(false);
         ctrl->setRecordSegmentIndex(0);
         ctrl->setRecordSegmentElapsed("00:00");
         ctrl->setRecordTotalElapsed("00:00");
-        ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + "录像已保存：" + QFileInfo(path).fileName());
+        ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + tr("录像已保存：") + QFileInfo(path).fileName());
     });
     // Reset isRecording_ when encoder init fails so the user can retry
     connect(myVideoRecorder, &VideoRecorder::recordingFailed, this, [this](const QString& reason){
@@ -625,7 +627,7 @@ void MainWindow::bindUiController(UiController* ctrl)
         ctrl->setDeviceOnline(online);
         ctrl->setRtspConnected(viewer_ != nullptr && lastFrameMs_ > 0
                                && (QDateTime::currentMSecsSinceEpoch() - lastFrameMs_) <= 1200);
-        ctrl->setDeviceName(online ? dev.sn : (curSelectedSn_.isEmpty() ? "未连接" : curSelectedSn_));
+        ctrl->setDeviceName(online ? dev.sn : (curSelectedSn_.isEmpty() ? tr("未连接") : curSelectedSn_));
         if (online) ctrl->setDeviceIp(dev.ip.toString());
         if (mgr_) ctrl->setDeviceList(mgr_->allSns());
         ctrl->setSelectedSn(curSelectedSn_);
@@ -634,7 +636,7 @@ void MainWindow::bindUiController(UiController* ctrl)
         if (ctrl->connecting() && lastFrameMs_ > 0
             && (QDateTime::currentMSecsSinceEpoch() - lastFrameMs_) <= 1200) {
             ctrl->setConnecting(false);
-            ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + "相机连接成功，视频流已建立");
+            ctrl->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ") + tr("相机连接成功，视频流已建立"));
         }
     });
 }

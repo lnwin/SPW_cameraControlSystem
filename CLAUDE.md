@@ -185,6 +185,92 @@ constexpr int CAMERA_FPS = 25;
 
 ---
 
+### [2026-09-07] SDK v1.0.0 严格审查 + 阻断级缺陷修复（sdk/ 目录，主工程源码未改动）
+**修改目标：** 审查 `sdk/`（第三方 C/C++/Python SDK）发现 7 项阻断级、9 项严重问题，全部修复并以洁净环境（PATH 仅系统目录）+ 本地 gst-rtsp-server 1080p25 流做端到端回归。
+
+**核心修复：**
+1. **打包缺 9 个 GStreamer 依赖 DLL**（gstaudio/gsttag/z-1/gstd3d11/gstd3dshader/gstdxva/gstd3d12/gstcuda/gstgl）→ 洁净机器 13 个插件加载失败、完全无法拉流。`package_sdk.bat` 补齐，新增 `check_deps.ps1` 用 dumpbin 做递归依赖闭包门禁，缺失即打包失败。
+2. **录像状态机死循环**：`pumpFrame` 仅在 `rec.recording` 为真时投帧，而该标志要等编码器打开（需首帧）后才置真。新增 `recordRequested_` 标志驱动投帧；`rec.recording` 仅作对外状态。
+3. **截图与帧泵竞争同一 `takeLatestFrameIfNew()`**（实测 10 次仅 4 张）。worker 缓存最近一帧 `lastFrame_` 供截图；无帧时 `spwcam_snapshot` 返回 `SPWCAM_ERR_NO_FRAME` 而非 OK。
+4. **回调内调 SDK API 直接崩溃（0xC0000409）**：`sdk_log/sdk_event` 持 `cbs.lock` 期间调用用户回调 → 同线程重入 std::mutex → terminate。改为锁内拷贝指针、锁外调用；头文件/文档改为"允许回调内调用"。
+5. **`spwcam::Camera` move 后崩溃（0xC0000005）**：回调 `user_data` 绑定 `this`。改为堆上 `Handlers` 结构（`unique_ptr`）按地址注册，移动后无需重绑；新增 `wait_for_stream/wait_for_device`、`set_trigger_mode(bool)` 重载。
+6. **Python 绑定 Py≥3.8 无法导入**：DLL 副本被放进 `python/spwcam/` 而依赖在 `bin/`。改为从 `<sdk>/bin` 加载 + `os.add_dll_directory`，支持 `SPWCAM_SDK_BIN` 环境变量；打包不再复制 DLL 进包；`setup.py` 去掉 `package_data`。
+7. **隐藏 ABI 缺陷（新发现）**：GStreamer `include/` 根目录含 FFmpeg 7.x 头（avcodec 61）且 include 顺序在 FFmpeg 8.0 之前 → `AVCodecContext` 按 61 布局编译、运行加载 62 DLL → 编码器打开失败（"Picture size 1080x0"）。CMake 去掉该根目录、FFmpeg 头优先，加编译期 `static_assert` + 运行期 `avcodec_version()` 校验。
+8. 其他：多 context 引用计数（`SdkQtApp::acquire/release`）；deinit 先阻塞停录像再停线程（文件必有 moov）；`discovery_start` bind 失败返回 `ERR_IO`；补齐 6 个从未触发的事件（STREAM_CONNECTED/LOST、DEVICE_LOST、RECORD_SEGMENT、TRIGGER_STATUS、IP_CHANGED）与 `STREAM_ERROR` 状态（5 s 无帧 → ERROR，恢复自动回 RUNNING）；PATH 只前插一次；`gst_plugins` 不存在时不接管 GStreamer 环境（构建树可测）；帧泵 33 ms → 16 ms PreciseTimer（投递帧率 21→25 fps）；公共头纯 ASCII；C++ 示例编译错误；examples CMake 直接链接 target；批处理 LF→CRLF（`^` 续行原本失效）；文档全面修正（latency 实为 350 ms 钳制 [300,600]、录像参数 v1.x 固定、异步语义、线程模型、许可证风险）。
+
+**涉及文件：** `sdk/src/*`（qt_worker.h/cpp 重写、spwcam_core/device/record/internal）、`sdk/include/spwcam/spwcam.h、spwcam.hpp`、`sdk/python/*`、`sdk/examples/*`、`sdk/scripts/build_sdk.bat、package_sdk.bat、check_deps.ps1（新）`、`sdk/tests/test_init.cpp、test_stream.cpp（新）、CMakeLists.txt`、`sdk/CMakeLists.txt`、`sdk/README.md`、`sdk/docs/*`
+**编译结果：** `scripts\build_sdk.bat` 通过；ctest 3/3（abi_smoke、init_deinit 39 项、stream_e2e 33 项）；e2e 连跑 5 次稳定。
+**运行验证：** `scripts\package_sdk.bat` 依赖闭包 66 DLL 全通过；洁净环境（PATH 仅 System32）用新 dist：拉流 25 fps、RECORD_STARTED/STOPPED、MP4 ffprobe 可解码、截图 10/10、回调内调 API 无崩溃、move 后回调可达、断流→ERROR→恢复→RUNNING、Python 3.8 导入并完整流程、C/C++ 示例编译并运行通过。
+**风险点：**
+- **许可证（未解决，需决策）**：随包 FFmpeg 为 `--enable-gpl --enable-libx264` 构建，录像编码实际落在 libx264；闭源分发违反 GPL。需换 LGPL 构建并把编码器改为 h264_mf/nvenc/libopenh264，或取得商业授权；openh264 再分发涉及 Cisco 专利费条款。已写入 README 注意事项第 9 条。
+- 上游 `VideoRecorder` 分段切换失败时只发 `sendMSG2ui` 不发 `recordingFailed`，SDK 状态会滞留 recording=1（上游限制，未改主工程）。
+- `fps/bitrate_kbps/segment_minutes` 仍为上游固定值，SDK 只记录 WARN，文档已明示。
+- 需用 RTSP 源的 e2e 测试通过环境变量 `SPWCAM_TEST_RTSP_URL` 启用，未设置时 SKIP。
+
+---
+
+### [2026-09-07] SDK V2.0 自包含分发包
+**修改目标：** 版本 1.0.0 → 2.0.0，作者改为"渊视科技"（ASCII 文件中为 Yuanshi Technology）；分发包解压即用。
+**涉及文件：** `sdk/CMakeLists.txt`、`include/spwcam/spwcam.h(.hpp)`（`SPWCAM_VERSION_*`）、`python/setup.py`、`src/spwcam_core.cpp`、`examples/*`、`README.md`、`docs/*`、`scripts/package_sdk.bat`（版本号、作者、`bin\` 内附预编译示例 exe、QUICKSTART 增加"解压即试"段落）。
+**编译结果：** `build_sdk.bat` 通过，ctest 3/3。
+**运行验证：** `package_sdk.bat` 闭包检查 66 DLL 通过 → 产物 `sdk/dist/spwcam_sdk_v2.0.0.zip`（62 MB，86 项）。模拟新电脑：把 zip 解压到空目录、PATH 仅 Windows 系统目录，`bin\example_c_basic.exe`、`bin\example_cpp_raii.exe`、`examples\python\example_basic.py`（Py3.8）三者对本地 RTSP 流均完整跑通（拉流/录像/截图事件齐全），用户程序按 `include\`+`lib\` 编译后 `spwcam_version()` 返回 2.0.0、init 成功。
+**风险点：** 许可证事项（仅内部测试，用户已确认不外发）；其余同上一条记录。
+
+---
+
+---
+
+### [2026-10-09] V4.3.1 多语言补全 + 断流弹窗英文硬编码
+**修改目标：** 全面修复英文模式下仍出现中文的所有 UI 文字，确保语言切换后所有用户可见文字均跟随切换。
+
+**根因排查结果：**
+1. `mainwindow.cpp` 多处 `appendLog` 调用使用裸字符串（无 `tr()`）
+2. `videorecorder.cpp` 两处 `QStringLiteral` 直接输出到 UI 日志，未走翻译
+3. `qml/RecordStatusPanel.qml` 全部文字硬编码，未用 `qsTr()`
+4. `qml/Main.qml` 窗口控制按钮 tooltip 硬编码中文
+5. `languagemanager.cpp` 默认语言为 `zh_CN`，且每次切换后写入 QSettings，导致旧安装启动仍显示中文；改为固定启动英文、不再读写 QSettings
+6. 四个 `.ts` 文件缺少 `VideoRecorder` context、窗口按钮条目、`"未连接"` 条目
+
+**涉及文件：**
+- `mainwindow.cpp`（`"正在连接相机..."` / `"连接超时..."` / `"断开相机连接"` / `"相机连接成功，视频流已建立"` / `"开始录像："` / `"录像已保存："` / `"未连接"` 补 `tr()`）
+- `videorecorder.cpp`（两处 `QStringLiteral` 改 `tr()`）
+- `themedmessagedialog.h/.cpp`（新增 `changeEvent`，语言切换时刷新 OK 按钮文本；补 `#include <QEvent>`）
+- `qml/ChangeIpDialog.qml`（标题/设备信息行/按钮全部改 `qsTr()`）
+- `qml/RecordStatusPanel.qml`（全部文字改 `qsTr()`）
+- `qml/Main.qml`（窗口按钮 tooltip 改 `qsTr()`）
+- `languagemanager.cpp`（`loadSaved()` 固定加载 `en_US`，移除 QSettings 读写，移除 `#include <QSettings>`）
+- `translations/app_zh_CN.ts`（补 `UiController`/`ChangeIpDialog`/`VideoRecorder` context，补曝光五档、窗口按钮、`"未连接"` 等条目）
+- `translations/app_en_US.ts`（同上，补完整英文翻译）
+- `translations/app_ko_KR.ts`（同上，补完整韩文翻译）
+- `translations/app_nl_NL.ts`（同上，补完整荷兰文翻译）
+
+**编译结果：** 待 Qt Creator qmake → Rebuild + lrelease 验证
+**运行验证：** 启动后界面应为英文；触发超时日志、断流弹窗、IP 修改弹窗、录像状态面板、窗口按钮 tooltip 均应显示英文；切换语言后上述文字同步切换
+**风险点：** 无
+
+---
+
+## 代码与商业机密保密规则
+**修改目标：**
+1. 信息栏"硬件触发状态未知"日志四个语言版本补全翻译。
+2. 修改相机IP弹窗文字随语言切换。
+3. 断流/设备中断弹窗"确定"按钮随语言切换。
+
+**涉及文件：**
+- `qml/ChangeIpDialog.qml`（标题、设备信息行、确定/取消按钮全部改用 `qsTr()`）
+- `themedmessagedialog.h`（新增 `changeEvent` 声明）
+- `themedmessagedialog.cpp`（实现 `changeEvent`，`LanguageChange` 时刷新 OK 按钮文本）
+- `translations/app_zh_CN.ts`（补 `UiController` / `ChangeIpDialog` context；补 V4.2.12 曝光五档条目）
+- `translations/app_en_US.ts`（补 `UiController` / `ChangeIpDialog` context）
+- `translations/app_ko_KR.ts`（补 `UiController` / `ChangeIpDialog` context）
+- `translations/app_nl_NL.ts`（补 `UiController` / `ChangeIpDialog` context）
+
+**编译结果：** 待 Qt Creator qmake → Rebuild + lrelease 验证
+**运行验证：** 切换至英文/韩文/荷兰文后：1) 触发超时日志应以目标语言出现；2) 点击"修改IP"弹窗标题/按钮应翻译；3) 断流弹窗"确定"按钮应翻译
+**风险点：** 无
+
+---
+
 ## 代码与商业机密保密规则
 
 > **最高优先级规则，适用于本工程及后续所有工程。**

@@ -2,6 +2,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QEvent>
 
 static const char* kStyle =
     "QDialog {"
@@ -50,6 +51,13 @@ ThemedMessageDialog::ThemedMessageDialog(QWidget* parent,
     body->addLayout(btnRow);
 
     root->addLayout(body);
+}
+
+void ThemedMessageDialog::changeEvent(QEvent* e)
+{
+    if (e->type() == QEvent::LanguageChange)
+        okBtn_->setText(tr("确定"));
+    QDialog::changeEvent(e);
 }
 
 void ThemedMessageDialog::warning(QWidget* parent, const QString& title, const QString& msg)

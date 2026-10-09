@@ -1,0 +1,126 @@
+Start testing: Aug 05 13:46 中国标准时间
+----------------------------------------------------------
+1/2 Testing: abi_smoke
+1/2 Test: abi_smoke
+Command: "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/bin/Release/test_abi.exe"
+Directory: D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/tests
+"abi_smoke" start time: Aug 05 13:46 中国标准时间
+Output:
+----------------------------------------------------------
+========= spwcam ABI smoke test =========
+
+[version]
+  PASS  spwcam_version() != NULL
+  PASS  version string non-empty
+  version = 1.0.0
+
+[struct_sizes]
+  PASS  sizeof(spwcam_init_params_t)
+  PASS  sizeof(spwcam_device_info_t)
+  PASS  sizeof(spwcam_frame_t)
+  PASS  sizeof(spwcam_record_status_t)
+  PASS  sizeof(spwcam_record_options_t)
+
+[struct_size_field]
+  PASS  device_info struct_size field round-trip
+  PASS  record_status struct_size field round-trip
+
+[error_strings]
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  unknown code returns non-NULL
+
+[init_deinit]
+  PASS  spwcam_init() returns non-NULL
+  PASS  last_error == OK after init
+  PASS  spwcam_deinit() returned without crash
+
+[null_deinit]
+  PASS  spwcam_deinit(NULL) is safe
+  PASS  spwcam_frame_free(NULL) is safe
+
+[invalid_params]
+  PASS  discovery_start(NULL) 鈫?NOT_INITIALIZED
+  PASS  stream_open(NULL) 鈫?error
+  PASS  frame_grab(NULL) 鈫?INVALID_PARAM
+
+=========================================
+All tests PASSED
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"abi_smoke" end time: Aug 05 13:46 中国标准时间
+"abi_smoke" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/2 Testing: init_deinit
+2/2 Test: init_deinit
+Command: "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/bin/Release/test_init.exe"
+Directory: D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build_ci/tests
+"init_deinit" start time: Aug 05 13:46 中国标准时间
+Output:
+----------------------------------------------------------
+===== spwcam init integration tests =====
+
+[C API: init/deinit]
+  PASS  spwcam_init() returns non-NULL
+  PASS  last_error == OK after init
+  PASS  version non-empty
+  PASS  initial stream status == STOPPED
+  PASS  frame_grab without stream 鈫?NO_FRAME
+  PASS  out_frame is NULL on NO_FRAME
+  PASS  record_start without stream 鈫?NOT_OPEN
+  PASS  spwcam_deinit() completed
+
+[C API: init with NULL params]
+  PASS  spwcam_init(NULL) returns non-NULL
+
+[C API: record_set_options]
+  PASS  record_set_options 鈫?OK
+  PASS  record_get_status 鈫?OK
+  PASS  not recording initially
+  PASS  segment_index == 0 initially
+
+[C++ RAII wrapper]
+  PASS  cam.initialised()
+  PASS  stream not running initially
+  PASS  not recording initially
+  PASS  version() non-empty
+  PASS  record_set_options overload compiles and runs
+  PASS  frame_grab without stream 鈫?empty Frame
+  PASS  cam.initialised() == false after deinit
+
+[C++ RAII: move semantics]
+  PASS  a initialised before move
+  PASS  a not initialised after move
+  PASS  b initialised after move
+  PASS  b deinited
+
+[DeviceInfo / Frame helpers]
+  PASS  DeviceInfo::sn
+  PASS  DeviceInfo::ip
+  PASS  DeviceInfo::rtsp_port
+  PASS  DeviceInfo::rtsp_url()
+
+=========================================
+Passed: 30  Failed: 0
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"init_deinit" end time: Aug 05 13:46 中国标准时间
+"init_deinit" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Aug 05 13:46 中国标准时间

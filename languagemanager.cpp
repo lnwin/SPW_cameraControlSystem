@@ -1,7 +1,6 @@
 #include "languagemanager.h"
 #include "themedmessagedialog.h"
 #include <QApplication>
-#include <QSettings>
 #include <QDir>
 #include <QCoreApplication>
 #include <QDebug>
@@ -16,8 +15,7 @@ LanguageManager& LanguageManager::instance()
 
 void LanguageManager::loadSaved()
 {
-    QSettings s("SPwater", "CameraControl");
-    switchLanguage(s.value("language/locale", "zh_CN").toString(), false);
+    switchLanguage("en_US", false);
 }
 
 bool LanguageManager::switchLanguage(const QString& locale, bool showErrors)
@@ -48,7 +46,6 @@ bool LanguageManager::switchLanguage(const QString& locale, bool showErrors)
             "Please rebuild the project so .qm files are generated.");
 
     m_locale = locale;
-    QSettings("SPwater", "CameraControl").setValue("language/locale", locale);
     emit languageChanged();
     return loaded;
 }

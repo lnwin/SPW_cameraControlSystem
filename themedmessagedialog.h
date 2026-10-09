@@ -20,6 +20,9 @@ public:
     static ThemedMessageDialog* openNonModal(QWidget* parent,
                                              const QString& title,
                                              const QString& msg);
+protected:
+    void changeEvent(QEvent* e) override;
+
 private:
     QPushButton* okBtn_;
 };

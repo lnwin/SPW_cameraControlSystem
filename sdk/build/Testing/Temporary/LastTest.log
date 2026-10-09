@@ -1,0 +1,194 @@
+Start testing: Sep 07 20:53 ÖÐ¹ú±ê×¼Ê±¼ä
+----------------------------------------------------------
+1/3 Testing: abi_smoke
+1/3 Test: abi_smoke
+Command: "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/bin/Release/test_abi.exe"
+Directory: D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/tests
+"abi_smoke" start time: Sep 07 20:53 ÖÐ¹ú±ê×¼Ê±¼ä
+Output:
+----------------------------------------------------------
+========= spwcam ABI smoke test =========
+
+[version]
+  PASS  spwcam_version() != NULL
+  PASS  version string non-empty
+  version = 2.0.0
+
+[struct_sizes]
+  PASS  sizeof(spwcam_init_params_t)
+  PASS  sizeof(spwcam_device_info_t)
+  PASS  sizeof(spwcam_frame_t)
+  PASS  sizeof(spwcam_record_status_t)
+  PASS  sizeof(spwcam_record_options_t)
+
+[struct_size_field]
+  PASS  device_info struct_size field round-trip
+  PASS  record_status struct_size field round-trip
+
+[error_strings]
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  error string not null/empty
+  PASS  unknown code returns non-NULL
+
+[init_deinit]
+  PASS  spwcam_init() returns non-NULL
+  PASS  last_error == OK after init
+  PASS  spwcam_deinit() returned without crash
+
+[null_deinit]
+  PASS  spwcam_deinit(NULL) is safe
+  PASS  spwcam_frame_free(NULL) is safe
+
+[invalid_params]
+  PASS  discovery_start(NULL) â†’ NOT_INITIALIZED
+  PASS  stream_open(NULL) â†’ error
+  PASS  frame_grab(NULL) â†’ INVALID_PARAM
+
+=========================================
+All tests PASSED
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"abi_smoke" end time: Sep 07 20:53 ÖÐ¹ú±ê×¼Ê±¼ä
+"abi_smoke" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/3 Testing: init_deinit
+2/3 Test: init_deinit
+Command: "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/bin/Release/test_init.exe"
+Directory: D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/tests
+"init_deinit" start time: Sep 07 20:53 ÖÐ¹ú±ê×¼Ê±¼ä
+Output:
+----------------------------------------------------------
+===== spwcam init integration tests =====
+
+[C API: init/deinit]
+  PASS  spwcam_init() returns non-NULL
+  PASS  last_error == OK after init
+  PASS  version non-empty
+  PASS  initial stream status == STOPPED
+  PASS  frame_grab without stream â†’ NO_FRAME
+  PASS  out_frame is NULL on NO_FRAME
+  PASS  record_start without stream â†’ NOT_OPEN
+  PASS  spwcam_deinit() completed
+
+[C API: init with NULL params]
+  PASS  spwcam_init(NULL) returns non-NULL
+
+[C API: record_set_options]
+  PASS  record_set_options â†’ OK
+  PASS  record_get_status â†’ OK
+  PASS  not recording initially
+  PASS  segment_index == 0 initially
+
+[C++ RAII wrapper]
+  PASS  cam.initialised()
+  PASS  stream not running initially
+  PASS  not recording initially
+  PASS  version() non-empty
+  PASS  record_set_options overload compiles and runs
+  PASS  frame_grab without stream â†’ empty Frame
+  PASS  cam.initialised() == false after deinit
+
+[C++ RAII: move semantics]
+  PASS  a initialised before move
+  PASS  a not initialised after move
+  PASS  b initialised after move
+  PASS  b deinited
+  PASS  log handler installed before move still fires after move
+
+[DeviceInfo / Frame helpers]
+  PASS  DeviceInfo::sn
+  PASS  DeviceInfo::ip
+  PASS  DeviceInfo::rtsp_port
+  PASS  DeviceInfo::rtsp_url()
+
+[C API: two contexts in one process]
+  PASS  two contexts created
+  PASS  second context still functional after first deinit
+  PASS  second context API still returns OK
+  PASS  init works again after all contexts released
+
+[C API: discovery port conflict]
+  PASS  first discovery_start OK
+  PASS  second discovery_start on same ports -> ERR_IO
+  PASS  last_error == ERR_IO
+
+[C API: SDK call from inside a callback]
+  PASS  re-entrant call from log callback returned correct value
+
+=========================================
+Passed: 39  Failed: 0
+<end of output>
+Test time =   0.13 sec
+----------------------------------------------------------
+Test Passed.
+"init_deinit" end time: Sep 07 20:53 ÖÐ¹ú±ê×¼Ê±¼ä
+"init_deinit" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/3 Testing: stream_e2e
+3/3 Test: stream_e2e
+Command: "D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/bin/Release/test_stream.exe"
+Directory: D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/tests
+"stream_e2e" start time: Sep 07 20:53 ÖÐ¹ú±ê×¼Ê±¼ä
+Output:
+----------------------------------------------------------
+===== spwcam stream integration test (rtsp://127.0.0.1:8554/test) =====
+  PASS  spwcam_init
+  PASS  stream_open
+  PASS  stream RUNNING within 15 s
+  PASS  STREAM_CONNECTED event fired
+  frames in 2 s: 50  (1920x1080 fmt=0)
+  PASS  frame rate >= 15 fps over 2 s
+  PASS  frame is 1920x1080
+  PASS  pixel format BGRA32
+  PASS  frame_grab returns a frame
+  PASS  rapid re-grab reports NO_FRAME when no new frame arrived
+  PASS  grabbed frames are never duplicated (sequence strictly increasing)
+  PASS  grab returns only OK or NO_FRAME
+  PASS  record_set_options
+  PASS  record_start returns OK
+  PASS  RECORD_STARTED event within 5 s
+  PASS  no RECORD_FAILED
+  PASS  status.recording == 1 while recording
+  PASS  status.current_file set
+  PASS  segment_index == 0 for first file
+  record file: D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/test_out/2026-09-07/2026-09-07_20-53-38.mp4  size 524336 -> 2883632
+  PASS  record file exists and is non-empty
+  PASS  record file grows while recording
+  snapshot: 10/10 calls OK, 10 SNAPSHOT_SAVED events
+  PASS  every snapshot call accepted while stream is running
+  PASS  every accepted snapshot produced a SNAPSHOT_SAVED event
+  PASS  snapshot file exists
+  PASS  SDK calls from inside event callback succeeded (no deadlock/crash)
+  PASS  record_stop returns OK
+  PASS  RECORD_STOPPED event within 5 s
+  PASS  status.recording == 0 after stop
+  PASS  record file finalised (size >= last observed)
+  PASS  second record_start
+  file recorded until deinit: D:/SPwater_CODE/SPW_cameraControlSystem/sdk/build/test_out/2026-09-07/2026-09-07_20-53-43.mp4  size=2461560
+  PASS  deinit while recording leaves a non-empty finalised file
+  PASS  MP4 contains a moov box (finalised / playable)
+
+ALL PASSED: total frames=211
+<end of output>
+Test time =  11.62 sec
+----------------------------------------------------------
+Test Passed.
+"stream_e2e" end time: Sep 07 20:53 ÖÐ¹ú±ê×¼Ê±¼ä
+"stream_e2e" time elapsed: 00:00:11
+----------------------------------------------------------
+
+End testing: Sep 07 20:53 ÖÐ¹ú±ê×¼Ê±¼ä

@@ -1,0 +1,57 @@
+"""
+spwcam/__init__.py  --  public API surface for the spwcam Python package
+"""
+
+from .camera import Camera, CameraError, DeviceInfo, RecordStatus
+from . import _ctypes_wrap as _raw
+
+# Re-export commonly used constants at package level
+from ._ctypes_wrap import (
+    SPWCAM_OK,
+    SPWCAM_ERR_INVALID_PARAM,
+    SPWCAM_ERR_NOT_INITIALIZED,
+    SPWCAM_ERR_ALREADY_OPEN,
+    SPWCAM_ERR_NOT_OPEN,
+    SPWCAM_ERR_DEVICE_NOT_FOUND,
+    SPWCAM_ERR_TIMEOUT,
+    SPWCAM_ERR_IO,
+    SPWCAM_ERR_ENCODER,
+    SPWCAM_ERR_NO_FRAME,
+    SPWCAM_ERR_OUT_OF_MEMORY,
+    SPWCAM_ERR_INTERNAL,
+    SPWCAM_PIXEL_BGRA32,
+    SPWCAM_PIXEL_RGB24,
+    SPWCAM_STREAM_STOPPED,
+    SPWCAM_STREAM_CONNECTING,
+    SPWCAM_STREAM_RUNNING,
+    SPWCAM_STREAM_ERROR,
+    SPWCAM_TRIGGER_SOFTWARE,
+    SPWCAM_TRIGGER_HARDWARE,
+    SPWCAM_LOG_DEBUG,
+    SPWCAM_LOG_INFO,
+    SPWCAM_LOG_WARN,
+    SPWCAM_LOG_ERROR,
+    SPWCAM_EVENT_DEVICE_DISCOVERED,
+    SPWCAM_EVENT_DEVICE_LOST,
+    SPWCAM_EVENT_STREAM_CONNECTED,
+    SPWCAM_EVENT_STREAM_LOST,
+    SPWCAM_EVENT_RECORD_STARTED,
+    SPWCAM_EVENT_RECORD_STOPPED,
+    SPWCAM_EVENT_RECORD_FAILED,
+    SPWCAM_EVENT_RECORD_SEGMENT,
+    SPWCAM_EVENT_SNAPSHOT_SAVED,
+    SPWCAM_EVENT_TRIGGER_STATUS,
+    SPWCAM_EVENT_IP_CHANGED,
+    SPWCAM_CONTAINER_MP4,
+    SPWCAM_CONTAINER_AVI,
+    SPWCAM_IMAGE_PNG,
+    SPWCAM_IMAGE_JPG,
+    SPWCAM_IMAGE_BMP,
+)
+
+__version__ = Camera.version()
+
+__all__ = [
+    "Camera", "CameraError", "DeviceInfo", "RecordStatus",
+    "__version__",
+]
