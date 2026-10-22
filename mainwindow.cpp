@@ -270,6 +270,10 @@ void MainWindow::onCheckDeviceAlive()
             return;
         }
         if (isRecording_) on_action_stopRecord_triggered();
+        // 停掉持有旧 URL 的 viewer，下次相机上线后用户直接点"开相机"即可，
+        // 无需先手动关闭再重开；同时重置上线时间戳，确保 3 秒缓冲期重新计算。
+        doStopViewer();
+        camOnlineSinceMs_.remove(curSelectedSn_);
         if (!offlinePopupShown_.value(curSelectedSn_, false)) {
             offlinePopupShown_[curSelectedSn_] = true;
             QString dur = QStringLiteral("Unknown");
@@ -312,6 +316,16 @@ bool MainWindow::openCameraForSelected(bool showMsgBox)
         DeviceInfo dev;
         if (!isControlOnline(curSelectedSn_, &dev)) {
             if (showMsgBox) ThemedMessageDialog::warning(this, tr("提示"), tr("设备离线，请确认心跳在线后再打开。"));
+            return false;
+        }
+
+        // 设备刚上线时 RTSP 服务尚未就绪（相机心跳早于 RTSP 服务就绪，通常差 2~5 s），
+        // 立即开流会让 rtspsrc 反复握手超时、长时间无画面，表现为"一点就卡"。
+        // 要求设备至少连续上线 3 秒再允许开流。
+        const qint64 sinceMs = camOnlineSinceMs_.value(curSelectedSn_, 0);
+        if (sinceMs > 0 && (QDateTime::currentMSecsSinceEpoch() - sinceMs) < 3000) {
+            if (showMsgBox) ThemedMessageDialog::warning(this, tr("提示"),
+                tr("设备刚上线，RTSP 服务尚未就绪，请稍候约 3 秒后再开启。"));
             return false;
         }
 
@@ -525,6 +539,8 @@ void MainWindow::bindUiController(UiController* ctrl)
     connect(ctrl, &UiController::requestSnapshot,      this, &MainWindow::on_action_grap_triggered);
     connect(ctrl, &UiController::requestRefreshDevices, this, [this](){ if (mgr_) mgr_->start(7777, 8888); });
     connect(ctrl, &UiController::requestSelectDevice,  this, [this](const QString& sn){
+        // 切换到不同相机时先停旧流，避免旧 viewer 占用时新流打不开
+        if (viewer_ && curSelectedSn_ != sn) doStopViewer();
         curSelectedSn_ = sn;
         offlinePopupShown_.remove(sn);
     });

@@ -125,7 +125,7 @@ static QString build_hw_d3d11_pipeline_udp(const QString& url, int latencyMs)
 {
     return QString(
                "rtspsrc name=src location=%1 protocols=udp latency=%2 buffer-mode=auto "
-               "udp-buffer-size=%3 do-retransmission=false drop-on-latency=%4 timeout=5000000 "
+               "udp-buffer-size=%3 do-retransmission=false drop-on-latency=%4 timeout=3000000 "
                "src. ! %5 "
                "! rtph264depay "
                "! h264parse "
@@ -149,7 +149,7 @@ static QString build_sw_pipeline_udp(const QString& url, int latencyMs)
 {
     return QString(
                "rtspsrc name=src location=%1 protocols=udp latency=%2 buffer-mode=auto "
-               "udp-buffer-size=%3 do-retransmission=false drop-on-latency=%4 timeout=5000000 "
+               "udp-buffer-size=%3 do-retransmission=false drop-on-latency=%4 timeout=3000000 "
                "src. ! %5 "
                "! rtph264depay "
                "! h264parse "
@@ -171,7 +171,7 @@ static QString build_fallback_decodebin_udp(const QString& url, int latencyMs)
 {
     return QString(
                "rtspsrc name=src location=%1 protocols=udp latency=%2 buffer-mode=auto "
-               "udp-buffer-size=%3 do-retransmission=false drop-on-latency=%4 timeout=5000000 "
+               "udp-buffer-size=%3 do-retransmission=false drop-on-latency=%4 timeout=3000000 "
                "src. ! %5 "
                "! decodebin "
                "! videoconvert "
@@ -185,22 +185,37 @@ static QString build_fallback_decodebin_udp(const QString& url, int latencyMs)
         .arg(kPostSrcQueue);
 }
 
-static bool wait_playing_or_fail(GstElement* pipeline, int timeout_ms, QString& errOut)
+// 分段轮询：每 100 ms 检查一次 stopFlag，使 stop() 能立即打断，
+// 避免单次 2 s 阻塞调用导致 doStopViewer 的 wait() 超时。
+static bool wait_playing_or_fail(GstElement* pipeline, int timeout_ms,
+                                  QString& errOut, const std::atomic<bool>& stopFlag)
 {
+    constexpr int kStep = 100; // ms per poll
+    int elapsed = 0;
+    while (elapsed < timeout_ms) {
+        if (stopFlag.load(std::memory_order_acquire)) {
+            errOut = "[GST] interrupted by stop";
+            return false;
+        }
+        GstState state = GST_STATE_NULL, pending = GST_STATE_NULL;
+        GstStateChangeReturn r = gst_element_get_state(
+            pipeline, &state, &pending, (GstClockTime)kStep * GST_MSECOND);
+        if (r == GST_STATE_CHANGE_FAILURE) {
+            errOut = "[GST] state change failure";
+            return false;
+        }
+        if (state == GST_STATE_PLAYING) return true;
+        // PAUSED 允许：某些 pipeline 会短暂停留在此态，仅在超时末尾才接受
+        if (state == GST_STATE_PAUSED && elapsed + kStep >= timeout_ms) return true;
+        elapsed += kStep;
+    }
     GstState state = GST_STATE_NULL, pending = GST_STATE_NULL;
-    GstStateChangeReturn r = gst_element_get_state(pipeline, &state, &pending, timeout_ms * GST_MSECOND);
-    if (r == GST_STATE_CHANGE_FAILURE) {
-        errOut = "[GST] state change failure";
-        return false;
-    }
-    if (state != GST_STATE_PLAYING && state != GST_STATE_PAUSED) {
-        errOut = QString("[GST] not playing, state=%1 pending=%2")
-                     .arg(gst_element_state_get_name(state))
-                     .arg(gst_element_state_get_name(pending));
-        // allow PAUSED (some pipelines settle there briefly), but if still not playing after timeout, treat as fail
-        if (state != GST_STATE_PAUSED) return false;
-    }
-    return true;
+    gst_element_get_state(pipeline, &state, &pending, 0);
+    errOut = QString("[GST] not playing after %1ms, state=%2 pending=%3")
+                 .arg(timeout_ms)
+                 .arg(gst_element_state_get_name(state))
+                 .arg(gst_element_state_get_name(pending));
+    return (state == GST_STATE_PLAYING || state == GST_STATE_PAUSED);
 }
 
 // --------- jitter helpers ----------
@@ -361,8 +376,14 @@ RECONNECT:
     gst_element_set_state(pipeline, GST_STATE_PLAYING);
 
     QString stateErr;
-    if (!wait_playing_or_fail(pipeline, 2000, stateErr)) {
+    if (!wait_playing_or_fail(pipeline, 2000, stateErr, stopFlag_)) {
         emit logLine(QString("[GST] failed to reach PLAYING: %1").arg(stateErr));
+        if (stopFlag_.load(std::memory_order_acquire)) {
+            gst_element_set_state(pipeline, GST_STATE_NULL);
+            gst_object_unref(sinkElem);
+            gst_object_unref(pipeline);
+            return;
+        }
         pump_bus(pipeline, [&](const QString& s){ emit logLine(s); }, nullptr);
         gst_element_set_state(pipeline, GST_STATE_NULL);
         gst_object_unref(sinkElem);
