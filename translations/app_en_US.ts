@@ -100,6 +100,12 @@
     <message><source>中</source><translation>Medium</translation></message>
     <message><source>较长</source><translation>Long+</translation></message>
     <message><source>长</source><translation>Long</translation></message>
+    <message><source>镜头变焦</source><translation>Lens Zoom</translation></message>
+    <message><source>镜头对焦</source><translation>Lens Focus</translation></message>
+    <message><source>镜头光圈</source><translation>Lens Iris</translation></message>
+    <message><source>镜头控制</source><translation>Lens Control</translation></message>
+    <message><source>当前相机为非变焦型号</source><translation>Current camera is non-zoom type</translation></message>
+    <message><source>一键预设（变焦5000/对焦5200/光圈300）</source><translation>Preset (Zoom 5000 / Focus 5200 / Iris 300)</translation></message>
 </context>
 <context>
     <name>TopToolBar</name>

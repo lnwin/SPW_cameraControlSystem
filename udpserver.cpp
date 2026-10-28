@@ -4,6 +4,9 @@
 
 #include <QCoreApplication>
 #include <QDebug>
+#include <QTcpSocket>
+#include <QJsonObject>
+#include <QJsonDocument>
 
 #ifdef Q_OS_WIN
 #include <winsock2.h>              // must be before <windows.h>
@@ -507,4 +510,38 @@ qint64 UdpDeviceManager::sendSetTrigger(const QString& sn, const QString& mode)
     emit logLine(QString("[UDP-Mgr] CMD_SET_TRIGGER SN=%1 mode=%2 bytes=%3 -> %4:%5")
                      .arg(sn, mode).arg(n).arg(dev.ip.toString()).arg(listenPort_));
     return n;
+}
+
+qint64 UdpDeviceManager::sendLensCommand(const QString& sn, const QString& cmdKey, int value)
+{
+    // 镜头命令走 TCP/JSON 通道（端口 9000）
+    // 使用非阻塞 QTcpSocket + lambda，避免主线程阻塞卡 UI
+    DeviceInfo dev;
+    if (!getDevice(sn, dev)) { emit logLine("[TCP-Lens] lens-cmd fail: SN not found"); return -1; }
+
+    QJsonObject obj;
+    obj[cmdKey] = value;
+    const QByteArray payload = QJsonDocument(obj).toJson(QJsonDocument::Compact);
+
+    auto* sock = new QTcpSocket();
+    const QString logKey  = cmdKey;
+    const int     logVal  = value;
+    const QString logIp   = dev.ip.toString();
+
+    // 连接成功后立即发送并关闭
+    connect(sock, &QTcpSocket::connected, this, [sock, payload, logKey, logVal, logIp, this](){
+        sock->write(payload);
+        sock->disconnectFromHost();
+        emit logLine(QString("[TCP-Lens] %1=%2 -> %3:9000").arg(logKey).arg(logVal).arg(logIp));
+    });
+    // 断开后自动释放
+    connect(sock, &QTcpSocket::disconnected, sock, &QObject::deleteLater);
+    // 连接失败也释放
+    connect(sock, &QAbstractSocket::errorOccurred, this, [sock, logKey, logIp, this](QAbstractSocket::SocketError){
+        emit logLine(QString("[TCP-Lens] connect fail: %1 -> %2:9000").arg(sock->errorString(), logIp));
+        sock->deleteLater();
+    });
+
+    sock->connectToHost(dev.ip, 9000);
+    return payload.size();
 }

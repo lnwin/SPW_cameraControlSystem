@@ -100,6 +100,12 @@
     <message><source>最小化</source><translation>Minimaliseren</translation></message>
     <message><source>最大化</source><translation>Maximaliseren</translation></message>
     <message><source>关闭</source><translation>Sluiten</translation></message>
+    <message><source>镜头变焦</source><translation>Lens Zoom</translation></message>
+    <message><source>镜头对焦</source><translation>Lens Focus</translation></message>
+    <message><source>镜头光圈</source><translation>Lens Iris</translation></message>
+    <message><source>镜头控制</source><translation>Lens Besturing</translation></message>
+    <message><source>当前相机为非变焦型号</source><translation>Huidige camera is geen zoommodel</translation></message>
+    <message><source>一键预设（变焦5000/对焦5200/光圈300）</source><translation>Preset (Zoom 5000 / Focus 5200 / Iris 300)</translation></message>
 </context>
 <context>
     <name>TopToolBar</name>

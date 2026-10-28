@@ -45,6 +45,7 @@ signals:
     void startRecord();
     void stopRecord();
     qint64 sendCameraExporeGain(const QString& sn, int exposureUs, double gainDb);
+    void sendLensCmd(const QString& sn, const QString& cmdKey, int value);
 
 private slots:
     void onCheckDeviceAlive();

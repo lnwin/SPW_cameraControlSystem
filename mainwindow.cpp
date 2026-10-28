@@ -122,6 +122,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(mgr_, &UdpDeviceManager::snDiscoveredOrUpdated, this, &MainWindow::onSnUpdatedForIpChange);
     connect(mgr_, &UdpDeviceManager::setIpAckReceived, this, &MainWindow::onSetIpAckReceived);
     connect(this, &MainWindow::sendCameraExporeGain, mgr_, &UdpDeviceManager::sendSetCameraParams);
+    connect(this, &MainWindow::sendLensCmd, mgr_, &UdpDeviceManager::sendLensCommand);
 
     // 设备存活定时器
     devAliveTimer_ = new QTimer(this);
@@ -552,6 +553,15 @@ void MainWindow::bindUiController(UiController* ctrl)
     });
     connect(ctrl, &UiController::exposureUsChanged, this, [this, ctrl](){
         emit sendCameraExporeGain(curSelectedSn_, ctrl->exposureUs(), ctrl->brightness());
+    });
+    connect(ctrl, &UiController::lensZoomChanged, this, [this, ctrl](){
+        emit sendLensCmd(curSelectedSn_, "lensZoom", ctrl->lensZoom());
+    });
+    connect(ctrl, &UiController::lensFocusChanged, this, [this, ctrl](){
+        emit sendLensCmd(curSelectedSn_, "lensFocus", ctrl->lensFocus());
+    });
+    connect(ctrl, &UiController::lensIrisChanged, this, [this, ctrl](){
+        emit sendLensCmd(curSelectedSn_, "lensIris", ctrl->lensIris());
     });
     connect(ctrl, &UiController::requestToggleCrosshair, this, [this](bool en){
         if (view_) view_->setCrosshairEnabled(en);

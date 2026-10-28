@@ -42,6 +42,9 @@ class UiController : public QObject
     Q_PROPERTY(int      triggerMode          READ triggerMode          NOTIFY triggerModeChanged) // 0=software 1=hardware
     Q_PROPERTY(bool     triggerSwitchLocked  READ triggerSwitchLocked  NOTIFY triggerSwitchLockedChanged)
     Q_PROPERTY(QString  triggerStatusMsg     READ triggerStatusMsg     NOTIFY triggerStatusMsgChanged)
+    Q_PROPERTY(int      lensZoom             READ lensZoom             WRITE setLensZoom NOTIFY lensZoomChanged)
+    Q_PROPERTY(int      lensFocus            READ lensFocus            WRITE setLensFocus NOTIFY lensFocusChanged)
+    Q_PROPERTY(int      lensIris             READ lensIris             WRITE setLensIris NOTIFY lensIrisChanged)
 
 public:
     explicit UiController(QObject* parent = nullptr);
@@ -76,6 +79,9 @@ public:
     bool        triggerSwitchLocked()  const { return triggerSwitchLocked_; }
     QString     triggerStatusMsg()     const { return triggerStatusMsg_; }
     bool        triggerWaitingAck()    const { return triggerUiState_ == TriggerUiState::WaitingAck; }
+    int         lensZoom()             const { return lensZoom_; }
+    int         lensFocus()            const { return lensFocus_; }
+    int         lensIris()             const { return lensIris_; }
 
 public slots:
     void setDeviceName(const QString& v)    { if (deviceName_ == v) return; deviceName_ = v; emit deviceNameChanged(); }
@@ -96,6 +102,9 @@ public slots:
     void setConnecting(bool v)             { if (connecting_ == v) return; connecting_ = v; emit connectingChanged(); }
     void setBrightness(int v)              { v = qBound(0,v,15); if (brightness_ == v) return; brightness_ = v; emit brightnessChanged(); }
     void setExposureUs(int v)              { v = qBound(10000,v,30000); if (exposureUs_ == v) return; exposureUs_ = v; emit exposureUsChanged(); }
+    void setLensZoom(int v)                { v = qBound(3835,v,7235); if (lensZoom_ == v) return; lensZoom_ = v; emit lensZoomChanged(); }
+    void setLensFocus(int v)               { v = qBound(3007,v,9207); if (lensFocus_ == v) return; lensFocus_ = v; emit lensFocusChanged(); }
+    void setLensIris(int v)                { v = qBound(0,v,656); if (lensIris_ == v) return; lensIris_ = v; emit lensIrisChanged(); }
 
     Q_INVOKABLE void cmdToggleCrosshair() { crosshairEnabled_ = !crosshairEnabled_; emit crosshairEnabledChanged(); emit requestToggleCrosshair(crosshairEnabled_); }
     Q_INVOKABLE void cmdSetLed(bool en);
@@ -159,6 +168,9 @@ signals:
     void triggerModeChanged();
     void triggerSwitchLockedChanged();
     void triggerStatusMsgChanged();
+    void lensZoomChanged();
+    void lensFocusChanged();
+    void lensIrisChanged();
     void noHardwareTriggerFallback(); // fallback=true 时由 MainWindow 显示弹窗
     void logAppended(const QString& msg);
 
@@ -209,6 +221,9 @@ private:
     bool        connecting_          = false;
     int         brightness_          = 15;
     int         exposureUs_          = 20000;
+    int         lensZoom_            = 5000;
+    int         lensFocus_           = 5200;
+    int         lensIris_            = 300;
     bool        crosshairEnabled_    = false;
     bool        ledEnabled_          = false;
     int         triggerMode_         = 0;  // 0=software, 1=hardware

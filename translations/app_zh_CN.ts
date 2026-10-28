@@ -100,6 +100,12 @@
     <message><source>中</source><translation>中</translation></message>
     <message><source>较长</source><translation>较长</translation></message>
     <message><source>长</source><translation>长</translation></message>
+    <message><source>镜头变焦</source><translation>镜头变焦</translation></message>
+    <message><source>镜头对焦</source><translation>镜头对焦</translation></message>
+    <message><source>镜头光圈</source><translation>镜头光圈</translation></message>
+    <message><source>镜头控制</source><translation>镜头控制</translation></message>
+    <message><source>当前相机为非变焦型号</source><translation>当前相机为非变焦型号</translation></message>
+    <message><source>一键预设（变焦5000/对焦5200/光圈300）</source><translation>一键预设（变焦5000/对焦5200/光圈300）</translation></message>
 </context>
 <context>
     <name>TopToolBar</name>

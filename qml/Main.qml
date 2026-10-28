@@ -45,7 +45,7 @@ Rectangle {
                 }
 
                 Text {
-                    text: "舟山渊视科技有限公司  V4.3.2"
+                    text: "舟山渊视科技有限公司  V4.4.0"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
@@ -152,13 +152,24 @@ Rectangle {
 
             // 右侧状态面板（只显示状态，不放按钮）
             HudPanel {
+                id: hudPanel
                 width: 260
                 Layout.fillHeight: true
 
-                ColumnLayout {
+                // 根据 SN 末两位判断是否为变焦型号
+                property bool isZoomCamera: uiCtrl ? uiCtrl.selectedSn.endsWith("AD") : false
+
+                Flickable {
                     anchors.fill: parent
                     anchors.margins: 10
-                    spacing: 5
+                    contentWidth: width
+                    contentHeight: hudColumn.implicitHeight
+                    clip: true
+
+                    ColumnLayout {
+                        id: hudColumn
+                        width: parent.width
+                        spacing: 5
 
                     Text {
                         text: qsTr("系统状态")
@@ -206,10 +217,10 @@ Rectangle {
 
                     Rectangle { Layout.fillWidth: true; height: 1; color: "#00cc88"; opacity: 0.2 }
 
-                    // 亮度调节
-                    Text { text: qsTr("亮度"); color: (uiCtrl && uiCtrl.rtspConnected) ? "#9aa0a6" : "#3a4a42"; font.pixelSize: 12; font.family: "Microsoft YaHei UI" }
+                    // 亮度调节 — 标签+滑块+值同行
                     RowLayout {
                         Layout.fillWidth: true
+                        Text { text: qsTr("亮度"); color: (uiCtrl && uiCtrl.rtspConnected) ? "#9aa0a6" : "#3a4a42"; font.pixelSize: 11; font.family: "Microsoft YaHei UI"; width: 52 }
                         Slider {
                             Layout.fillWidth: true
                             from: 0; to: 15; stepSize: 1
@@ -218,30 +229,22 @@ Rectangle {
                             onMoved: if (uiCtrl) uiCtrl.brightness = value
                             background: Rectangle {
                                 x: parent.leftPadding; y: parent.topPadding + parent.availableHeight / 2 - height / 2
-                                width: parent.availableWidth; height: 3; radius: 1
-                                color: "#0a1a12"
+                                width: parent.availableWidth; height: 3; radius: 1; color: "#0a1a12"
                                 Rectangle { width: parent.parent.visualPosition * parent.width; height: parent.height; radius: 1; color: "#00cc88" }
                             }
                             handle: Rectangle {
                                 x: parent.leftPadding + parent.visualPosition * parent.availableWidth - width / 2
                                 y: parent.topPadding + parent.availableHeight / 2 - height / 2
-                                width: 10; height: 10; radius: 5
-                                color: parent.pressed ? "#00ff99" : "#00cc88"
+                                width: 10; height: 10; radius: 5; color: parent.pressed ? "#00ff99" : "#00cc88"
                             }
                         }
-                        Text {
-                            text: uiCtrl ? uiCtrl.brightness : 100
-                            color: "#00ff99"; font.pixelSize: 11; font.family: "Microsoft YaHei UI"
-                            width: 28; horizontalAlignment: Text.AlignRight
-                        }
+                        Text { text: uiCtrl ? uiCtrl.brightness : 15; color: "#00ff99"; font.pixelSize: 11; font.family: "Microsoft YaHei UI"; width: 24; horizontalAlignment: Text.AlignRight }
                     }
 
-                    Rectangle { Layout.fillWidth: true; height: 1; color: "#00cc88"; opacity: 0.2 }
-
-                    // 曝光时间调节（10000~30000 µs，右侧显示短/较短/中/较长/长）
-                    Text { text: qsTr("曝光时间"); color: (uiCtrl && uiCtrl.rtspConnected) ? "#9aa0a6" : "#3a4a42"; font.pixelSize: 12; font.family: "Microsoft YaHei UI" }
+                    // 曝光时间 — 标签+滑块+档位同行
                     RowLayout {
                         Layout.fillWidth: true
+                        Text { text: qsTr("曝光时间"); color: (uiCtrl && uiCtrl.rtspConnected) ? "#9aa0a6" : "#3a4a42"; font.pixelSize: 11; font.family: "Microsoft YaHei UI"; width: 52 }
                         Slider {
                             Layout.fillWidth: true
                             from: 10000; to: 30000; stepSize: 1000
@@ -250,28 +253,183 @@ Rectangle {
                             onMoved: if (uiCtrl) uiCtrl.exposureUs = value
                             background: Rectangle {
                                 x: parent.leftPadding; y: parent.topPadding + parent.availableHeight / 2 - height / 2
-                                width: parent.availableWidth; height: 3; radius: 1
-                                color: "#0a1a12"
+                                width: parent.availableWidth; height: 3; radius: 1; color: "#0a1a12"
                                 Rectangle { width: parent.parent.visualPosition * parent.width; height: parent.height; radius: 1; color: "#00cc88" }
                             }
                             handle: Rectangle {
                                 x: parent.leftPadding + parent.visualPosition * parent.availableWidth - width / 2
                                 y: parent.topPadding + parent.availableHeight / 2 - height / 2
-                                width: 10; height: 10; radius: 5
-                                color: parent.pressed ? "#00ff99" : "#00cc88"
+                                width: 10; height: 10; radius: 5; color: parent.pressed ? "#00ff99" : "#00cc88"
                             }
                         }
                         Text {
-                            text: {
-                                var v = uiCtrl ? uiCtrl.exposureUs : 20000
-                                if (v <= 13000) return qsTr("短")
-                                if (v <= 17000) return qsTr("较短")
-                                if (v <= 22000) return qsTr("中")
-                                if (v <= 26000) return qsTr("较长")
-                                return qsTr("长")
+                            color: "#00ff99"; font.pixelSize: 11; font.family: "Microsoft YaHei UI"; width: 36; horizontalAlignment: Text.AlignRight
+                            text: { var v = uiCtrl ? uiCtrl.exposureUs : 20000; if (v<=13000) return qsTr("短"); if (v<=17000) return qsTr("较短"); if (v<=22000) return qsTr("中"); if (v<=26000) return qsTr("较长"); return qsTr("长") }
+                        }
+                    }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: "#00cc88"; opacity: 0.2 }
+
+                    // 镜头控制标题
+                    Text {
+                        text: qsTr("镜头控制")
+                        color: hudPanel.isZoomCamera ? "#00cc88" : "#5a6a60"
+                        font.pixelSize: 12
+                        font.bold: true
+                        font.family: "Microsoft YaHei UI"
+                    }
+                    Rectangle { Layout.fillWidth: true; height: 1; color: "#00cc88"; opacity: 0.4 }
+
+                    // 非变焦型号提示
+                    Text {
+                        Layout.fillWidth: true
+                        visible: !hudPanel.isZoomCamera
+                        text: qsTr("当前相机为非变焦型号")
+                        color: "#ff9966"
+                        font.pixelSize: 11
+                        font.family: "Microsoft YaHei UI"
+                        wrapMode: Text.WordWrap
+                    }
+
+                    // 镜头变焦（Zoom）：3835~7235 — 标签+滑块+输入框同行
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text { text: qsTr("镜头变焦"); color: (hudPanel.isZoomCamera && uiCtrl && uiCtrl.rtspConnected) ? "#9aa0a6" : "#3a4a42"; font.pixelSize: 11; font.family: "Microsoft YaHei UI"; width: 52 }
+                        Slider {
+                            id: zoomSlider
+                            Layout.fillWidth: true
+                            from: 3835; to: 7235; stepSize: 10
+                            value: uiCtrl ? uiCtrl.lensZoom : 5000
+                            enabled: hudPanel.isZoomCamera && uiCtrl && uiCtrl.rtspConnected
+                            onPressedChanged: if (!pressed && uiCtrl) uiCtrl.lensZoom = value
+                            background: Rectangle {
+                                x: parent.leftPadding; y: parent.topPadding + parent.availableHeight / 2 - height / 2
+                                width: parent.availableWidth; height: 3; radius: 1; color: "#0a1a12"
+                                Rectangle { width: parent.parent.visualPosition * parent.width; height: parent.height; radius: 1; color: "#00cc88" }
                             }
+                            handle: Rectangle {
+                                x: parent.leftPadding + parent.visualPosition * parent.availableWidth - width / 2
+                                y: parent.topPadding + parent.availableHeight / 2 - height / 2
+                                width: 10; height: 10; radius: 5; color: parent.pressed ? "#00ff99" : "#00cc88"
+                            }
+                        }
+                        TextField {
+                            id: zoomField
                             color: "#00ff99"; font.pixelSize: 11; font.family: "Microsoft YaHei UI"
-                            width: 36; horizontalAlignment: Text.AlignRight
+                            width: 50; horizontalAlignment: TextInput.AlignRight
+                            padding: 0; leftPadding: 2; rightPadding: 2
+                            enabled: hudPanel.isZoomCamera && uiCtrl && uiCtrl.rtspConnected
+                            validator: IntValidator { bottom: 3835; top: 7235 }
+                            onEditingFinished: if (uiCtrl) { var v = parseInt(text); if (!isNaN(v)) uiCtrl.lensZoom = v }
+                            background: Rectangle { color: "transparent" }
+                            Component.onCompleted: text = zoomSlider.value
+                            Connections { target: zoomSlider; onValueChanged: if (!zoomField.activeFocus) zoomField.text = zoomSlider.value }
+                        }
+                    }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: "#00cc88"; opacity: 0.2 }
+
+                    // 镜头对焦（Focus）：3007~9207 — 标签+滑块+输入框同行
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text { text: qsTr("镜头对焦"); color: (hudPanel.isZoomCamera && uiCtrl && uiCtrl.rtspConnected) ? "#9aa0a6" : "#3a4a42"; font.pixelSize: 11; font.family: "Microsoft YaHei UI"; width: 52 }
+                        Slider {
+                            id: focusSlider
+                            Layout.fillWidth: true
+                            from: 3007; to: 9207; stepSize: 10
+                            value: uiCtrl ? uiCtrl.lensFocus : 5200
+                            enabled: hudPanel.isZoomCamera && uiCtrl && uiCtrl.rtspConnected
+                            onPressedChanged: if (!pressed && uiCtrl) uiCtrl.lensFocus = value
+                            background: Rectangle {
+                                x: parent.leftPadding; y: parent.topPadding + parent.availableHeight / 2 - height / 2
+                                width: parent.availableWidth; height: 3; radius: 1; color: "#0a1a12"
+                                Rectangle { width: parent.parent.visualPosition * parent.width; height: parent.height; radius: 1; color: "#00cc88" }
+                            }
+                            handle: Rectangle {
+                                x: parent.leftPadding + parent.visualPosition * parent.availableWidth - width / 2
+                                y: parent.topPadding + parent.availableHeight / 2 - height / 2
+                                width: 10; height: 10; radius: 5; color: parent.pressed ? "#00ff99" : "#00cc88"
+                            }
+                        }
+                        TextField {
+                            id: focusField
+                            color: "#00ff99"; font.pixelSize: 11; font.family: "Microsoft YaHei UI"
+                            width: 50; horizontalAlignment: TextInput.AlignRight
+                            padding: 0; leftPadding: 2; rightPadding: 2
+                            enabled: hudPanel.isZoomCamera && uiCtrl && uiCtrl.rtspConnected
+                            validator: IntValidator { bottom: 3007; top: 9207 }
+                            onEditingFinished: if (uiCtrl) { var v = parseInt(text); if (!isNaN(v)) uiCtrl.lensFocus = v }
+                            background: Rectangle { color: "transparent" }
+                            Component.onCompleted: text = focusSlider.value
+                            Connections { target: focusSlider; onValueChanged: if (!focusField.activeFocus) focusField.text = focusSlider.value }
+                        }
+                    }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: "#00cc88"; opacity: 0.2 }
+
+                    // 镜头光圈（Iris）：0~656 — 标签+滑块+输入框同行
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text { text: qsTr("镜头光圈"); color: (hudPanel.isZoomCamera && uiCtrl && uiCtrl.rtspConnected) ? "#9aa0a6" : "#3a4a42"; font.pixelSize: 11; font.family: "Microsoft YaHei UI"; width: 52 }
+                        Slider {
+                            id: irisSlider
+                            Layout.fillWidth: true
+                            from: 0; to: 656; stepSize: 4
+                            value: uiCtrl ? uiCtrl.lensIris : 300
+                            enabled: hudPanel.isZoomCamera && uiCtrl && uiCtrl.rtspConnected
+                            onPressedChanged: if (!pressed && uiCtrl) uiCtrl.lensIris = value
+                            background: Rectangle {
+                                x: parent.leftPadding; y: parent.topPadding + parent.availableHeight / 2 - height / 2
+                                width: parent.availableWidth; height: 3; radius: 1; color: "#0a1a12"
+                                Rectangle { width: parent.parent.visualPosition * parent.width; height: parent.height; radius: 1; color: "#00cc88" }
+                            }
+                            handle: Rectangle {
+                                x: parent.leftPadding + parent.visualPosition * parent.availableWidth - width / 2
+                                y: parent.topPadding + parent.availableHeight / 2 - height / 2
+                                width: 10; height: 10; radius: 5; color: parent.pressed ? "#00ff99" : "#00cc88"
+                            }
+                        }
+                        TextField {
+                            id: irisField
+                            color: "#00ff99"; font.pixelSize: 11; font.family: "Microsoft YaHei UI"
+                            width: 50; horizontalAlignment: TextInput.AlignRight
+                            padding: 0; leftPadding: 2; rightPadding: 2
+                            enabled: hudPanel.isZoomCamera && uiCtrl && uiCtrl.rtspConnected
+                            validator: IntValidator { bottom: 0; top: 656 }
+                            onEditingFinished: if (uiCtrl) { var v = parseInt(text); if (!isNaN(v)) uiCtrl.lensIris = v }
+                            background: Rectangle { color: "transparent" }
+                            Component.onCompleted: text = irisSlider.value
+                            Connections { target: irisSlider; onValueChanged: if (!irisField.activeFocus) irisField.text = irisSlider.value }
+                        }
+                    }
+
+                    Rectangle { Layout.fillWidth: true; height: 1; color: "#00cc88"; opacity: 0.2 }
+
+                    // 一键调节预设（仅变焦型号）
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: 26
+                        visible: hudPanel.isZoomCamera
+                        radius: 4
+                        color: presetMa.pressed ? "#0d2a1e" : "#0a1a12"
+                        border.color: "#00cc88"
+                        border.width: 1
+                        Text {
+                            anchors.centerIn: parent
+                            text: qsTr("一键预设（变焦5000/对焦5200/光圈300）")
+                            color: "#00ff99"
+                            font.pixelSize: 11
+                            font.family: "Microsoft YaHei UI"
+                        }
+                        MouseArea {
+                            id: presetMa
+                            anchors.fill: parent
+                            enabled: hudPanel.isZoomCamera && uiCtrl && uiCtrl.rtspConnected
+                            onClicked: if (uiCtrl) {
+                                uiCtrl.lensZoom = 5000
+                                uiCtrl.lensFocus = 5200
+                                uiCtrl.lensIris = 300
+                            }
                         }
                     }
 
@@ -343,10 +501,13 @@ Rectangle {
                         horizontalAlignment: Text.AlignRight
                     }
 
-                    Item { Layout.fillHeight: true }
-                }
-            }
-        }
+                    Item { height: 8 }
+
+                    } // end ColumnLayout hudColumn
+                }     // end Flickable
+            }         // end HudPanel
+
+        } // end RowLayout
 
         // 底部日志区
         Rectangle {

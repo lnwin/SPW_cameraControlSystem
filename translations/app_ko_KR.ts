@@ -100,21 +100,12 @@
     <message><source>最小化</source><translation>최소화</translation></message>
     <message><source>最大化</source><translation>최대화</translation></message>
     <message><source>关闭</source><translation>닫기</translation></message>
-    <message><source>系统状态</source><translation>시스템 상태</translation></message>
-    <message><source>录像状态</source><translation>녹화 상태</translation></message>
-    <message><source>状态</source><translation>상태</translation></message>
-    <message><source>录像中</source><translation>녹화 중</translation></message>
-    <message><source>已停止</source><translation>정지됨</translation></message>
-    <message><source>文件名</source><translation>파일명</translation></message>
-    <message><source>分段</source><translation>분절</translation></message>
-    <message><source>分段时长</source><translation>분절 시간</translation></message>
-    <message><source>总时长</source><translation>총 시간</translation></message>
-    <message><source>截图路径</source><translation>스크린샷 경로</translation></message>
-    <message><source>录像路径</source><translation>녹화 경로</translation></message>
-    <message><source>亮度</source><translation>밝기</translation></message>
-    <message><source>系统日志</source><translation>시스템 로그</translation></message>
-    <message><source>分辨率</source><translation>해상도</translation></message>
-    <message><source>帧率</source><translation>프레임 속도</translation></message>
+    <message><source>镜头变焦</source><translation>렌즈 줌</translation></message>
+    <message><source>镜头对焦</source><translation>렌즈 포커스</translation></message>
+    <message><source>镜头光圈</source><translation>렌즈 조리개</translation></message>
+    <message><source>镜头控制</source><translation>렌즈 제어</translation></message>
+    <message><source>当前相机为非变焦型号</source><translation>현재 카메라는 줌 미지원 모델입니다</translation></message>
+    <message><source>一键预设（变焦5000/对焦5200/光圈300）</source><translation>프리셋 (줌 5000 / 포커스 5200 / 조리개 300)</translation></message>
 </context>
 <context>
     <name>TopToolBar</name>
