@@ -124,6 +124,60 @@ MainWindow::MainWindow(QWidget* parent)
     connect(this, &MainWindow::sendCameraExporeGain, mgr_, &UdpDeviceManager::sendSetCameraParams);
     connect(this, &MainWindow::sendLensCmd, mgr_, &UdpDeviceManager::sendLensCommand);
 
+    // 多相机系统初始化
+    qInfo() << "[MultiCam] Multi-camera system initialized";
+
+    // 创建布局管理器
+    layoutMgr_ = new MultiCameraLayoutManager(this);
+    layoutMgr_->setSpacing(4);
+    layoutMgr_->setMargins(2, 2, 2, 2);
+
+    // 创建相机管理器，绑定到设备管理器
+    cameraMgr_ = new CameraManager(nullptr, this);
+    cameraMgr_->bindDeviceManager(mgr_);
+
+    // 创建视频网格
+    videoGrid_ = new MultiCameraVideoGrid(this);
+    videoGrid_->setLayoutManager(layoutMgr_);
+
+    // 连接相机管理器信号
+    connect(cameraMgr_, &CameraManager::cameraAdded, this, [this](const QString& sn){
+        qInfo() << "[MultiCam] Camera added:" << sn;
+        CameraView* cam = cameraMgr_->camera(sn);
+        if (cam) {
+            videoGrid_->addCameraWindow(cam);
+            qInfo() << "[MultiCam] Camera window added to grid:" << sn;
+
+            // 连接 FPS 更新信号
+            connect(cam, &CameraView::fpsUpdated, this, [this, sn](int fps){
+                if (fps > 0) {  // 只在 FPS > 0 时更新 UI
+                    if (uiCtrl_ && sn == curSelectedSn_) {
+                        uiCtrl_->setVideoFps(fps);
+                    }
+                }
+            });
+        }
+    });
+
+    connect(cameraMgr_, &CameraManager::cameraConnected, this, [this](const QString& sn){
+        qInfo() << "[MultiCam] Camera connected:" << sn;
+        CameraView* cam = cameraMgr_->camera(sn);
+        if (cam && uiCtrl_ && sn == curSelectedSn_) {
+            uiCtrl_->setVideoFps(static_cast<int>(cam->currentFps()));
+        }
+    });
+
+    connect(cameraMgr_, &CameraManager::cameraDisconnected, this, [this](const QString& sn){
+        qInfo() << "[MultiCam] Camera disconnected:" << sn;
+        if (uiCtrl_ && sn == curSelectedSn_) {
+            uiCtrl_->setVideoFps(0);
+        }
+    });
+
+    connect(cameraMgr_, &CameraManager::selectedCameraChanged, this, &MainWindow::onCameraSelected);
+    connect(cameraMgr_, &CameraManager::activeStreamingCountChanged, this, &MainWindow::onActiveStreamingCountChanged);
+    connect(cameraMgr_, &CameraManager::cameraLogMessage, this, &MainWindow::onCameraLogMessage);
+
     // 设备存活定时器
     devAliveTimer_ = new QTimer(this);
     devAliveTimer_->setInterval(1000);
@@ -692,4 +746,55 @@ void MainWindow::shutdownAllThreads()
     g_noFrameStreak.remove(this); g_lastNewFrameMs.remove(this);
     g_streamStartMs.remove(this); g_viewerStartMs.remove(this);
     offlinePopupShown_.clear();
+}
+
+// ── 多相机槽函数实现 ─────────────────────────────────────────────────────────
+void MainWindow::onCameraSelected(const QString& sn)
+{
+    qInfo() << "[MultiCam] Camera selected:" << sn;
+    qDebug() << "[MainWindow] onCameraSelected called, SN:" << sn << "videoGrid_:" << videoGrid_;
+
+    curSelectedSn_ = sn;
+
+    if (videoGrid_) {
+        qDebug() << "[MainWindow] Calling videoGrid_->setSelectedCamera(" << sn << ")";
+        videoGrid_->setSelectedCamera(sn);
+    }
+
+    // 更新 UI 状态
+    if (uiCtrl_ && cameraMgr_) {
+        CameraView* cam = cameraMgr_->camera(sn);
+        if (cam) {
+            uiCtrl_->setVideoFps(static_cast<int>(cam->currentFps()));
+        }
+    }
+}
+
+void MainWindow::onActiveStreamingCountChanged(int count)
+{
+    qInfo() << "[MultiCam] Active streaming count changed:" << count;
+
+    if (cameraMgr_ && videoGrid_) {
+        // 获取所有活跃拉流的相机 SN 列表
+        QList<QString> activeSns = cameraMgr_->allActiveSns();
+
+        // 更新视频网格布局
+        videoGrid_->updateLayout(activeSns);
+    }
+
+    // 更新 UI FPS 显示
+    if (uiCtrl_ && !curSelectedSn_.isEmpty() && cameraMgr_) {
+        CameraView* cam = cameraMgr_->camera(curSelectedSn_);
+        if (cam) {
+            uiCtrl_->setVideoFps(static_cast<int>(cam->currentFps()));
+        }
+    }
+}
+
+void MainWindow::onCameraLogMessage(const QString& sn, const QString& msg)
+{
+    if (uiCtrl_) {
+        QString logMsg = QString("[%1] %2").arg(sn).arg(msg);
+        uiCtrl_->appendLog(logMsg);
+    }
 }

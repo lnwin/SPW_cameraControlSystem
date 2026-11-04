@@ -14,6 +14,9 @@
 #include "videorecorder.h"
 #include "uicontroller.h"
 #include "myStruct.h"
+#include "cameramanager.h"
+#include "multicameralayoutmanager.h"
+#include "multicameravideogrid.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -30,6 +33,7 @@ public:
     ZoomPanImageView* videoView()             const { return view_; }
     VideoRecorder*    myVideoRecorderPublic() const { return myVideoRecorder; }
     UdpDeviceManager* deviceManager()         const { return mgr_; }
+    MultiCameraVideoGrid* videoGrid()         const { return videoGrid_; }
 
 public slots:
     void changeIp(const QString& sn, const QString& newIp);
@@ -57,6 +61,11 @@ private slots:
     void onSnUpdatedForIpChange(const QString& sn);
     void onIpChangeTimeout();
     void onSetIpAckReceived(const QString& sn, const QString& status);
+
+    // 多相机槽函数
+    void onCameraSelected(const QString& sn);
+    void onActiveStreamingCountChanged(int count);
+    void onCameraLogMessage(const QString& sn, const QString& msg);
 
 private:
     void startPreviewPullTimer();
@@ -102,6 +111,11 @@ private:
     int    fpsFrameCount_  = 0;
     qint64 fpsWindowStart_ = 0;
     int    lastFps_        = 0;
+
+    // 多相机系统成员
+    CameraManager* cameraMgr_ = nullptr;
+    MultiCameraLayoutManager* layoutMgr_ = nullptr;
+    MultiCameraVideoGrid* videoGrid_ = nullptr;
 
     // overlay 复用缓冲区（避免每帧分配 8-16MB 导致长时内存碎片化）
     // 3 槽：防止 update() 异步 paint 仍在读某槽时被下一帧 memcpy 覆盖

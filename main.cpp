@@ -138,7 +138,14 @@ int main(int argc, char* argv[])
         if (!hud.isMaximized()) hud.move(hud.x() + dx, hud.y() + dy);
     });
 
-    if (w.videoView()) hud.embedVideoWidget(w.videoView());
+    // 优先嵌入多相机视频网格，回退到单相机视图
+    if (w.videoGrid()) {
+        hud.embedVideoWidget(w.videoGrid());
+        qInfo() << "[MultiCam] Video grid embedded into HudWindow";
+    } else if (w.videoView()) {
+        hud.embedVideoWidget(w.videoView());
+        qInfo() << "[SingleCam] Video view embedded into HudWindow";
+    }
 
     // 系统设置窗口
     SettingsController settingsCtrl;

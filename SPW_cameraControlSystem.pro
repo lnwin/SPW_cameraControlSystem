@@ -18,7 +18,11 @@ SOURCES += \
     hudwindow.cpp \
     settingscontroller.cpp \
     languagemanager.cpp \
-    themedmessagedialog.cpp
+    themedmessagedialog.cpp \
+    cameraview.cpp \
+    cameramanager.cpp \
+    multicameralayoutmanager.cpp \
+    multicameravideogrid.cpp
 
 HEADERS += \
     mainwindow.h \
@@ -32,7 +36,11 @@ HEADERS += \
     hudwindow.h \
     settingscontroller.h \
     languagemanager.h \
-    themedmessagedialog.h
+    themedmessagedialog.h \
+    cameraview.h \
+    cameramanager.h \
+    multicameralayoutmanager.h \
+    multicameravideogrid.h
 
 FORMS += mainwindow.ui
 
