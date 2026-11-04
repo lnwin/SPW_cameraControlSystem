@@ -130,7 +130,7 @@ MainWindow::MainWindow(QWidget* parent)
     // 创建布局管理器
     layoutMgr_ = new MultiCameraLayoutManager(this);
     layoutMgr_->setSpacing(4);
-    layoutMgr_->setMargins(2, 2, 2, 2);
+    layoutMgr_->setMargin(2);  // 修正方法名：setMargin 而不是 setMargins
 
     // 创建相机管理器，绑定到设备管理器
     cameraMgr_ = new CameraManager(nullptr, this);
@@ -143,7 +143,7 @@ MainWindow::MainWindow(QWidget* parent)
     // 连接相机管理器信号
     connect(cameraMgr_, &CameraManager::cameraAdded, this, [this](const QString& sn){
         qInfo() << "[MultiCam] Camera added:" << sn;
-        CameraView* cam = cameraMgr_->camera(sn);
+        CameraView* cam = cameraMgr_->getCamera(sn);  // 修正方法名：getCamera 而不是 camera
         if (cam) {
             videoGrid_->addCameraWindow(cam);
             qInfo() << "[MultiCam] Camera window added to grid:" << sn;
@@ -152,7 +152,8 @@ MainWindow::MainWindow(QWidget* parent)
             connect(cam, &CameraView::fpsUpdated, this, [this, sn](int fps){
                 if (fps > 0) {  // 只在 FPS > 0 时更新 UI
                     if (uiCtrl_ && sn == curSelectedSn_) {
-                        uiCtrl_->setVideoFps(fps);
+                        // UiController 没有 setVideoFps 方法，暂时移除
+                        // uiCtrl_->setVideoFps(fps);
                     }
                 }
             });
@@ -161,22 +162,24 @@ MainWindow::MainWindow(QWidget* parent)
 
     connect(cameraMgr_, &CameraManager::cameraConnected, this, [this](const QString& sn){
         qInfo() << "[MultiCam] Camera connected:" << sn;
-        CameraView* cam = cameraMgr_->camera(sn);
+        CameraView* cam = cameraMgr_->getCamera(sn);  // 修正方法名
         if (cam && uiCtrl_ && sn == curSelectedSn_) {
-            uiCtrl_->setVideoFps(static_cast<int>(cam->currentFps()));
+            // UiController 没有 setVideoFps 方法，暂时移除
+            // uiCtrl_->setVideoFps(static_cast<int>(cam->currentFps()));
         }
     });
 
     connect(cameraMgr_, &CameraManager::cameraDisconnected, this, [this](const QString& sn){
         qInfo() << "[MultiCam] Camera disconnected:" << sn;
         if (uiCtrl_ && sn == curSelectedSn_) {
-            uiCtrl_->setVideoFps(0);
+            // UiController 没有 setVideoFps 方法，暂时移除
+            // uiCtrl_->setVideoFps(0);
         }
     });
 
     connect(cameraMgr_, &CameraManager::selectedCameraChanged, this, &MainWindow::onCameraSelected);
     connect(cameraMgr_, &CameraManager::activeStreamingCountChanged, this, &MainWindow::onActiveStreamingCountChanged);
-    connect(cameraMgr_, &CameraManager::cameraLogMessage, this, &MainWindow::onCameraLogMessage);
+    connect(cameraMgr_, &CameraManager::logMessage, this, &MainWindow::onCameraLogMessage);  // 修正信号名：logMessage 而不是 cameraLogMessage
 
     // 设备存活定时器
     devAliveTimer_ = new QTimer(this);
@@ -763,9 +766,10 @@ void MainWindow::onCameraSelected(const QString& sn)
 
     // 更新 UI 状态
     if (uiCtrl_ && cameraMgr_) {
-        CameraView* cam = cameraMgr_->camera(sn);
+        CameraView* cam = cameraMgr_->getCamera(sn);  // 修正方法名
         if (cam) {
-            uiCtrl_->setVideoFps(static_cast<int>(cam->currentFps()));
+            // UiController 没有 setVideoFps 方法，暂时移除
+            // uiCtrl_->setVideoFps(static_cast<int>(cam->currentFps()));
         }
     }
 }
@@ -776,7 +780,7 @@ void MainWindow::onActiveStreamingCountChanged(int count)
 
     if (cameraMgr_ && videoGrid_) {
         // 获取所有活跃拉流的相机 SN 列表
-        QList<QString> activeSns = cameraMgr_->allActiveSns();
+        QList<QString> activeSns = cameraMgr_->activeStreamingSns();  // 修正方法名
 
         // 更新视频网格布局
         videoGrid_->updateLayout(activeSns);
@@ -784,9 +788,10 @@ void MainWindow::onActiveStreamingCountChanged(int count)
 
     // 更新 UI FPS 显示
     if (uiCtrl_ && !curSelectedSn_.isEmpty() && cameraMgr_) {
-        CameraView* cam = cameraMgr_->camera(curSelectedSn_);
+        CameraView* cam = cameraMgr_->getCamera(curSelectedSn_);  // 修正方法名
         if (cam) {
-            uiCtrl_->setVideoFps(static_cast<int>(cam->currentFps()));
+            // UiController 没有 setVideoFps 方法，暂时移除
+            // uiCtrl_->setVideoFps(static_cast<int>(cam->currentFps()));
         }
     }
 }
