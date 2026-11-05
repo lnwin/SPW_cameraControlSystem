@@ -180,32 +180,6 @@ MainWindow::MainWindow(QWidget* parent)
     connect(cameraMgr_, &CameraManager::activeStreamingCountChanged, this, &MainWindow::onActiveStreamingCountChanged);
     connect(cameraMgr_, &CameraManager::logMessage, this, &MainWindow::onCameraLogMessage);
 
-    // 更新设备列表（使用 1 秒定时器）
-    connect(devAliveTimer_, &QTimer::timeout, this, [this](){
-        if (cameraMgr_ && uiCtrl_) {
-            // 更新设备列表
-            QList<QString> allSns = cameraMgr_->allCameraSns();
-            uiCtrl_->setDeviceList(allSns);
-
-            // 更新当前选中相机的连接状态和 FPS
-            if (!curSelectedSn_.isEmpty()) {
-                CameraView* cam = cameraMgr_->getCamera(curSelectedSn_);
-                if (cam) {
-                    qint64 now = QDateTime::currentMSecsSinceEpoch();
-                    qint64 lastFrame = cam->lastFrameMs();
-                    bool videoAlive = (lastFrame > 0 && (now - lastFrame) <= 1200);
-                    uiCtrl_->setRtspConnected(videoAlive);
-
-                    if (videoAlive) {
-                        uiCtrl_->setCurrentFps(static_cast<int>(cam->currentFps()));
-                    } else {
-                        uiCtrl_->setCurrentFps(0);
-                    }
-                }
-            }
-        }
-    });
-
     // 设备存活定时器
     devAliveTimer_ = new QTimer(this);
     devAliveTimer_->setInterval(1000);
@@ -335,6 +309,12 @@ void MainWindow::stopPreviewPullTimer()
 // ── 设备存活检测 ─────────────────────────────────────────────────────────────
 void MainWindow::onCheckDeviceAlive()
 {
+    // 多相机模式：提前返回，由多相机系统自己处理状态更新
+    if (cameraMgr_) {
+        return;
+    }
+
+    // 单相机模式逻辑
     if (curSelectedSn_.isEmpty()) return;
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     const bool viewerRunning = (viewer_ != nullptr);
@@ -730,6 +710,34 @@ void MainWindow::bindUiController(UiController* ctrl)
     });
 
     connect(devAliveTimer_, &QTimer::timeout, ctrl, [this, ctrl](){
+        // 多相机模式：更新设备列表和选中相机状态
+        if (cameraMgr_) {
+            // 更新设备列表
+            QList<QString> allSns = cameraMgr_->allCameraSns();
+            ctrl->setDeviceList(allSns);
+            ctrl->setSelectedSn(curSelectedSn_);
+
+            // 更新当前选中相机的连接状态和 FPS
+            if (!curSelectedSn_.isEmpty()) {
+                CameraView* cam = cameraMgr_->getCamera(curSelectedSn_);
+                if (cam) {
+                    qint64 now = QDateTime::currentMSecsSinceEpoch();
+                    qint64 lastFrame = cam->lastFrameMs();
+                    bool videoAlive = (lastFrame > 0 && (now - lastFrame) <= 1200);
+                    ctrl->setRtspConnected(videoAlive);
+                    ctrl->setDeviceOnline(videoAlive);
+
+                    if (videoAlive) {
+                        ctrl->setCurrentFps(static_cast<int>(cam->currentFps()));
+                    } else {
+                        ctrl->setCurrentFps(0);
+                    }
+                }
+            }
+            return;
+        }
+
+        // 单相机模式逻辑
         DeviceInfo dev;
         const bool online = !curSelectedSn_.isEmpty() && isControlOnline(curSelectedSn_, &dev);
         ctrl->setDeviceOnline(online);
@@ -809,9 +817,9 @@ void MainWindow::onCameraSelected(const QString& sn)
             // 更新设备名称和 IP
             if (mgr_) {
                 DeviceInfo dev;
-                if (mgr_->deviceInfoBySn(sn, &dev)) {
-                    uiCtrl_->setDeviceName(dev.name);
-                    uiCtrl_->setDeviceIp(dev.ip);
+                if (mgr_->getDevice(sn, dev)) {  // 修正方法名：getDevice 而不是 deviceInfoBySn
+                    uiCtrl_->setDeviceName(sn);  // DeviceInfo 没有 name 字段，使用 sn
+                    uiCtrl_->setDeviceIp(dev.ip.toString());  // QHostAddress 需要转换为 QString
                     uiCtrl_->setDeviceOnline(true);
                 }
             }
