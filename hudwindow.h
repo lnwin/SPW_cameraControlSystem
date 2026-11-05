@@ -6,6 +6,7 @@
 #include "uicontroller.h"
 
 class QToolButton;
+class QLabel;
 
 class HudWindow : public QQuickWidget
 {
@@ -17,6 +18,9 @@ public:
     // 视频区全屏（铺满整个主界面，保持图像比例）；再次调用恢复
     bool isVideoFullscreen() const { return videoFullscreen_; }
     void setVideoFullscreen(bool on);
+
+    // 录像指示器控制
+    void setRecording(bool recording);
 
 protected:
     void resizeEvent(QResizeEvent* e) override;
@@ -34,6 +38,9 @@ private:
 
     QWidget*     videoContainer_  = nullptr;
     QToolButton* fsBtn_           = nullptr;   // 视频区右上角全屏切换按钮
+    QLabel*      resizeIndicator_ = nullptr;   // 右下角调整尺寸指示器
+    QLabel*      recIndicator_    = nullptr;   // 录像红点指示器
+    QTimer*      recBlinkTimer_   = nullptr;   // 录像红点闪烁定时器
     bool         videoFullscreen_ = false;
     // 全屏态在视频上左键拖动移动窗口（仅图像未放大时，避免与平移冲突）
     bool         winDragging_     = false;

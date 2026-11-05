@@ -9,6 +9,7 @@
 #include <QKeyEvent>
 #include <QCursor>
 #include <QToolButton>
+#include <QLabel>
 #include <QPainter>
 #include <QPixmap>
 #include <QIcon>
@@ -74,6 +75,36 @@ HudWindow::HudWindow(UiController* ctrl, const QString& greenLogoPath, const QSt
 
     for (const QQmlError& e : errors())
         qCritical() << "[QML ERROR]" << e.toString();
+
+    // 创建右下角调整尺寸指示控件
+    resizeIndicator_ = new QLabel(this);
+    resizeIndicator_->setObjectName("resizeIndicator");
+    resizeIndicator_->setFixedSize(24, 24);  // 增大尺寸从 12x12 到 24x24
+    resizeIndicator_->setStyleSheet("QLabel { background-color: rgba(0, 200, 136, 180); border: none; }");  // 绿色背景
+    // 绘制调整尺寸图标（三条斜线）
+    QPixmap pixmap(24, 24);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    QPen pen(QColor(255, 255, 255), 2);  // 白色线条
+    painter.setPen(pen);
+    // 绘制三条平行斜线，表示可以拖动调整尺寸
+    painter.drawLine(8, 22, 22, 8);
+    painter.drawLine(12, 22, 22, 12);
+    painter.drawLine(16, 22, 22, 16);
+    resizeIndicator_->setPixmap(pixmap);
+    resizeIndicator_->move(width() - 24, height() - 24);
+    resizeIndicator_->raise();
+
+    // 添加定时器确保右下角调整尺寸指示器始终在最上层
+    QTimer* raiseResizeIndicatorTimer = new QTimer(this);
+    raiseResizeIndicatorTimer->setInterval(100);
+    connect(raiseResizeIndicatorTimer, &QTimer::timeout, this, [this](){
+        if (resizeIndicator_) {
+            resizeIndicator_->raise();
+        }
+    });
+    raiseResizeIndicatorTimer->start();
 }
 
 void HudWindow::embedVideoWidget(QWidget* videoWidget)
@@ -107,6 +138,40 @@ void HudWindow::embedVideoWidget(QWidget* videoWidget)
         raiseTimer->start();
     }
 
+    // 创建录像红点指示器（作为视频容器的子控件，显示在视频上方）
+    if (!recIndicator_) {
+        recIndicator_ = new QLabel(videoContainer_);
+        recIndicator_->setObjectName("recIndicator");
+        recIndicator_->setFixedSize(80, 30);
+        recIndicator_->setAlignment(Qt::AlignCenter);
+        recIndicator_->setStyleSheet("QLabel { background-color: rgba(0, 0, 0, 180); color: red; font-size: 14px; font-weight: bold; border-radius: 4px; padding: 2px 8px; }");
+        recIndicator_->setText("● REC");
+        recIndicator_->move(20, 20);  // 左上角位置
+        recIndicator_->hide();  // 初始隐藏
+        recIndicator_->raise();  // 确保在视频上方
+
+        // 创建闪烁定时器（如果还没创建）
+        if (!recBlinkTimer_) {
+            recBlinkTimer_ = new QTimer(this);
+            connect(recBlinkTimer_, &QTimer::timeout, this, [this](){
+                if (recIndicator_) {
+                    recIndicator_->setVisible(!recIndicator_->isVisible());
+                    recIndicator_->raise();  // 每次闪烁时也 raise，确保在最上层
+                }
+            });
+        }
+
+        // 添加定时器确保录像红点始终在最上层（与全屏按钮类似）
+        QTimer* raiseTimer = new QTimer(this);
+        raiseTimer->setInterval(100);
+        connect(raiseTimer, &QTimer::timeout, this, [this](){
+            if (recIndicator_ && recIndicator_->isVisible()) {
+                recIndicator_->raise();
+            }
+        });
+        raiseTimer->start();
+    }
+
     videoContainer_->show();
     syncVideoGeometry();
 }
@@ -115,6 +180,7 @@ void HudWindow::setVideoFullscreen(bool on)
 {
     if (videoFullscreen_ == on) return;
     videoFullscreen_ = on;
+    qDebug() << "[HudWindow] setVideoFullscreen:" << on;
     if (!on) {
         // 退出全屏：复位拖动/缩放状态与光标
         winDragging_    = false;
@@ -124,6 +190,21 @@ void HudWindow::setVideoFullscreen(bool on)
     updateFullscreenButtonUi();
     syncVideoGeometry();
     if (on && videoContainer_) videoContainer_->setFocus();   // 让 Esc 直接可用
+}
+
+void HudWindow::setRecording(bool recording)
+{
+    if (!recIndicator_ || !recBlinkTimer_) return;
+
+    if (recording) {
+        // 开始录像：显示红点并启动闪烁定时器
+        recIndicator_->show();
+        recBlinkTimer_->start(500);  // 500ms 闪烁一次
+    } else {
+        // 停止录像：隐藏红点并停止闪烁定时器
+        recBlinkTimer_->stop();
+        recIndicator_->hide();
+    }
 }
 
 void HudWindow::updateFullscreenButtonUi()
@@ -174,21 +255,25 @@ bool HudWindow::eventFilter(QObject* obj, QEvent* e)
         //    已放大时保持原有平移图像行为。
         case QEvent::MouseButtonPress: {
             auto* me = static_cast<QMouseEvent*>(e);
+            qDebug() << "[HudWindow] MouseButtonPress received - pos:" << me->pos() << "button:" << me->button() << "videoFullscreen_:" << videoFullscreen_;
             if (videoFullscreen_ && me->button() == Qt::LeftButton && !isMaximized()) {
                 const Corner c = cornerAt(me->pos());
+                qDebug() << "[HudWindow] Corner detected:" << c << "at pos:" << me->pos();
                 if (c != NoCorner) {
                     fsResizeCorner_ = c;
                     fsResizeStart_  = me->globalPos();
                     fsGeomAtStart_  = geometry();
+                    qDebug() << "[HudWindow] Starting corner resize, corner:" << c;
                     return true;
                 }
-                auto* view = qobject_cast<ZoomPanImageView*>(videoContainer_);
-                if (!view || view->zoom() <= 1.0 + 1e-6) {
-                    winDragging_   = true;
-                    winDragStart_  = me->globalPos();
-                    winPosAtStart_ = pos();
-                    videoContainer_->setCursor(Qt::SizeAllCursor);
-                }
+                // 多相机模式下，videoContainer_ 是 MultiCameraVideoGrid，不是 ZoomPanImageView
+                // 移除 zoom 检查，允许在任何位置拖动窗口
+                winDragging_   = true;
+                winDragStart_  = me->globalPos();
+                winPosAtStart_ = pos();
+                videoContainer_->setCursor(Qt::SizeAllCursor);
+                qDebug() << "[HudWindow] Starting window drag";
+                return true;  // 返回 true 表示事件已处理
             }
             break;
         }
@@ -245,6 +330,12 @@ void HudWindow::resizeEvent(QResizeEvent* e)
 {
     QQuickWidget::resizeEvent(e);
     syncVideoGeometry();
+
+    // 更新调整尺寸指示器的位置
+    if (resizeIndicator_) {
+        resizeIndicator_->move(width() - 24, height() - 24);
+        resizeIndicator_->raise();
+    }
 }
 
 bool HudWindow::inResizeZone(const QPoint& pos) const

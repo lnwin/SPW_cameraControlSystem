@@ -43,6 +43,9 @@ public:
     // 截图
     void captureSnapshot();
 
+    // 设置录像选项（录像和截图保存路径等）
+    void setRecordOptions(const myRecordOptions& options);
+
     // overlay 配置
     void setOverlayEnabled(bool enabled) { overlayEnabled_ = enabled; }
     void setOverlayText(const QString& text) { overlayTopText_ = text; }
@@ -52,6 +55,7 @@ signals:
     void disconnected();
     void recordingStarted(const QString& filePath);
     void recordingStopped(const QString& filePath);
+    void recordingDurationUpdate(int segmentSeconds, int totalSeconds);
     void snapshotSaved(const QString& filePath);
     void logMessage(const QString& sn, const QString& msg);
     void fpsUpdated(int fps);

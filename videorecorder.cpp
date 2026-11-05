@@ -100,6 +100,7 @@ void VideoRecorder::receiveFrame2Record(QSharedPointer<QImage> img)
         frameIndex_ = 0;
         lastPtsMs_ = 0;
         recStartUs_ = 0;
+        lastDurationUpdateMs_ = 0;  // 重置时长更新计数器
 
         if (!openEncoderLockedForImage(*img)) {
             recording_ = false;
@@ -113,9 +114,13 @@ void VideoRecorder::receiveFrame2Record(QSharedPointer<QImage> img)
 
         encoderOpened_ = true;
         emit recordingStarted(currentRecordingPath_);
+        emit recordingDurationUpdate(0, 0);  // 开始录像时重置时长为0
     } else if (lastPtsMs_ >= kMaxSegmentMs) {
-        // 超过 30 分钟，切换到新文件
+        // 超过 10 秒，切换到新文件
         QString finishedPath = currentRecordingPath_;
+
+        // 累加总录像时长
+        totalRecordedMs_ += lastPtsMs_;
 
         // flush & 关闭旧文件
         avcodec_send_frame(codecCtx_, nullptr);
@@ -137,6 +142,7 @@ void VideoRecorder::receiveFrame2Record(QSharedPointer<QImage> img)
         frameIndex_ = 0;
         lastPtsMs_ = 0;
         recStartUs_ = 0;
+        lastDurationUpdateMs_ = 0;  // 重置时长更新计数器
         if (!openEncoderLockedForImage(*img)) {
             recording_ = false;
             encoderOpened_ = false;
@@ -149,6 +155,14 @@ void VideoRecorder::receiveFrame2Record(QSharedPointer<QImage> img)
 
     if (!encodeImageLocked(*img)) {
         emit sendMSG2ui(QStringLiteral("[VideoRecorder] 视频编码失败"));
+    }
+
+    // 每秒发送一次时长更新（用于更新 UI 的录像时长显示）
+    if (lastPtsMs_ - lastDurationUpdateMs_ >= 1000) {
+        int segmentSec = static_cast<int>(lastPtsMs_ / 1000);
+        int totalSec = static_cast<int>((totalRecordedMs_ + lastPtsMs_) / 1000);
+        emit recordingDurationUpdate(segmentSec, totalSec);
+        lastDurationUpdateMs_ = lastPtsMs_;
     }
 }
 
@@ -170,6 +184,7 @@ QString VideoRecorder::makeVideoFilePathLocked(const VideoOptions& opt) const
         }
     }
 
+    // 先创建日期子目录
     QDir dateDir(root.filePath(dateStr));
     if (!dateDir.exists()) {
         if (!dateDir.mkpath(".")) {
@@ -178,11 +193,23 @@ QString VideoRecorder::makeVideoFilePathLocked(const VideoOptions& opt) const
         }
     }
 
+    // 如果设置了 SN，在日期目录下创建 SN 子目录
+    QDir snDir = dateDir;
+    if (!sn_.isEmpty()) {
+        snDir = QDir(dateDir.filePath(sn_));
+        if (!snDir.exists()) {
+            if (!snDir.mkpath(".")) {
+                qWarning() << "[VideoRecorder] mkpath video SN dir failed:" << snDir.absolutePath();
+                return QString();
+            }
+        }
+    }
+
     const QDateTime now = QDateTime::currentDateTime();
     const QString prefix = now.toString("yyyy-MM-dd_hh-mm-ss");
     const QString ext = containerToExtension(opt.container);
 
-    return dateDir.filePath(prefix + "." + ext);
+    return snDir.filePath(prefix + "." + ext);
 }
 
 QString VideoRecorder::makeSnapshotFilePathLocked(ImageFormat fmt) const
@@ -201,11 +228,24 @@ QString VideoRecorder::makeSnapshotFilePathLocked(ImageFormat fmt) const
         }
     }
 
+    // 先创建日期子目录
     QDir dateDir(root.filePath(dateStr));
     if (!dateDir.exists()) {
         if (!dateDir.mkpath(".")) {
             qWarning() << "[VideoRecorder] mkpath snapshot date dir failed:" << dateDir.absolutePath();
             return QString();
+        }
+    }
+
+    // 如果设置了 SN，在日期目录下创建 SN 子目录
+    QDir snDir = dateDir;
+    if (!sn_.isEmpty()) {
+        snDir = QDir(dateDir.filePath(sn_));
+        if (!snDir.exists()) {
+            if (!snDir.mkpath(".")) {
+                qWarning() << "[VideoRecorder] mkpath snapshot SN dir failed:" << snDir.absolutePath();
+                return QString();
+            }
         }
     }
 
@@ -271,6 +311,7 @@ void VideoRecorder::startRecording()
     recording_ = true;
     encoderOpened_ = false;
     currentRecordingPath_.clear();
+    totalRecordedMs_ = 0;  // 重置总录像时长
 
     qInfo() << "[REC-STATE] startRecording done: recording_=true, waiting first frame to open encoder";
     emit sendMSG2ui(QStringLiteral("[VideoRecorder] startRecording"));

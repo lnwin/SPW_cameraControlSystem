@@ -16,9 +16,9 @@ SettingsController::SettingsController(QObject* parent) : QObject(parent)
 void SettingsController::load()
 {
     QSettings s("SPwater", "CameraControl");
-    // Paths are NOT persisted — always start from VideoRecorder defaults to avoid UI/actual mismatch
-    setCapturePath("D:/SP_camera_capture");
-    setRecordPath("D:/SP_camera_record");
+    // 从 QSettings 读取保存的路径，如果不存在则使用默认值
+    setCapturePath(s.value("path/capturePath", "D:/SP_camera_capture").toString());
+    setRecordPath(s.value("path/recordPath", "D:/SP_camera_record").toString());
     setCaptureType(s.value("format/captureType", 0).toInt());
     setRecordType(s.value("format/recordType",   0).toInt());
     setOverlayEnabled(s.value("overlay/enabled", true).toBool());
@@ -28,7 +28,9 @@ void SettingsController::load()
 void SettingsController::save()
 {
     QSettings s("SPwater", "CameraControl");
-    // Paths intentionally NOT saved — they reset to defaults each startup
+    // 保存路径到 QSettings
+    s.setValue("path/capturePath", capturePath_);
+    s.setValue("path/recordPath", recordPath_);
     s.setValue("format/captureType", captureType_);
     s.setValue("format/recordType",  recordType_);
     s.setValue("overlay/enabled",    overlayEnabled_);

@@ -1,5 +1,7 @@
 #include "cameramanager.h"
 #include <QTimer>
+#include <QNetworkInterface>
+#include <QMessageBox>
 
 CameraManager::CameraManager(QWidget* parentWidget, QObject* parent)
     : QObject(parent)
@@ -9,14 +11,23 @@ CameraManager::CameraManager(QWidget* parentWidget, QObject* parent)
 
 CameraManager::~CameraManager()
 {
-    // 清理所有相机
+    qDebug() << "[CameraManager] Destructor called, cleaning up" << cameras_.size() << "cameras";
+
+    // 先停止所有录像和拉流
     for (auto* cam : cameras_) {
         if (cam) {
+            if (cam->isRecording()) {
+                cam->stopRecording();
+            }
             cam->disconnect();
-            cam->deleteLater();
         }
     }
+
+    // 清空列表，但不要手动删除 - Qt 父子关系会自动清理
+    // 因为 CameraView 的父对象是 CameraManager (this)，Qt 会自动删除它们
     cameras_.clear();
+
+    qDebug() << "[CameraManager] Destructor finished";
 }
 
 void CameraManager::bindDeviceManager(UdpDeviceManager* mgr)
@@ -179,6 +190,68 @@ QString CameraManager::buildRtspUrl(const QString& sn)
         .arg(path);
 }
 
+void CameraManager::checkIpSubnet(const QString& cameraIp, const QString& sn)
+{
+    // 获取本机所有网络接口的 IP 地址
+    QList<QHostAddress> localAddresses = QNetworkInterface::allAddresses();
+
+    bool inSameSubnet = false;
+
+    QHostAddress camAddr(cameraIp);
+    if (camAddr.isNull()) {
+        return; // 无效的相机 IP
+    }
+
+    // 检查是否在同一网段（简化检查：前三段相同）
+    for (const QHostAddress& localAddr : localAddresses) {
+        if (localAddr.protocol() != QAbstractSocket::IPv4Protocol) {
+            continue; // 只检查 IPv4
+        }
+
+        if (localAddr == QHostAddress::LocalHost) {
+            continue; // 跳过 127.0.0.1
+        }
+
+        // 比较前三段是否相同（假设 /24 子网掩码）
+        quint32 camIp = camAddr.toIPv4Address();
+        quint32 locIp = localAddr.toIPv4Address();
+
+        // 前 24 位相同表示在同一 /24 网段
+        if ((camIp & 0xFFFFFF00) == (locIp & 0xFFFFFF00)) {
+            inSameSubnet = true;
+            break;
+        }
+    }
+
+    // 如果不在同一网段，弹窗提示（只提示一次）
+    static QSet<QString> warnedDevices;
+    if (!inSameSubnet && !warnedDevices.contains(sn)) {
+        warnedDevices.insert(sn);
+
+        QString localIps;
+        for (const QHostAddress& localAddr : localAddresses) {
+            if (localAddr.protocol() == QAbstractSocket::IPv4Protocol
+                && localAddr != QHostAddress::LocalHost) {
+                if (!localIps.isEmpty()) localIps += ", ";
+                localIps += localAddr.toString();
+            }
+        }
+
+        QString msg = QString("警告：相机 [%1] 的 IP 地址 %2 与本机 IP (%3) 不在同一网段，"
+                              "可能无法正常通信。请检查网络配置。")
+                            .arg(sn)
+                            .arg(cameraIp)
+                            .arg(localIps.isEmpty() ? "未知" : localIps);
+
+        emit logMessage(sn, msg);
+
+        // 使用 QTimer 延迟弹窗，避免阻塞设备发现流程
+        QTimer::singleShot(500, this, [msg](){
+            QMessageBox::warning(nullptr, "网段警告", msg);
+        });
+    }
+}
+
 void CameraManager::updateActiveStreamingCount()
 {
     int current = activeStreamingCount();
@@ -190,6 +263,17 @@ void CameraManager::updateActiveStreamingCount()
 
 void CameraManager::onDeviceDiscovered(const QString& sn)
 {
+    // 获取设备信息
+    if (!deviceMgr_) return;
+
+    DeviceInfo dev;
+    if (!deviceMgr_->getDevice(sn, dev)) {
+        return;
+    }
+
+    // 检查 IP 网段
+    checkIpSubnet(dev.ip.toString(), sn);
+
     // 检查是否已经创建了该相机的 CameraView
     if (cameras_.contains(sn)) {
         // 已存在，检查连接状态

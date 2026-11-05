@@ -37,6 +37,7 @@ public:
     ~VideoRecorder() override;
 
 public slots:
+    void setSn(const QString& sn) { sn_ = sn; }
     void receiveRecordOptions(myRecordOptions myOptions);
     void receiveFrame2Save(QSharedPointer<QImage> img);
     void receiveFrame2Record(QSharedPointer<QImage> img);
@@ -48,6 +49,7 @@ signals:
     void recordingStarted(const QString& filePath);
     void recordingStopped(const QString& filePath);
     void recordingFailed(const QString& reason);   // encoder init failed → MainWindow resets isRecording_
+    void recordingDurationUpdate(int segmentSeconds, int totalSeconds);  // 录像时长更新信号
     void snapshotSaved(const QString& filePath);
     void sendMSG2ui(const QString&);
 
@@ -64,6 +66,7 @@ private:
     // 路径配置
     QString videoRootDir_    = "D:/SP_camera_record";
     QString snapshotRootDir_ = "D:/SP_camera_capture";
+    QString sn_;  // 相机序列号，用于按 SN 创建子文件夹
 
     ImageFormat    myCaptureType = ImageFormat::PNG;
     VideoContainer myRecordType  = VideoContainer::MP4;
@@ -76,9 +79,11 @@ private:
     // 最近一帧缓存（供截图用）
     QImage lastFrame_;
 
-    // 用于“真实时间PTS”的基准与单调控制（解决时长漂移）
+    // 用于”真实时间PTS”的基准与单调控制（解决时长漂移）
     qint64 recStartUs_ = 0;     // 录制开始的时间（微秒）
     qint64 lastPtsMs_  = 0;     // 上一次写入的 pts（毫秒），保证单调递增
+    qint64 lastDurationUpdateMs_ = 0;  // 上次发送时长更新的时间（毫秒）
+    qint64 totalRecordedMs_ = 0;  // 总录像时长（毫秒），包括所有分段
 
     // 挂起的截图请求
     bool pendingSnapshot_ = false;
@@ -99,7 +104,7 @@ private:
     double  encFps_    = 25.0;
     qint64  frameIndex_ = 0;
 
-    static constexpr qint64 kMaxSegmentMs = 30LL * 60 * 1000; // 30 分钟
+    static constexpr qint64 kMaxSegmentMs = 5LL * 60 * 1000; // 5 分钟自动分段
 
     bool openEncoderLockedForImage(const QImage &img);
     bool encodeImageLocked(const QImage &img);

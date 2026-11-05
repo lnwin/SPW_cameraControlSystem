@@ -98,6 +98,7 @@ private:
     QString curSelectedSn_;
     QString overlayTopText_;
     bool    overlayEnabled_ = false;
+    myRecordOptions currentRecordOptions_;  // 存储当前的录像选项配置
 
     bool    ipChangeWaiting_  = false;
     bool    ipAckAccepted_    = false;

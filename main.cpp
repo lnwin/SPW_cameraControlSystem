@@ -7,6 +7,8 @@
 #include <QIcon>
 #include <QImage>
 #include <QUrl>
+#include <QLockFile>
+#include <QMessageBox>
 
 #include "mainwindow.h"
 #include "hudwindow.h"
@@ -103,6 +105,32 @@ int main(int argc, char* argv[])
     }
 
     QApplication a(argc, argv);
+
+    // ========== 单实例检查 ==========
+    const QString appDir = QFileInfo(QString::fromLocal8Bit(argv[0])).absolutePath();
+    const QString lockFilePath = QDir(appDir).filePath("SPW_cameraControlSystem.lock");
+    QLockFile lockFile(lockFilePath);
+    lockFile.setStaleLockTime(0);  // 禁用陈旧锁文件自动删除，确保检测准确
+
+    if (!lockFile.tryLock(100)) {
+        qWarning() << "[STARTUP] Another instance is already running. Lock file:" << lockFilePath;
+
+        QMessageBox msgBox;
+        msgBox.setIcon(QMessageBox::Warning);
+        msgBox.setWindowTitle(QObject::tr("程序已运行"));
+        msgBox.setText(QObject::tr("检测到程序已经在运行中！\n\n每次只能运行一个程序实例。"));
+        msgBox.setInformativeText(QObject::tr("请关闭已运行的程序后再启动。"));
+        msgBox.setStandardButtons(QMessageBox::Ok);
+        msgBox.setDefaultButton(QMessageBox::Ok);
+        msgBox.exec();
+
+        qInfo() << "[STARTUP] Exiting due to another instance already running";
+        return 1;  // 退出程序
+    }
+
+    qInfo() << "[STARTUP] Single instance lock acquired successfully";
+    // ========== 单实例检查结束 ==========
+
     QFont f; f.setFamily("Microsoft YaHei UI"); f.setPointSize(9);
     a.setFont(f);
 
@@ -136,6 +164,11 @@ int main(int argc, char* argv[])
     QObject::connect(&uiCtrl, &UiController::requestWinClose, &hud, &QWidget::close);
     QObject::connect(&uiCtrl, &UiController::requestWinDrag, &hud, [&hud](int dx, int dy){
         if (!hud.isMaximized()) hud.move(hud.x() + dx, hud.y() + dy);
+    });
+
+    // 连接录像状态变化到 HudWindow 的录像指示器
+    QObject::connect(&uiCtrl, &UiController::recordingChanged, &hud, [&hud, &uiCtrl](){
+        hud.setRecording(uiCtrl.recording());
     });
 
     // 优先嵌入多相机视频网格，回退到单相机视图
@@ -172,6 +205,20 @@ int main(int argc, char* argv[])
     };
     QObject::connect(&settingsCtrl, &SettingsController::settingsSaved, &uiCtrl, [&](const myRecordOptions&){ syncPaths(); });
     syncPaths(); // 启动时初始化
+
+    // 启动时应用录像选项到多相机系统
+    {
+        myRecordOptions initialOpt;
+        initialOpt.capturePath = settingsCtrl.capturePath();
+        initialOpt.recordPath = settingsCtrl.recordPath();
+        initialOpt.capturType = static_cast<ImageFormat>(settingsCtrl.captureType());
+        initialOpt.recordType = static_cast<VideoContainer>(settingsCtrl.recordType());
+        initialOpt.overlayEnabled = settingsCtrl.overlayEnabled();
+        w.applyRecordOptions(initialOpt);
+        qInfo() << "[STARTUP] Applied initial record options: recordPath=" << initialOpt.recordPath
+                << "capturePath=" << initialOpt.capturePath;
+    }
+
     QObject::connect(&uiCtrl, &UiController::requestOpenSettings, &settingsWin, [&settingsWin, &settingsCtrl](){
         settingsCtrl.load(); settingsWin.show(); settingsWin.raise();
     });

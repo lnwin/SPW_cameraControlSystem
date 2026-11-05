@@ -51,15 +51,16 @@ Rectangle {
             delegate: ToolBtn { tip: modelData.tip; cmd: modelData.cmd }
         }
 
-        ToolBtn {
-            tip:        (uiCtrl && uiCtrl.connecting) ? qsTr("连接中...") :
-                        (uiCtrl && uiCtrl.rtspConnected) ? qsTr("断开连接") : qsTr("连接相机")
-            cmd:        (uiCtrl && uiCtrl.rtspConnected) ? "close" : "open"
-            active:     uiCtrl && uiCtrl.rtspConnected
-            activeColor: "#ff3040"
-            enabled:    !(uiCtrl && uiCtrl.connecting)
-            opacity:    (uiCtrl && uiCtrl.connecting) ? 0.5 : 1.0
-        }
+        // 隐藏"连接相机"按钮 - 多相机模式自动连接
+        // ToolBtn {
+        //     tip:        (uiCtrl && uiCtrl.connecting) ? qsTr("连接中...") :
+        //                 (uiCtrl && uiCtrl.rtspConnected) ? qsTr("断开连接") : qsTr("连接相机")
+        //     cmd:        (uiCtrl && uiCtrl.rtspConnected) ? "close" : "open"
+        //     active:     uiCtrl && uiCtrl.rtspConnected
+        //     activeColor: "#ff3040"
+        //     enabled:    !(uiCtrl && uiCtrl.connecting)
+        //     opacity:    (uiCtrl && uiCtrl.connecting) ? 0.5 : 1.0
+        // }
 
         ToolBtn {
             tip:        (uiCtrl && uiCtrl.recording) ? qsTr("停止录像") : qsTr("开始录像")

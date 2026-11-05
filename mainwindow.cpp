@@ -11,12 +11,14 @@
 #include <QFileInfo>
 #include <QInputDialog>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPainter>
 #include <QProgressDialog>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QSettings>
+#include <QStorageInfo>
 #include <QUrl>
 
 #include <cstring>
@@ -148,12 +150,45 @@ MainWindow::MainWindow(QWidget* parent)
             videoGrid_->addCameraWindow(cam);
             qInfo() << "[MultiCam] Camera window added to grid:" << sn;
 
+            // *** 关键修复：为新创建的相机立即应用当前的录像选项 ***
+            cam->setRecordOptions(currentRecordOptions_);
+            qInfo() << "[MultiCam] Applied record options to new camera:" << sn
+                    << "recordPath:" << currentRecordOptions_.recordPath
+                    << "capturePath:" << currentRecordOptions_.capturePath;
+
             // 连接 FPS 更新信号，更新 UI
             connect(cam, &CameraView::fpsUpdated, this, [this, sn](int fps){
                 if (sn == curSelectedSn_ && uiCtrl_) {
                     uiCtrl_->setCurrentFps(fps);
                 }
             });
+
+            // 连接录像开始信号，更新 UI 状态（用于分段录像）
+            connect(cam, &CameraView::recordingStarted, this, [this, sn](const QString& path){
+                if (sn == curSelectedSn_ && uiCtrl_ && isRecording_) {
+                    // 分段录像：增加 segment 计数
+                    int currentSegment = uiCtrl_->recordSegmentIndex() + 1;
+                    uiCtrl_->setRecordSegmentIndex(currentSegment);
+                    uiCtrl_->setRecordFileName(QFileInfo(path).fileName());
+                }
+            });
+
+            // 连接录像时长更新信号
+            connect(cam, &CameraView::recordingDurationUpdate, this, [this, sn](int segmentSec, int totalSec){
+                if (sn == curSelectedSn_ && uiCtrl_ && isRecording_) {
+                    // 更新 UI 的录像时长显示
+                    int segMin = segmentSec / 60;
+                    int segSec = segmentSec % 60;
+                    int totalMin = totalSec / 60;
+                    int totalSecRem = totalSec % 60;
+
+                    uiCtrl_->setRecordSegmentElapsed(QString("%1:%2").arg(segMin, 2, 10, QChar('0')).arg(segSec, 2, 10, QChar('0')));
+                    uiCtrl_->setRecordTotalElapsed(QString("%1:%2").arg(totalMin, 2, 10, QChar('0')).arg(totalSecRem, 2, 10, QChar('0')));
+                }
+            });
+
+            // 注意：录像和截图信号已经在 CameraManager 中转发为 logMessage，
+            // 不需要在这里重复连接，避免日志重复输出
         }
     });
 
@@ -271,6 +306,23 @@ void MainWindow::closeEvent(QCloseEvent* e) { shutdownAllThreads(); e->accept();
 void MainWindow::applyRecordOptions(const myRecordOptions& opt)
 {
     overlayEnabled_ = opt.overlayEnabled;
+
+    // 保存当前录像选项配置
+    currentRecordOptions_ = opt;
+
+    // 多相机模式：为所有相机设置录像选项
+    if (cameraMgr_) {
+        QList<QString> allSns = cameraMgr_->allCameraSns();
+        for (const QString& sn : allSns) {
+            CameraView* cam = cameraMgr_->getCamera(sn);
+            if (cam) {
+                cam->setRecordOptions(opt);
+            }
+        }
+        qInfo() << "[MultiCam] Applied record options to" << allSns.size() << "cameras"
+                << "recordPath:" << opt.recordPath
+                << "capturePath:" << opt.capturePath;
+    }
 }
 
 bool MainWindow::eventFilter(QObject* obj, QEvent* event)
@@ -446,20 +498,144 @@ void MainWindow::on_action_closeCamera_triggered()
     g_lastNewFrameMs[this] = 0;
 }
 
-void MainWindow::on_action_grap_triggered() { iscapturing_ = true; }
+void MainWindow::on_action_grap_triggered()
+{
+    // 多相机模式：为所有拉流成功的相机截图
+    if (cameraMgr_) {
+        QList<QString> activeSns = cameraMgr_->activeStreamingSns();
+
+        if (activeSns.isEmpty()) {
+            ThemedMessageDialog::information(this, tr("提示"), tr("没有相机正在拉流，无法截图。"));
+            return;
+        }
+
+        qInfo() << "[SNAPSHOT] Multi-camera snapshot for" << activeSns.size() << "cameras:" << activeSns;
+
+        int snapshotCount = 0;
+        // 为每个拉流成功的相机截图
+        for (const QString& sn : activeSns) {
+            CameraView* cam = cameraMgr_->getCamera(sn);
+            if (cam) {
+                qint64 now = QDateTime::currentMSecsSinceEpoch();
+                qint64 lastFrame = cam->lastFrameMs();
+                bool hasVideoStream = (lastFrame > 0 && (now - lastFrame) <= 1200);
+
+                if (hasVideoStream) {
+                    cam->captureSnapshot();
+                    snapshotCount++;
+                    qInfo() << "[SNAPSHOT] Captured snapshot for camera:" << sn;
+                }
+            }
+        }
+
+        if (uiCtrl_) {
+            uiCtrl_->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ")
+                + tr("截图保存：共 %1 个相机").arg(snapshotCount));
+        }
+
+        return;
+    }
+
+    // 单相机模式
+    iscapturing_ = true;
+}
 
 void MainWindow::on_action_startRecord_triggered()
 {
     qInfo() << "[REC-UI] record button clicked isRecording_=" << isRecording_
-            << "viewer=" << (viewer_ != nullptr);
+            << "viewer=" << (viewer_ != nullptr) << "cameraMgr_=" << (cameraMgr_ != nullptr);
+
     if (isRecording_) {
         qWarning() << "[REC-START-FAIL] isRecording_ already true, ignoring click";
         return;
     }
+
+    // 多相机模式：为所有拉流成功的相机开始录像
+    if (cameraMgr_) {
+        QList<QString> activeSns = cameraMgr_->activeStreamingSns();
+
+        if (activeSns.isEmpty()) {
+            ThemedMessageDialog::information(this, tr("提示"), tr("没有相机正在拉流，无法开始录像。"));
+            return;
+        }
+
+        // 检查磁盘空间
+        QString recordPath = "D:/SP_camera_record";
+        QStorageInfo storage(recordPath);
+        qint64 availableBytes = storage.bytesAvailable();
+        qint64 requiredBytes = 1LL * 1024 * 1024 * 1024; // 1GB
+
+        qInfo() << "[REC-START] Disk space check: available=" << (availableBytes / 1024 / 1024) << "MB"
+                << "required=" << (requiredBytes / 1024 / 1024) << "MB";
+
+        if (availableBytes < requiredBytes) {
+            QString msg = tr("警告：录像磁盘 %1 剩余空间不足 1GB（当前剩余：%2 MB），可能导致录像失败。\n\n是否继续录像？")
+                            .arg(recordPath)
+                            .arg(availableBytes / 1024 / 1024);
+
+            QMessageBox::StandardButton reply = QMessageBox::warning(
+                this,
+                tr("磁盘空间不足"),
+                msg,
+                QMessageBox::Yes | QMessageBox::No
+            );
+
+            if (reply != QMessageBox::Yes) {
+                qInfo() << "[REC-START] User cancelled recording due to low disk space";
+                return;
+            }
+        }
+
+        qInfo() << "[REC-START] Multi-camera recording started for" << activeSns.size() << "cameras:" << activeSns;
+
+        int startedCount = 0;
+        // 为每个拉流成功的相机开始录像
+        for (const QString& sn : activeSns) {
+            CameraView* cam = cameraMgr_->getCamera(sn);
+            if (cam) {
+                qint64 now = QDateTime::currentMSecsSinceEpoch();
+                qint64 lastFrame = cam->lastFrameMs();
+                bool hasVideoStream = (lastFrame > 0 && (now - lastFrame) <= 1200);
+                bool isConnected = cam->isConnected();
+
+                qInfo() << "[REC-START] Camera" << sn << "- connected:" << isConnected
+                        << "hasVideoStream:" << hasVideoStream
+                        << "lastFrame:" << lastFrame;
+
+                if (hasVideoStream && isConnected) {
+                    cam->startRecording();
+                    startedCount++;
+                    qInfo() << "[REC-START] Started recording for camera:" << sn;
+                } else {
+                    qWarning() << "[REC-START] Skipping camera" << sn
+                              << "- not ready for recording (connected:" << isConnected
+                              << "hasVideoStream:" << hasVideoStream << ")";
+                }
+            }
+        }
+
+        if (startedCount == 0) {
+            ThemedMessageDialog::information(this, tr("提示"), tr("没有相机准备好录像。"));
+            return;
+        }
+
+        isRecording_ = true;
+
+        // 更新 UI 状态
+        if (uiCtrl_) {
+            uiCtrl_->setRecording(true);
+            uiCtrl_->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ")
+                + tr("开始录像：共 %1 个相机").arg(startedCount));
+        }
+        return;
+    }
+
+    // 单相机模式：检查 viewer_ 是否存在
     if (!viewer_) {
         ThemedMessageDialog::information(this, tr("提示"), tr("请先打开相机预览再开始录制。"));
         return;
     }
+
     isRecording_ = true;
     emit startRecord();
 }
@@ -469,6 +645,38 @@ void MainWindow::on_action_stopRecord_triggered()
     if (!isRecording_) return;
     isRecording_ = false;
 
+    // 多相机模式：停止所有正在录像的相机
+    if (cameraMgr_) {
+        QList<QString> allSns = cameraMgr_->allCameraSns();
+        int stoppedCount = 0;
+
+        qInfo() << "[REC-STOP] Multi-camera recording stop requested for all cameras";
+
+        // 停止所有相机的录像
+        for (const QString& sn : allSns) {
+            CameraView* cam = cameraMgr_->getCamera(sn);
+            if (cam) {
+                cam->stopRecording();
+                stoppedCount++;
+                qInfo() << "[REC-STOP] Stopped recording for camera:" << sn;
+            }
+        }
+
+        // 更新 UI 状态
+        if (uiCtrl_) {
+            uiCtrl_->setRecording(false);
+            uiCtrl_->setRecordSegmentIndex(0);
+            uiCtrl_->setRecordSegmentElapsed("00:00");
+            uiCtrl_->setRecordTotalElapsed("00:00");
+            uiCtrl_->appendLog(QDateTime::currentDateTime().toString("[hh:mm:ss] ")
+                + tr("停止录像：共 %1 个相机").arg(stoppedCount));
+        }
+
+        qInfo() << "[REC-STOP] Multi-camera recording stopped successfully, count:" << stoppedCount;
+        return;
+    }
+
+    // 单相机模式：使用原有逻辑
     recSaveDlg_ = new QProgressDialog(tr("正在保存录像，请稍候..."), QString(), 0, 0, this);
     recSaveDlg_->setWindowModality(Qt::WindowModal);
     recSaveDlg_->setCancelButton(nullptr);
@@ -817,9 +1025,9 @@ void MainWindow::onCameraSelected(const QString& sn)
             // 更新设备名称和 IP
             if (mgr_) {
                 DeviceInfo dev;
-                if (mgr_->getDevice(sn, dev)) {  // 修正方法名：getDevice 而不是 deviceInfoBySn
-                    uiCtrl_->setDeviceName(sn);  // DeviceInfo 没有 name 字段，使用 sn
-                    uiCtrl_->setDeviceIp(dev.ip.toString());  // QHostAddress 需要转换为 QString
+                if (mgr_->getDevice(sn, dev)) {
+                    uiCtrl_->setDeviceName(sn);
+                    uiCtrl_->setDeviceIp(dev.ip.toString());
                     uiCtrl_->setDeviceOnline(true);
                 }
             }
@@ -863,6 +1071,11 @@ void MainWindow::onActiveStreamingCountChanged(int count)
 
 void MainWindow::onCameraLogMessage(const QString& sn, const QString& msg)
 {
+    // 过滤 [GST] 类型的日志信息
+    if (msg.contains("[GST]", Qt::CaseInsensitive)) {
+        return;
+    }
+
     if (uiCtrl_) {
         QString logMsg = QString("[%1] %2").arg(sn).arg(msg);
         uiCtrl_->appendLog(logMsg);

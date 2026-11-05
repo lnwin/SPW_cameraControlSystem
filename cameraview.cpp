@@ -1,6 +1,7 @@
 #include "cameraview.h"
 #include <QDateTime>
 #include <QPainter>
+#include <QDebug>
 #include <cstring>
 
 static int calcNextPullIntervalMs(int streak)
@@ -65,34 +66,89 @@ CameraView::CameraView(const QString& sn, QWidget* parentWidget, QObject* parent
     connect(recorder_, &VideoRecorder::recordingStarted, this, [this](const QString& path){
         isRecording_ = true;
         emit recordingStarted(path);
-        emit logMessage(sn_, QString("Recording started: %1").arg(path));
+        // 不要在这里发送 logMessage，CameraManager 会转发 recordingStarted 信号
     });
     connect(recorder_, &VideoRecorder::recordingStopped, this, [this](const QString& path){
         isRecording_ = false;
         emit recordingStopped(path);
-        emit logMessage(sn_, QString("Recording stopped: %1").arg(path));
+        // 不要在这里发送 logMessage，CameraManager 会转发 recordingStopped 信号
     });
+    connect(recorder_, &VideoRecorder::recordingDurationUpdate, this, &CameraView::recordingDurationUpdate);
     connect(recorder_, &VideoRecorder::snapshotSaved, this, [this](const QString& path){
         emit snapshotSaved(path);
-        emit logMessage(sn_, QString("Snapshot saved: %1").arg(path));
+        // 不要在这里发送 logMessage，CameraManager 会转发 snapshotSaved 信号
     });
 }
 
 CameraView::~CameraView()
 {
-    disconnect();
+    qDebug() << "[CameraView] Destructor called for SN:" << sn_;
 
-    if (recThread_) {
+    // *** 关键修复：先断开所有信号连接，避免在析构时触发信号导致崩溃 ***
+    QObject::disconnect(this, nullptr, nullptr, nullptr);
+    qDebug() << "[CameraView] All signals disconnected, SN:" << sn_;
+
+    // 1. 先停止录像(如果正在录像)
+    if (isRecording_) {
+        qDebug() << "[CameraView] Stopping recording before cleanup, SN:" << sn_;
+        stopRecording();
+        QThread::msleep(100);  // 给一点时间让停止操作完成
+    }
+
+    // 2. 断开RTSP连接(停止拉流) - 现在不会触发信号了
+    if (viewer_) {
+        qDebug() << "[CameraView] Calling disconnect (no signals will be emitted), SN:" << sn_;
+
+        stopPullTimer();
+
+        viewer_->stop();
+        if (!viewer_->wait(2000)) {
+            qWarning() << "[CameraView] Viewer thread timeout, terminating, SN:" << sn_;
+            viewer_->terminate();
+            viewer_->wait(500);
+        }
+
+        viewer_->deleteLater();
+        viewer_ = nullptr;
+
+        connected_ = false;
+        if (view_) {
+            view_->setImage(QImage());
+        }
+    }
+
+    // 3. 停止并等待录像线程结束
+    if (recThread_ && recThread_->isRunning()) {
+        qDebug() << "[CameraView] Quitting recorder thread, SN:" << sn_;
         recThread_->quit();
-        recThread_->wait(3000);
+
+        if (!recThread_->wait(5000)) {  // 等待5秒
+            qWarning() << "[CameraView] Recorder thread did not finish in time, terminating, SN:" << sn_;
+            recThread_->terminate();  // 强制终止
+            recThread_->wait(1000);   // 再等1秒
+        }
+        qDebug() << "[CameraView] Recorder thread stopped, SN:" << sn_;
     }
 
-    if (view_) {
-        view_->deleteLater();
-    }
+    // 4. 删除录像器(现在线程已经停止,可以安全删除)
     if (recorder_) {
-        recorder_->deleteLater();
+        delete recorder_;
+        recorder_ = nullptr;
     }
+
+    // 5. 删除录像线程
+    if (recThread_) {
+        delete recThread_;
+        recThread_ = nullptr;
+    }
+
+    // 6. 删除视图
+    if (view_) {
+        delete view_;
+        view_ = nullptr;
+    }
+
+    qDebug() << "[CameraView] Destructor finished, SN:" << sn_;
 }
 
 void CameraView::connectToCamera(const QString& rtspUrl)
@@ -119,27 +175,46 @@ void CameraView::connectToCamera(const QString& rtspUrl)
 
 void CameraView::disconnect()
 {
-    if (!viewer_) return;
+    qDebug() << "[CameraView] disconnect() called for SN:" << sn_ << "viewer_:" << viewer_;
 
+    if (!viewer_) {
+        qDebug() << "[CameraView] No viewer to disconnect, SN:" << sn_;
+        return;
+    }
+
+    qDebug() << "[CameraView] Stopping pull timer, SN:" << sn_;
     stopPullTimer();
 
-    if (viewer_) {
-        viewer_->stop();
-        viewer_->wait(3000);
-        viewer_->deleteLater();
-        viewer_ = nullptr;
+    qDebug() << "[CameraView] Calling viewer_->stop(), SN:" << sn_;
+    viewer_->stop();
+
+    qDebug() << "[CameraView] Waiting for viewer thread, SN:" << sn_;
+    if (!viewer_->wait(2000)) {  // 只等待 2 秒
+        qWarning() << "[CameraView] Viewer thread timeout, terminating, SN:" << sn_;
+        viewer_->terminate();
+        viewer_->wait(500);  // 再等 0.5 秒
     }
+
+    qDebug() << "[CameraView] Deleting viewer (deleteLater), SN:" << sn_;
+    viewer_->deleteLater();
+    viewer_ = nullptr;
 
     connected_ = false;
     view_->setImage(QImage());
 
+    qDebug() << "[CameraView] Emitting disconnected signal, SN:" << sn_;
     emit disconnected();
     emit logMessage(sn_, "Disconnected");
+
+    qDebug() << "[CameraView] disconnect() finished, SN:" << sn_;
 }
 
 void CameraView::startRecording()
 {
     if (!connected_ || !recorder_) return;
+
+    // 立即设置 isRecording_ 为 true，这样下一帧就会被发送给录像器
+    isRecording_ = true;
 
     QMetaObject::invokeMethod(recorder_, &VideoRecorder::startRecording, Qt::QueuedConnection);
 }
@@ -154,6 +229,23 @@ void CameraView::stopRecording()
 void CameraView::captureSnapshot()
 {
     pendingSnapshot_ = true;
+}
+
+void CameraView::setRecordOptions(const myRecordOptions& options)
+{
+    if (!recorder_) {
+        qWarning() << "[CameraView] Cannot set record options: no recorder";
+        return;
+    }
+
+    // 通过信号槽将录像选项传递给 VideoRecorder（在另一个线程中）
+    QMetaObject::invokeMethod(recorder_, "receiveRecordOptions",
+                              Qt::QueuedConnection,
+                              Q_ARG(myRecordOptions, options));
+
+    qDebug() << "[CameraView] Record options set for SN:" << sn_
+             << "recordPath:" << options.recordPath
+             << "capturePath:" << options.capturePath;
 }
 
 void CameraView::startPullTimer()

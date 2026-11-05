@@ -66,6 +66,7 @@ private slots:
 private:
     QString buildRtspUrl(const QString& sn);
     void updateActiveStreamingCount();
+    void checkIpSubnet(const QString& cameraIp, const QString& sn);
 
     QWidget* parentWidget_;
     UdpDeviceManager* deviceMgr_ = nullptr;
