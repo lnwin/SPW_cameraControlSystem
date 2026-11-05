@@ -91,8 +91,13 @@ void VideoWindowWidget::setOverlayText(const QString& text)
 {
     qDebug() << "[VideoWidget] setOverlayText called: old=" << overlayText_ << "new=" << text;
     overlayText_ = text;
-    updateInfoText();
-    qDebug() << "[VideoWidget] overlayText updated and updateInfoText called";
+
+    // 更新 CameraView 的叠加文字
+    if (cameraView_) {
+        cameraView_->setOverlayText(overlayText_);
+    }
+
+    qDebug() << "[VideoWidget] overlayText updated and sent to CameraView";
 }
 
 bool VideoWindowWidget::eventFilter(QObject* obj, QEvent* event)

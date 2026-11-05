@@ -97,6 +97,14 @@ void HudWindow::embedVideoWidget(QWidget* videoWidget)
             "QToolButton:hover { background:#0d2a1e; border-color:#00ff99; }");
         connect(fsBtn_, &QToolButton::clicked, this, [this](){ setVideoFullscreen(!videoFullscreen_); });
         updateFullscreenButtonUi();
+
+        // 定时器确保按钮始终在最上层
+        QTimer* raiseTimer = new QTimer(this);
+        raiseTimer->setInterval(100);
+        connect(raiseTimer, &QTimer::timeout, this, [this](){
+            if (fsBtn_) fsBtn_->raise();
+        });
+        raiseTimer->start();
     }
 
     videoContainer_->show();
