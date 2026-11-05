@@ -26,8 +26,9 @@ VideoWindowWidget::VideoWindowWidget(CameraView* cameraView, QWidget* parent)
     // 设置默认叠加文字
     overlayText_ = tr("双击改动文字信息");
 
-    // 关闭 CameraView 的 overlay 功能（不在视频画面上叠加文字）
-    cameraView_->setOverlayEnabled(false);
+    // 启用 CameraView 的 overlay 功能，并设置默认叠加文字
+    cameraView_->setOverlayEnabled(true);
+    cameraView_->setOverlayText(overlayText_);
 
     // 为视频视图安装事件过滤器，捕获双击事件
     ZoomPanImageView* videoView = cameraView_->view();
@@ -36,74 +37,12 @@ VideoWindowWidget::VideoWindowWidget(CameraView* cameraView, QWidget* parent)
         qDebug() << "[VideoWidget] Event filter installed on ZoomPanImageView for" << cameraView_->sn();
     }
 
-    createInfoOverlay();
-
-    // 连接帧率更新信号
-    connect(cameraView_, &CameraView::fpsUpdated, this, [this](){
-        updateInfoText();
-    });
-}
-
-void VideoWindowWidget::createInfoOverlay()
-{
-    // 信息标签（左上角）- 使用可双击的标签
-    infoLabel_ = new ClickableLabel(this);
-    infoLabel_->setStyleSheet(
-        "QLabel {"
-        "  background-color: rgba(0, 0, 0, 180);"
-        "  color: #00cc88;"
-        "  padding: 4px 8px;"
-        "  font-size: 11px;"
-        "  font-family: 'Microsoft YaHei UI';"
-        "  border: 1px solid #00cc88;"
-        "}"
-    );
-    infoLabel_->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-
-    // 连接双击信号
-    connect(static_cast<ClickableLabel*>(infoLabel_), &ClickableLabel::doubleClicked, this, [this](){
-        qDebug() << "[VideoWidget] ClickableLabel doubleClicked signal received!";
-
-        // 双击编辑叠加文字
-        bool ok;
-        QString newText = QInputDialog::getText(this, tr("编辑顶部文字"),
-                                                 tr("顶部叠加文字："),
-                                                 QLineEdit::Normal,
-                                                 overlayText_, &ok);
-        qDebug() << "[VideoWidget] Dialog returned: ok=" << ok << "newText=" << newText;
-
-        if (ok) {
-            qDebug() << "[VideoWidget] Calling setOverlayText with:" << newText;
-            setOverlayText(newText);
-        }
-    });
-
-    qDebug() << "[VideoWidget] ClickableLabel created and doubleClicked signal connected";
-
-    updateInfoText();
-    infoLabel_->adjustSize();
-
-    // 不创建全屏按钮 - 使用原有的全屏按钮
-}
-
-void VideoWindowWidget::updateInfoText()
-{
-    // 黑条信息：只显示提示文字，不显示 SN 和 FPS
-    QString text = tr("双击图像编辑文字信息");
-
-    infoLabel_->setText(text);
-    infoLabel_->adjustSize();
-
-    // 确保信息标签和全屏按钮始终在最上层
-    infoLabel_->raise();
-    if (fullscreenBtn_) {
-        fullscreenBtn_->raise();
-    }
+    // 不创建 infoLabel_ - CameraView 内部的 applyOverlayInto() 会绘制叠加信息
 }
 
 void VideoWindowWidget::updateInfo()
 {
-    updateInfoText();
+    // 不再需要更新 infoLabel_，CameraView 内部会绘制叠加信息
 }
 
 void VideoWindowWidget::setSelected(bool selected)
