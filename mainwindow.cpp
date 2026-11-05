@@ -143,18 +143,15 @@ MainWindow::MainWindow(QWidget* parent)
     // 连接相机管理器信号
     connect(cameraMgr_, &CameraManager::cameraAdded, this, [this](const QString& sn){
         qInfo() << "[MultiCam] Camera added:" << sn;
-        CameraView* cam = cameraMgr_->getCamera(sn);  // 修正方法名：getCamera 而不是 camera
+        CameraView* cam = cameraMgr_->getCamera(sn);
         if (cam) {
             videoGrid_->addCameraWindow(cam);
             qInfo() << "[MultiCam] Camera window added to grid:" << sn;
 
-            // 连接 FPS 更新信号
+            // 连接 FPS 更新信号，更新 UI
             connect(cam, &CameraView::fpsUpdated, this, [this, sn](int fps){
-                if (fps > 0) {  // 只在 FPS > 0 时更新 UI
-                    if (uiCtrl_ && sn == curSelectedSn_) {
-                        // UiController 没有 setVideoFps 方法，暂时移除
-                        // uiCtrl_->setVideoFps(fps);
-                    }
+                if (sn == curSelectedSn_ && uiCtrl_) {
+                    uiCtrl_->setCurrentFps(fps);
                 }
             });
         }
@@ -162,24 +159,52 @@ MainWindow::MainWindow(QWidget* parent)
 
     connect(cameraMgr_, &CameraManager::cameraConnected, this, [this](const QString& sn){
         qInfo() << "[MultiCam] Camera connected:" << sn;
-        CameraView* cam = cameraMgr_->getCamera(sn);  // 修正方法名
-        if (cam && uiCtrl_ && sn == curSelectedSn_) {
-            // UiController 没有 setVideoFps 方法，暂时移除
-            // uiCtrl_->setVideoFps(static_cast<int>(cam->currentFps()));
+        if (sn == curSelectedSn_ && uiCtrl_) {
+            CameraView* cam = cameraMgr_->getCamera(sn);
+            if (cam) {
+                uiCtrl_->setCurrentFps(static_cast<int>(cam->currentFps()));
+                uiCtrl_->setRtspConnected(true);
+            }
         }
     });
 
     connect(cameraMgr_, &CameraManager::cameraDisconnected, this, [this](const QString& sn){
         qInfo() << "[MultiCam] Camera disconnected:" << sn;
-        if (uiCtrl_ && sn == curSelectedSn_) {
-            // UiController 没有 setVideoFps 方法，暂时移除
-            // uiCtrl_->setVideoFps(0);
+        if (sn == curSelectedSn_ && uiCtrl_) {
+            uiCtrl_->setCurrentFps(0);
+            uiCtrl_->setRtspConnected(false);
         }
     });
 
     connect(cameraMgr_, &CameraManager::selectedCameraChanged, this, &MainWindow::onCameraSelected);
     connect(cameraMgr_, &CameraManager::activeStreamingCountChanged, this, &MainWindow::onActiveStreamingCountChanged);
-    connect(cameraMgr_, &CameraManager::logMessage, this, &MainWindow::onCameraLogMessage);  // 修正信号名：logMessage 而不是 cameraLogMessage
+    connect(cameraMgr_, &CameraManager::logMessage, this, &MainWindow::onCameraLogMessage);
+
+    // 更新设备列表（使用 1 秒定时器）
+    connect(devAliveTimer_, &QTimer::timeout, this, [this](){
+        if (cameraMgr_ && uiCtrl_) {
+            // 更新设备列表
+            QList<QString> allSns = cameraMgr_->allCameraSns();
+            uiCtrl_->setDeviceList(allSns);
+
+            // 更新当前选中相机的连接状态和 FPS
+            if (!curSelectedSn_.isEmpty()) {
+                CameraView* cam = cameraMgr_->getCamera(curSelectedSn_);
+                if (cam) {
+                    qint64 now = QDateTime::currentMSecsSinceEpoch();
+                    qint64 lastFrame = cam->lastFrameMs();
+                    bool videoAlive = (lastFrame > 0 && (now - lastFrame) <= 1200);
+                    uiCtrl_->setRtspConnected(videoAlive);
+
+                    if (videoAlive) {
+                        uiCtrl_->setCurrentFps(static_cast<int>(cam->currentFps()));
+                    } else {
+                        uiCtrl_->setCurrentFps(0);
+                    }
+                }
+            }
+        }
+    });
 
     // 设备存活定时器
     devAliveTimer_ = new QTimer(this);
@@ -764,12 +789,36 @@ void MainWindow::onCameraSelected(const QString& sn)
         videoGrid_->setSelectedCamera(sn);
     }
 
-    // 更新 UI 状态
+    // 更新 UI 状态：连接状态、FPS、设备信息
     if (uiCtrl_ && cameraMgr_) {
-        CameraView* cam = cameraMgr_->getCamera(sn);  // 修正方法名
+        CameraView* cam = cameraMgr_->getCamera(sn);
         if (cam) {
-            // UiController 没有 setVideoFps 方法，暂时移除
-            // uiCtrl_->setVideoFps(static_cast<int>(cam->currentFps()));
+            // 更新连接状态（基于最后帧时间戳）
+            qint64 now = QDateTime::currentMSecsSinceEpoch();
+            qint64 lastFrame = cam->lastFrameMs();
+            bool videoAlive = (lastFrame > 0 && (now - lastFrame) <= 1200);
+            uiCtrl_->setRtspConnected(videoAlive);
+
+            // 更新 FPS
+            if (videoAlive) {
+                uiCtrl_->setCurrentFps(static_cast<int>(cam->currentFps()));
+            } else {
+                uiCtrl_->setCurrentFps(0);
+            }
+
+            // 更新设备名称和 IP
+            if (mgr_) {
+                DeviceInfo dev;
+                if (mgr_->deviceInfoBySn(sn, &dev)) {
+                    uiCtrl_->setDeviceName(dev.name);
+                    uiCtrl_->setDeviceIp(dev.ip);
+                    uiCtrl_->setDeviceOnline(true);
+                }
+            }
+
+            qDebug() << "[MainWindow] Updated UI for selected camera:" << sn
+                     << "videoAlive=" << videoAlive
+                     << "fps=" << cam->currentFps();
         }
     }
 }
@@ -780,18 +829,26 @@ void MainWindow::onActiveStreamingCountChanged(int count)
 
     if (cameraMgr_ && videoGrid_) {
         // 获取所有活跃拉流的相机 SN 列表
-        QList<QString> activeSns = cameraMgr_->activeStreamingSns();  // 修正方法名
+        QList<QString> activeSns = cameraMgr_->activeStreamingSns();
 
         // 更新视频网格布局
         videoGrid_->updateLayout(activeSns);
     }
 
-    // 更新 UI FPS 显示
+    // 更新当前选中相机的 UI 状态（连接状态和 FPS）
     if (uiCtrl_ && !curSelectedSn_.isEmpty() && cameraMgr_) {
-        CameraView* cam = cameraMgr_->getCamera(curSelectedSn_);  // 修正方法名
+        CameraView* cam = cameraMgr_->getCamera(curSelectedSn_);
         if (cam) {
-            // UiController 没有 setVideoFps 方法，暂时移除
-            // uiCtrl_->setVideoFps(static_cast<int>(cam->currentFps()));
+            qint64 now = QDateTime::currentMSecsSinceEpoch();
+            qint64 lastFrame = cam->lastFrameMs();
+            bool videoAlive = (lastFrame > 0 && (now - lastFrame) <= 1200);
+            uiCtrl_->setRtspConnected(videoAlive);
+
+            if (videoAlive) {
+                uiCtrl_->setCurrentFps(static_cast<int>(cam->currentFps()));
+            } else {
+                uiCtrl_->setCurrentFps(0);
+            }
         }
     }
 }
