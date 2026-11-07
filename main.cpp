@@ -223,6 +223,36 @@ int main(int argc, char* argv[])
         settingsCtrl.load(); settingsWin.show(); settingsWin.raise();
     });
 
+    // 通用消息弹窗（QML 风格，匹配系统设置样式）
+    QQuickWidget msgWin;
+    msgWin.setWindowFlags(Qt::FramelessWindowHint | Qt::Window | Qt::Tool);
+    msgWin.rootContext()->setContextProperty("uiCtrl", &uiCtrl);
+    msgWin.setSource(QUrl("qrc:/qml/MessageDialog.qml"));
+    msgWin.setResizeMode(QQuickWidget::SizeRootObjectToView);
+    msgWin.resize(400, 200);
+
+    // 连接消息弹窗信号
+    QObject::connect(&uiCtrl, &UiController::requestShowMessage, &msgWin,
+                     [&msgWin](const QString& title, const QString& message, bool showCancel){
+        if (auto* root = msgWin.rootObject()) {
+            root->setProperty("title", title);
+            root->setProperty("message", message);
+            root->setProperty("showCancel", showCancel);
+        }
+        msgWin.show();
+        msgWin.raise();
+    });
+
+    {
+        QObject* root = qobject_cast<QObject*>(msgWin.rootObject());
+        if (root) {
+            QObject::connect(root, SIGNAL(accepted()), &msgWin, SLOT(hide()));
+            QObject::connect(root, SIGNAL(rejected()), &msgWin, SLOT(hide()));
+            QObject::connect(root, SIGNAL(accepted()), &uiCtrl, SIGNAL(messageDialogAccepted()));
+            QObject::connect(root, SIGNAL(rejected()), &uiCtrl, SIGNAL(messageDialogRejected()));
+        }
+    }
+
     // 修改 IP 弹窗（QML 风格）
     QQuickWidget ipWin;
     ipWin.setWindowFlags(Qt::FramelessWindowHint | Qt::Window | Qt::Tool);
@@ -258,6 +288,7 @@ int main(int argc, char* argv[])
         qInfo() << "[LANG] languageChanged received, retranslate trigger status";
         hud.engine()->retranslate();
         settingsWin.engine()->retranslate();
+        msgWin.engine()->retranslate();
         ipWin.engine()->retranslate();
         uiCtrl.retranslateTriggerStatus();
     });

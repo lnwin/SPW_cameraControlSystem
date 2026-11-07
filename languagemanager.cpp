@@ -39,11 +39,10 @@ bool LanguageManager::switchLanguage(const QString& locale, bool showErrors)
     }
     if (loaded)
         qApp->installTranslator(&m_translator);
-    else if (showErrors && locale != "zh_CN")
-        ThemedMessageDialog::warning(nullptr, "Error",
-            "Language file load failed.\n"
-            "Path: " + qrcPath + "\n"
-            "Please rebuild the project so .qm files are generated.");
+    else if (showErrors && locale != "zh_CN") {
+        qWarning() << "[LanguageManager] Language file load failed:" << qrcPath;
+        // 不再弹窗，使用日志记录
+    }
 
     m_locale = locale;
     emit languageChanged();

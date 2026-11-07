@@ -58,6 +58,7 @@ signals:
 
 private slots:
     void onDeviceDiscovered(const QString& sn);
+    void onDeviceOffline(const QString& sn);  // 新增：处理设备离线
     void onCameraConnected();
     void onCameraDisconnected();
     void onCameraFpsUpdated(int fps);

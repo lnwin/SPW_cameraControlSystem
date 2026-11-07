@@ -1,7 +1,9 @@
 #include "cameramanager.h"
+#include "mainwindow.h"
 #include <QTimer>
+#include <QDebug>
 #include <QNetworkInterface>
-#include <QMessageBox>
+#include <QHostAddress>
 
 CameraManager::CameraManager(QWidget* parentWidget, QObject* parent)
     : QObject(parent)
@@ -41,6 +43,10 @@ void CameraManager::bindDeviceManager(UdpDeviceManager* mgr)
     if (deviceMgr_) {
         connect(deviceMgr_, &UdpDeviceManager::snDiscoveredOrUpdated,
                 this, &CameraManager::onDeviceDiscovered);
+
+        // 监听设备离线信号（新增）
+        connect(deviceMgr_, &UdpDeviceManager::snOffline,
+                this, &CameraManager::onDeviceOffline);
     }
 }
 
@@ -237,17 +243,18 @@ void CameraManager::checkIpSubnet(const QString& cameraIp, const QString& sn)
             }
         }
 
-        QString msg = QString("警告：相机 [%1] 的 IP 地址 %2 与本机 IP (%3) 不在同一网段，"
-                              "可能无法正常通信。请检查网络配置。")
+        QString msg = QString(tr("警告：相机 [%1] 的 IP 地址 %2 与本机 IP (%3) 不在同一网段，"
+                              "可能无法正常通信。请检查网络配置。"))
                             .arg(sn)
                             .arg(cameraIp)
-                            .arg(localIps.isEmpty() ? "未知" : localIps);
+                            .arg(localIps.isEmpty() ? tr("未知") : localIps);
 
         emit logMessage(sn, msg);
 
         // 使用 QTimer 延迟弹窗，避免阻塞设备发现流程
-        QTimer::singleShot(500, this, [msg](){
-            QMessageBox::warning(nullptr, "网段警告", msg);
+        // 注意：弹窗功能已移至 UiController，这里仅记录日志
+        QTimer::singleShot(500, this, [this, sn, msg](){
+            emit logMessage(sn, QString("[网段警告] %1").arg(msg));
         });
     }
 }
@@ -370,6 +377,34 @@ void CameraManager::onCameraFpsUpdated(int fps)
     }
 
     lastFpsMap[cam] = fps;
+}
+
+// 处理设备离线事件（新增）
+void CameraManager::onDeviceOffline(const QString& sn)
+{
+    qInfo() << "[CameraManager] Device offline:" << sn;
+
+    // 移除对应的相机
+    if (cameras_.contains(sn)) {
+        removeCamera(sn);
+        emit logMessage(sn, QString("设备 [%1] 已离线，已从列表中移除").arg(sn));
+    }
+
+    // 如果移除的是当前选中的相机，选中其他相机
+    if (selectedSn_ == sn) {
+        if (!cameras_.isEmpty()) {
+            QString nextSn = cameras_.firstKey();
+            setSelectedCamera(nextSn);
+            qInfo() << "[CameraManager] Selected camera removed, switched to:" << nextSn;
+        } else {
+            selectedSn_.clear();
+            emit selectedCameraChanged(QString());
+            qInfo() << "[CameraManager] No cameras available after removal";
+        }
+    }
+
+    // 更新活跃流计数，触发 UI 布局自适应
+    updateActiveStreamingCount();
 }
 
 void CameraManager::onCameraLogMessage(const QString& sn, const QString& msg)

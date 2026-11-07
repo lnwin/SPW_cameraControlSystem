@@ -141,6 +141,11 @@ public slots:
     Q_INVOKABLE void cmdWinClose()      { emit requestWinClose(); }
     Q_INVOKABLE void cmdWinDrag(int dx, int dy) { emit requestWinDrag(dx, dy); }
 
+    // 通用消息弹窗请求
+    void showMessage(const QString& title, const QString& message, bool showCancel = false) {
+        emit requestShowMessage(title, message, showCancel);
+    }
+
 signals:
     void currentTimeChanged();
     void deviceNameChanged();
@@ -191,6 +196,9 @@ signals:
     void requestWinMaximize();
     void requestWinClose();
     void requestWinDrag(int dx, int dy);
+    void requestShowMessage(const QString& title, const QString& message, bool showCancel);
+    void messageDialogAccepted();
+    void messageDialogRejected();
 
 private slots:
     void tickTime();

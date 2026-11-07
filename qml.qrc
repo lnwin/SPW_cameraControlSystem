@@ -12,5 +12,6 @@
         <file>qml/Settings.qml</file>
         <file>qml/PathStatusItem.qml</file>
         <file>qml/ChangeIpDialog.qml</file>
+        <file>qml/MessageDialog.qml</file>
     </qresource>
 </RCC>

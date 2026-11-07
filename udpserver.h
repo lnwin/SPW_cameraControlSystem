@@ -48,6 +48,7 @@ public slots:
 
 signals:
     void snDiscoveredOrUpdated(const QString& sn);
+    void snOffline(const QString& sn);  // 新增：设备离线信号
     void datagramReceived(const QString& sn, const QHostAddress& ip, quint16 port, const QByteArray& payload);
     void logLine(const QString& line);
     void setIpAckReceived(const QString& sn, const QString& status);
@@ -55,6 +56,7 @@ signals:
 private slots:
     void onReadyRead();
     void onReadyReadHb();
+    void checkDeviceTimeout();  // 新增：检查设备超时
 
 private:
     void upsertDevice(const QString& sn,
@@ -76,4 +78,7 @@ private:
 
     QHash<QString, DeviceInfo> devices_;
     mutable QMutex mtx_;
+
+    QTimer* timeoutCheckTimer_ = nullptr;  // 新增：超时检查定时器
+    static constexpr qint64 kDeviceTimeoutMs = 15000;  // 15秒超时
 };

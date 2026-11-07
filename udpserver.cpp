@@ -7,6 +7,7 @@
 #include <QTcpSocket>
 #include <QJsonObject>
 #include <QJsonDocument>
+#include <QTimer>
 
 #ifdef Q_OS_WIN
 #include <winsock2.h>              // must be before <windows.h>
@@ -35,6 +36,10 @@ static QRegularExpression kReSn(R"(sn\s*=\s*([A-Za-z0-9\-_]+))",
 UdpDeviceManager::UdpDeviceManager(QObject* parent)
     : QObject(parent)
 {
+    // 创建设备超时检查定时器
+    timeoutCheckTimer_ = new QTimer(this);
+    connect(timeoutCheckTimer_, &QTimer::timeout, this, &UdpDeviceManager::checkDeviceTimeout);
+    timeoutCheckTimer_->setInterval(5000);  // 每5秒检查一次
 }
 
 // -------------------- start/stop --------------------
@@ -88,11 +93,19 @@ bool UdpDeviceManager::start(quint16 discoverPort, quint16 heartbeatPort)
 
     connect(sockHb_, &QUdpSocket::readyRead, this, &UdpDeviceManager::onReadyReadHb);
 
+    // 启动设备超时检查定时器
+    timeoutCheckTimer_->start();
+
     return true;
 }
 
 void UdpDeviceManager::stop()
 {
+    // 停止超时检查定时器
+    if (timeoutCheckTimer_) {
+        timeoutCheckTimer_->stop();
+    }
+
     auto closeDel = [](QUdpSocket*& s){
         if (!s) return;
         QObject::disconnect(s, nullptr, nullptr, nullptr);
@@ -371,6 +384,39 @@ bool UdpDeviceManager::getDevice(const QString& sn, DeviceInfo& out) const
     if (it == devices_.end()) return false;
     out = it.value();
     return true;
+}
+
+// -------------------- 设备超时检查 --------------------
+void UdpDeviceManager::checkDeviceTimeout()
+{
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    QList<QString> offlineSns;
+
+    {
+        QMutexLocker lk(&mtx_);
+
+        // 遍历所有设备，检查超时
+        for (auto it = devices_.begin(); it != devices_.end(); ) {
+            const QString& sn = it.key();
+            const DeviceInfo& dev = it.value();
+
+            // 检查设备是否超时（超过 15 秒未收到心跳）
+            if (now - dev.lastSeenMs > kDeviceTimeoutMs) {
+                qInfo() << "[UDP-Mgr] Device timeout:" << sn
+                        << "last seen:" << (now - dev.lastSeenMs) << "ms ago";
+                offlineSns.append(sn);
+                it = devices_.erase(it);  // 从设备列表中移除
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    // 在锁外发射信号，避免死锁
+    for (const QString& sn : offlineSns) {
+        emit logLine(QString("[UDP-Mgr] Device removed from list: %1").arg(sn));
+        emit snOffline(sn);
+    }
 }
 
 // -------------------- commands --------------------
