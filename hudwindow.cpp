@@ -96,15 +96,8 @@ HudWindow::HudWindow(UiController* ctrl, const QString& greenLogoPath, const QSt
     resizeIndicator_->move(width() - 24, height() - 24);
     resizeIndicator_->raise();
 
-    // 添加定时器确保右下角调整尺寸指示器始终在最上层
-    QTimer* raiseResizeIndicatorTimer = new QTimer(this);
-    raiseResizeIndicatorTimer->setInterval(100);
-    connect(raiseResizeIndicatorTimer, &QTimer::timeout, this, [this](){
-        if (resizeIndicator_) {
-            resizeIndicator_->raise();
-        }
-    });
-    raiseResizeIndicatorTimer->start();
+    // 移除100ms定时器，避免长时间运行累积大量raise调用导致GPU资源泄漏
+    // resizeIndicator在resizeEvent中自动raise即可保持层级
 }
 
 void HudWindow::embedVideoWidget(QWidget* videoWidget)
@@ -129,13 +122,7 @@ void HudWindow::embedVideoWidget(QWidget* videoWidget)
         connect(fsBtn_, &QToolButton::clicked, this, [this](){ setVideoFullscreen(!videoFullscreen_); });
         updateFullscreenButtonUi();
 
-        // 定时器确保按钮始终在最上层
-        QTimer* raiseTimer = new QTimer(this);
-        raiseTimer->setInterval(100);
-        connect(raiseTimer, &QTimer::timeout, this, [this](){
-            if (fsBtn_) fsBtn_->raise();
-        });
-        raiseTimer->start();
+        // 移除100ms定时器，按钮在 layoutFullscreenButton() 中 raise 即可保持层级
     }
 
     // 创建录像红点指示器（作为视频容器的子控件，显示在视频上方）
@@ -156,20 +143,12 @@ void HudWindow::embedVideoWidget(QWidget* videoWidget)
             connect(recBlinkTimer_, &QTimer::timeout, this, [this](){
                 if (recIndicator_) {
                     recIndicator_->setVisible(!recIndicator_->isVisible());
-                    recIndicator_->raise();  // 每次闪烁时也 raise，确保在最上层
+                    // 移除这里的 raise，避免500ms定时器内频繁调用
                 }
             });
         }
 
-        // 添加定时器确保录像红点始终在最上层（与全屏按钮类似）
-        QTimer* raiseTimer = new QTimer(this);
-        raiseTimer->setInterval(100);
-        connect(raiseTimer, &QTimer::timeout, this, [this](){
-            if (recIndicator_ && recIndicator_->isVisible()) {
-                recIndicator_->raise();
-            }
-        });
-        raiseTimer->start();
+        // 移除100ms定时器，recIndicator在show()和闪烁时raise一次即可保持层级
     }
 
     videoContainer_->show();

@@ -83,6 +83,12 @@ int main(int argc, char* argv[])
         Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
 #endif
 
+    // 【GPU显存泄漏修复】强制QQuickWidget使用软件渲染后端，避免长时间运行GPU纹理累积
+    // QQuickWidget默认使用OpenGL/D3D11硬件加速，Qt Scene Graph可能不及时释放纹理资源
+    // 软件渲染性能对QML UI足够，且避免与GStreamer D3D11解码器共享GPU显存池
+    qputenv("QSG_RHI_BACKEND", "software");
+    qInfo("[STARTUP] QSG_RHI_BACKEND=software (防止QQuickWidget GPU显存累积)");
+
     setupGStreamerRuntime(argv[0]);
 
     // 安装文件日志（在 QApplication 之前即可，QFile 不依赖 QApplication）

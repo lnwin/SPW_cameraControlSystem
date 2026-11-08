@@ -621,7 +621,10 @@ RECONNECT:
     }
 
     gst_element_set_state(pipeline, GST_STATE_NULL);
-    QThread::msleep(30);
+    // 等待状态切换完成，确保D3D11资源完全释放（修复GPU显存泄漏）
+    GstState state = GST_STATE_NULL, pending = GST_STATE_NULL;
+    gst_element_get_state(pipeline, &state, &pending, 5 * GST_SECOND);
+    QThread::msleep(100);  // 给D3D11/GPU驱动更多释放时间
 
     gst_object_unref(sinkElem);
     gst_object_unref(pipeline);

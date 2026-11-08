@@ -20,6 +20,9 @@ static void applyOverlayInto(QImage& dst, const QImage& src, const QString& topT
     std::memcpy(dst.bits(), src.constBits(),
                 static_cast<size_t>(src.sizeInBytes()));
 
+    // 强制深拷贝，避免 QPainter 在 GPU 创建共享纹理缓存（修复长时间运行GPU显存累积）
+    dst.detach();
+
     QPainter p(&dst);
     p.setRenderHint(QPainter::TextAntialiasing);
     const QFont font("Arial", 20, QFont::Bold);
