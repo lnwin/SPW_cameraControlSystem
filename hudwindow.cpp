@@ -121,6 +121,8 @@ void HudWindow::embedVideoWidget(QWidget* videoWidget)
             "QToolButton:hover { background:#0d2a1e; border-color:#00ff99; }");
         connect(fsBtn_, &QToolButton::clicked, this, [this](){ setVideoFullscreen(!videoFullscreen_); });
         updateFullscreenButtonUi();
+        fsBtn_->show();  // 确保按钮可见
+        layoutFullscreenButton();  // 立即调用一次，确保按钮正确定位并raise到最上层
 
         // 移除100ms定时器，按钮在 layoutFullscreenButton() 中 raise 即可保持层级
     }
@@ -153,6 +155,21 @@ void HudWindow::embedVideoWidget(QWidget* videoWidget)
 
     videoContainer_->show();
     syncVideoGeometry();
+    // syncVideoGeometry中会raise videoContainer，之后需要重新raise子控件确保在最上层
+    if (fsBtn_) fsBtn_->raise();
+    if (recIndicator_) recIndicator_->raise();
+
+    // 延迟再次raise，确保在Qt事件循环完成所有初始化后按钮仍在最上层
+    // 这是因为某些内部操作可能在第一次raise之后才执行，导致按钮被覆盖
+    QTimer::singleShot(100, this, [this](){
+        if (fsBtn_) {
+            fsBtn_->show();
+            fsBtn_->raise();
+        }
+        if (recIndicator_ && recIndicator_->isVisible()) {
+            recIndicator_->raise();
+        }
+    });
 }
 
 void HudWindow::setVideoFullscreen(bool on)
@@ -381,4 +398,7 @@ void HudWindow::syncVideoGeometry()
     );
     videoContainer_->raise();
     layoutFullscreenButton();
+    // videoContainer raise后，子控件需要重新raise确保在最上层
+    if (fsBtn_) fsBtn_->raise();
+    if (recIndicator_) recIndicator_->raise();
 }

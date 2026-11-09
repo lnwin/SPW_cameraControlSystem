@@ -45,6 +45,9 @@ public:
     void setOverlayText(const QString& text);
     QString overlayText() const { return overlayText_; }
 
+    // 更新按钮层级（在视频view添加后调用）
+    void updateButtonLayers();
+
 signals:
     void clicked(const QString& sn);
     void requestFullscreen(const QString& sn);

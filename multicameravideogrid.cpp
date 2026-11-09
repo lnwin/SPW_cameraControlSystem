@@ -39,6 +39,7 @@ VideoWindowWidget::VideoWindowWidget(CameraView* cameraView, QWidget* parent)
     }
 
     // 不创建 infoLabel_ - CameraView 内部的 applyOverlayInto() 会绘制叠加信息
+    // 不创建 fullscreenBtn_ - HudWindow级别已有全屏按钮
 }
 
 void VideoWindowWidget::updateInfo()

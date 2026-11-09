@@ -302,7 +302,18 @@ MainWindow::MainWindow(QWidget* parent)
     connect(ipChangeTimer_, &QTimer::timeout, this, &MainWindow::onIpChangeTimeout);
 }
 
-MainWindow::~MainWindow() { shutdownAllThreads(); delete ui; }
+MainWindow::~MainWindow() {
+    // 清理全局QHash中的条目，避免内存泄漏累积
+    g_dropUntilMs.remove(this);
+    g_noFrameStreak.remove(this);
+    g_lastNewFrameMs.remove(this);
+    g_previewLoopOn.remove(this);
+    g_streamStartMs.remove(this);
+    g_viewerStartMs.remove(this);
+
+    shutdownAllThreads();
+    delete ui;
+}
 
 void MainWindow::closeEvent(QCloseEvent* e) { shutdownAllThreads(); e->accept(); }
 
@@ -870,7 +881,18 @@ void MainWindow::bindUiController(UiController* ctrl)
         emit sendLensCmd(curSelectedSn_, "lensIris", ctrl->lensIris());
     });
     connect(ctrl, &UiController::requestToggleCrosshair, this, [this](bool en){
-        if (view_) view_->setCrosshairEnabled(en);
+        // 多相机模式（包括单个相机）：设置到当前选中的相机视图
+        if (cameraMgr_ && !curSelectedSn_.isEmpty()) {
+            CameraView* cam = cameraMgr_->getCamera(curSelectedSn_);
+            if (cam && cam->view()) {
+                cam->view()->setCrosshairEnabled(en);
+                return;
+            }
+        }
+        // 后备方案：单相机模式的 view_
+        if (view_) {
+            view_->setCrosshairEnabled(en);
+        }
     });
 
     connect(ctrl, &UiController::requestSetLed, this, [this, ctrl](bool en){
