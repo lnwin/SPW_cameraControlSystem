@@ -106,6 +106,9 @@ void VideoWindowWidget::setOverlayText(const QString& text)
     qDebug() << "[VideoWidget] setOverlayText called: old=" << overlayText_ << "new=" << text;
     overlayText_ = text;
 
+    // 用户修改了文字，标记为非默认文字
+    isDefaultOverlayText_ = false;
+
     // 更新 CameraView 的叠加文字
     if (cameraView_) {
         cameraView_->setOverlayText(overlayText_);
@@ -388,6 +391,20 @@ void VideoWindowWidget::resizeEvent(QResizeEvent* event)
     }
     if (fullscreenBtn_) {
         fullscreenBtn_->move(width() - fullscreenBtn_->width() - 8, 8);
+    }
+}
+
+void VideoWindowWidget::changeEvent(QEvent* event)
+{
+    QWidget::changeEvent(event);
+
+    // 语言切换时，如果文字未被用户修改过（仍为默认值），则更新为新语言的翻译
+    if (event->type() == QEvent::LanguageChange && isDefaultOverlayText_) {
+        overlayText_ = tr("双击改动文字信息");
+        if (cameraView_) {
+            cameraView_->setOverlayText(overlayText_);
+        }
+        update(); // 触发重绘
     }
 }
 

@@ -163,6 +163,14 @@
     <message><source>取消</source><translation>Cancel</translation></message>
 </context>
 <context>
+    <name>VideoWindowWidget</name>
+    <message><source>双击改动文字信息</source><translation>Double-click to edit text</translation></message>
+    <message><source>编辑顶部文字</source><translation>Edit Top Text</translation></message>
+    <message><source>顶部叠加文字：</source><translation>Top overlay text:</translation></message>
+    <message><source>确定</source><translation>OK</translation></message>
+    <message><source>取消</source><translation>Cancel</translation></message>
+</context>
+<context>
     <name>VideoRecorder</name>
     <message><source>视频根目录未设置</source><translation>Video root directory not set</translation></message>
     <message><source>视频录制初始化失败（编码器打开失败，请检查路径/磁盘/H264支持）</source><translation>Recording init failed (encoder open failed — check path, disk space, and H264 support)</translation></message>

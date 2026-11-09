@@ -58,6 +58,7 @@ protected:
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     bool eventFilter(QObject* obj, QEvent* event) override;
+    void changeEvent(QEvent* event) override;
 
 private:
     void createInfoOverlay();
@@ -66,6 +67,7 @@ private:
     CameraView* cameraView_;
     bool selected_ = false;
     QString overlayText_;  // 叠加文字
+    bool isDefaultOverlayText_ = true;  // 标记是否为默认文字（未被用户修改）
 
     // 信息叠加层
     QLabel* infoLabel_ = nullptr;

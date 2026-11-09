@@ -163,6 +163,14 @@
     <message><source>取消</source><translation>Annuleren</translation></message>
 </context>
 <context>
+    <name>VideoWindowWidget</name>
+    <message><source>双击改动文字信息</source><translation>Dubbelklik om tekst te bewerken</translation></message>
+    <message><source>编辑顶部文字</source><translation>Bewerk boventekst</translation></message>
+    <message><source>顶部叠加文字：</source><translation>Bovenste overlay tekst:</translation></message>
+    <message><source>确定</source><translation>OK</translation></message>
+    <message><source>取消</source><translation>Annuleren</translation></message>
+</context>
+<context>
     <name>VideoRecorder</name>
     <message><source>视频根目录未设置</source><translation>Videohoofddirectory niet ingesteld</translation></message>
     <message><source>视频录制初始化失败（编码器打开失败，请检查路径/磁盘/H264支持）</source><translation>Opname-initialisatie mislukt (encoder openen mislukt — controleer pad, schijfruimte en H264-ondersteuning)</translation></message>

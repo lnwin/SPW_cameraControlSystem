@@ -163,6 +163,14 @@
     <message><source>取消</source><translation>취소</translation></message>
 </context>
 <context>
+    <name>VideoWindowWidget</name>
+    <message><source>双击改动文字信息</source><translation>텍스트 수정하려면 더블클릭하세요</translation></message>
+    <message><source>编辑顶部文字</source><translation>상단 텍스트 편집</translation></message>
+    <message><source>顶部叠加文字：</source><translation>상단 오버레이 텍스트:</translation></message>
+    <message><source>确定</source><translation>확인</translation></message>
+    <message><source>取消</source><translation>취소</translation></message>
+</context>
+<context>
     <name>VideoRecorder</name>
     <message><source>视频根目录未设置</source><translation>비디오 루트 디렉토리가 설정되지 않았습니다</translation></message>
     <message><source>视频录制初始化失败（编码器打开失败，请检查路径/磁盘/H264支持）</source><translation>녹화 초기화 실패 (인코더 열기 실패 — 경로, 디스크 공간, H264 지원을 확인하세요)</translation></message>
