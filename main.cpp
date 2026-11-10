@@ -156,7 +156,7 @@ int main(int argc, char* argv[])
     w.bindUiController(&uiCtrl);
 
     const QString appIconDir = QUrl::fromLocalFile(
-        QCoreApplication::applicationDirPath() + "/icons/current/").toString();
+        QCoreApplication::applicationDirPath() + "/icons/").toString();
     qDebug() << "appIconDir =" << appIconDir;
 
     HudWindow hud(&uiCtrl, {}, appIconDir);
