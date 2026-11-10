@@ -37,15 +37,15 @@ Rectangle {
                 spacing: 8
 
                 Image {
-                    source: appIconDir + "Slogo.png"
+                    source: appIconDir + "smd.png"
                     height: 20
-                    width: height * (547/379)
+                    width: height * (690/281)
                     fillMode: Image.PreserveAspectFit
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
                 Text {
-                    text: "舟山渊视科技有限公司  V4.5.3"
+                    text: "V4.5.3"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
