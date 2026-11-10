@@ -45,7 +45,7 @@ Rectangle {
                 }
 
                 Text {
-                    text: "V4.5.3"
+                    text: "V4.5.4"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
