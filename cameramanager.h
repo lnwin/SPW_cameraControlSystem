@@ -2,6 +2,8 @@
 
 #include <QObject>
 #include <QMap>
+#include <QHash>
+#include <QSet>
 #include <QString>
 #include <QWidget>
 #include "cameraview.h"
@@ -80,4 +82,10 @@ private:
 
     // 活跃流计数（用于检测变化）
     int lastActiveCount_ = 0;
+
+    // FPS 变化检测（修复静态 QHash 泄漏）
+    QHash<CameraView*, int> lastFpsMap_;
+
+    // 已警告的设备集合（避免重复弹窗）
+    QSet<QString> warnedDevices_;
 };

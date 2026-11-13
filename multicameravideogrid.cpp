@@ -242,22 +242,11 @@ bool VideoWindowWidget::eventFilter(QObject* obj, QEvent* event)
                 contentLayout->addLayout(buttonLayout);
                 mainLayout->addWidget(contentWidget);
 
-                // 标题栏拖动功能 - 使用 lambda 和成员变量实现
-                // 注意：这些变量需要在 lambda 外部声明以便正确捕获
-                QPoint* dragPos = new QPoint();
-                bool* isDragging = new bool(false);
+                // 标题栏拖动功能 - 使用栈变量避免堆泄漏
+                QPoint dragPos;
+                bool isDragging = false;
 
                 // 为标题栏安装事件过滤器以实现拖动
-                auto* filter = new QObject(&dlg);
-                QObject::connect(filter, &QObject::destroyed, [dragPos, isDragging]() {
-                    delete dragPos;
-                    delete isDragging;
-                });
-
-                titleBar->installEventFilter(filter);
-                QObject* filterObj = filter;
-
-                // 使用 lambda 覆盖 eventFilter
                 struct TitleBarEventFilter : public QObject {
                     QDialog* dialog;
                     QPoint* dragPosition;
@@ -284,8 +273,8 @@ bool VideoWindowWidget::eventFilter(QObject* obj, QEvent* event)
 
                 auto* titleBarFilter = new TitleBarEventFilter();
                 titleBarFilter->dialog = &dlg;
-                titleBarFilter->dragPosition = dragPos;
-                titleBarFilter->dragging = isDragging;
+                titleBarFilter->dragPosition = &dragPos;
+                titleBarFilter->dragging = &isDragging;
                 titleBarFilter->setParent(&dlg);
                 titleBar->installEventFilter(titleBarFilter);
 

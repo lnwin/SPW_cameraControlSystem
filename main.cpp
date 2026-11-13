@@ -299,5 +299,14 @@ int main(int argc, char* argv[])
         uiCtrl.retranslateTriggerStatus();
     });
 
-    return a.exec();
+    int ret = a.exec();
+
+    // 关闭日志文件句柄，避免资源泄漏
+    if (g_logFile) {
+        g_logFile->close();
+        delete g_logFile;
+        g_logFile = nullptr;
+    }
+
+    return ret;
 }

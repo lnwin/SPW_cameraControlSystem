@@ -155,6 +155,12 @@ void CameraManager::removeCamera(const QString& sn)
     cameras_.remove(sn);
     emit cameraRemoved(sn);
 
+    // 清理 FPS 映射表，防止悬空指针累积
+    lastFpsMap_.remove(cam);
+
+    // 清理警告记录，允许设备重新上线后再次检测
+    warnedDevices_.remove(sn);
+
     // 如果移除的是当前选中的相机，选中其他相机
     if (selectedSn_ == sn) {
         if (!cameras_.isEmpty()) {
@@ -230,9 +236,8 @@ void CameraManager::checkIpSubnet(const QString& cameraIp, const QString& sn)
     }
 
     // 如果不在同一网段，弹窗提示（只提示一次）
-    static QSet<QString> warnedDevices;
-    if (!inSameSubnet && !warnedDevices.contains(sn)) {
-        warnedDevices.insert(sn);
+    if (!inSameSubnet && !warnedDevices_.contains(sn)) {
+        warnedDevices_.insert(sn);
 
         QString localIps;
         for (const QHostAddress& localAddr : localAddresses) {
@@ -368,15 +373,14 @@ void CameraManager::onCameraFpsUpdated(int fps)
     if (!cam) return;
 
     // FPS 变化可能影响活跃流状态（从0变为>0，或从>0变为0）
-    // 这里做一个简单的检查
-    static QHash<CameraView*, int> lastFpsMap;
-    int lastFps = lastFpsMap.value(cam, 0);
+    // 改用成员变量存储，避免静态 QHash 累积悬空指针（CameraView 销毁后未清理）
+    int lastFps = lastFpsMap_.value(cam, 0);
 
     if ((lastFps == 0 && fps > 0) || (lastFps > 0 && fps == 0)) {
         updateActiveStreamingCount();
     }
 
-    lastFpsMap[cam] = fps;
+    lastFpsMap_[cam] = fps;
 }
 
 // 处理设备离线事件（新增）
@@ -384,23 +388,10 @@ void CameraManager::onDeviceOffline(const QString& sn)
 {
     qInfo() << "[CameraManager] Device offline:" << sn;
 
-    // 移除对应的相机
+    // removeCamera 内部已处理选中相机切换、lastFpsMap_ 清理、warnedDevices_ 清理
     if (cameras_.contains(sn)) {
         removeCamera(sn);
         emit logMessage(sn, QString("设备 [%1] 已离线，已从列表中移除").arg(sn));
-    }
-
-    // 如果移除的是当前选中的相机，选中其他相机
-    if (selectedSn_ == sn) {
-        if (!cameras_.isEmpty()) {
-            QString nextSn = cameras_.firstKey();
-            setSelectedCamera(nextSn);
-            qInfo() << "[CameraManager] Selected camera removed, switched to:" << nextSn;
-        } else {
-            selectedSn_.clear();
-            emit selectedCameraChanged(QString());
-            qInfo() << "[CameraManager] No cameras available after removal";
-        }
     }
 
     // 更新活跃流计数，触发 UI 布局自适应

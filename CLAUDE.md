@@ -273,6 +273,46 @@ constexpr int CAMERA_FPS = 25;
 
 ---
 
+### [2026-11-13] V4.5.5 长期运行内存泄漏全面清查与修复
+**修改目标：** 彻查并修复所有长期运行内存泄漏和性能劣化隐患。
+
+**问题清单与修复：**
+
+1. **P0：`cameramanager.cpp` 静态 `lastFpsMap` 悬空指针泄漏**
+   - 原 `static QHash<CameraView*, int> lastFpsMap` 在 CameraView 对象销毁后指针永久残留
+   - 修复：改为成员变量 `lastFpsMap_`，`removeCamera` 时显式调用 `lastFpsMap_.remove(cam)` 清理
+
+2. **P0：`cameramanager.cpp` 静态 `warnedDevices` 无界增长**
+   - 原 `static QSet<QString> warnedDevices` 每个 SN 插入后永不删除
+   - 修复：改为成员变量 `warnedDevices_`，设备离线时 `removeCamera` 中清理
+
+3. **P1：`multicameravideogrid.cpp` 堆指针泄漏**
+   - 原 `QPoint* dragPos = new QPoint()` / `bool* isDragging = new bool(false)` 依赖 `QObject::destroyed` 延迟释放，存在重复 new 未 delete 窗口
+   - 修复：改为栈变量 `QPoint dragPos; bool isDragging = false;`，完全消除堆分配
+
+4. **P1：`onDeviceOffline` 重复执行选中相机切换逻辑**
+   - `removeCamera` 内已处理选中相机切换，`onDeviceOffline` 重复执行同一逻辑
+   - 修复：移除 `onDeviceOffline` 中的冗余代码，统一由 `removeCamera` 处理
+
+5. **P2：`main.cpp` 全局 QFile 句柄程序退出时未关闭**
+   - 修复：`a.exec()` 返回后显式 `g_logFile->close(); delete g_logFile;`
+
+6. **P2：`mainwindow.cpp` 析构时 recSaveDlg_ 未释放**
+   - 修复：析构函数中补充 `delete recSaveDlg_` 保护性清理
+
+**涉及文件：**
+- `cameramanager.h`（新增 `QHash`/`QSet` include；`lastFpsMap_`/`warnedDevices_` 成员变量）
+- `cameramanager.cpp`（`removeCamera` 清理映射表；`onDeviceOffline` 去重）
+- `multicameravideogrid.cpp`（拖动变量改栈分配）
+- `main.cpp`（退出前关闭日志文件句柄）
+- `mainwindow.cpp`（析构函数补 recSaveDlg_ 清理）
+
+**编译结果：** 待 Qt Creator qmake → Rebuild 验证
+**运行验证：** 长时压测（≥24h）：设备频繁上下线后 `runtime.log` 不应出现内存增长告警；进程工作集应平稳
+**风险点：** 无
+
+---
+
 ### [2026-11-13] V4.5.4 长时拉流掉帧 + 鼠标卡顿根治
 **修改目标：** 修复连续拉流数小时后画面降至 7-8 fps、鼠标悬停 UI 卡顿的问题。
 

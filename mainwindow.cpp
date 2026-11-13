@@ -311,6 +311,13 @@ MainWindow::~MainWindow() {
     g_streamStartMs.remove(this);
     g_viewerStartMs.remove(this);
 
+    // 清理可能未释放的 QProgressDialog
+    if (recSaveDlg_) {
+        recSaveDlg_->close();
+        delete recSaveDlg_;
+        recSaveDlg_ = nullptr;
+    }
+
     shutdownAllThreads();
     delete ui;
 }
