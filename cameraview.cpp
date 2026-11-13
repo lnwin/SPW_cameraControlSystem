@@ -20,14 +20,15 @@ static void applyOverlayInto(QImage& dst, const QImage& src, const QString& topT
     std::memcpy(dst.bits(), src.constBits(),
                 static_cast<size_t>(src.sizeInBytes()));
 
-    // 强制深拷贝，避免 QPainter 在 GPU 创建共享纹理缓存（修复长时间运行GPU显存累积）
-    dst.detach();
+    // 无需 detach()：dst 是独立三缓冲槽，src 是帧池，两者不共享像素数据。
+    // 显式 detach() 在 setImage 深拷贝后反而触发多余的写时复制分配。
 
     QPainter p(&dst);
     p.setRenderHint(QPainter::TextAntialiasing);
-    const QFont font("Arial", 20, QFont::Bold);
+    // static：字体对象只构造一次，避免每帧在堆上分配 QFont/QFontMetrics
+    static const QFont font("Arial", 20, QFont::Bold);
+    static const QFontMetrics fm(font);
     p.setFont(font);
-    const QFontMetrics fm(font);
     const int pad = 6;
     const QString line = QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss")
                        + (topText.isEmpty() ? "" : "  " + topText);

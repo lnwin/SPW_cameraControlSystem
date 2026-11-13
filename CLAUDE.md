@@ -271,6 +271,41 @@ constexpr int CAMERA_FPS = 25;
 
 ---
 
+---
+
+### [2026-11-13] V4.5.4 长时拉流掉帧 + 鼠标卡顿根治
+**修改目标：** 修复连续拉流数小时后画面降至 7-8 fps、鼠标悬停 UI 卡顿的问题。
+
+**根因分析：**
+1. **`ZoomPanImageView::setImage` 浅拷贝触发写时复制（主因）**
+   - 原 `img_ = img` 是 Qt 浅拷贝，`img_` 与 `overlayDispBuf_[slot]` 共享同一像素缓冲。
+   - 三缓冲轮转到该槽时，`applyOverlayInto` 调用 `dst.bits()` 写入，Qt 检测到引用计数 > 1，
+     触发写时复制 detach，每帧分配并释放一个 ~8 MB 堆块（1920×1080×4 字节）。
+   - 25fps 下每秒 ~200 MB alloc/free，长时间运行造成 Windows 堆碎片化，
+     `malloc` 延迟劣化从微秒级升至毫秒级，UI 线程被卡住，拉帧定时器触发延误，FPS 降至 7-8。
+     鼠标卡顿同理：Windows 消息泵与 UI 线程共享，UI 线程饥饿后鼠标事件积压。
+2. **`dst.detach()` 副作用（次因）**
+   - V4.3.1 为防 GPU 纹理缓存累积而加的 `dst.detach()`，在 `setImage` 改为深拷贝后会变成
+     在 `img_` 已独立持有像素时再次触发一次多余的写时复制，反而加重问题。已同步移除。
+3. **每帧构造 QFont/QFontMetrics（轻微）**
+   - overlay 路径每帧 `new QFont(...)`，改为 static 只构造一次。
+
+**修复方案：**
+1. `ZoomPanImageView::setImage`：改为 memcpy 深拷贝到自有缓冲，`img_` 永远不与外部共享像素数据。
+2. `mainwindow.cpp` / `cameraview.cpp` 中的 `applyOverlayInto`：删除 `dst.detach()`，QFont/QFontMetrics 改 static。
+
+**涉及文件：**
+- `ZoomPanImageView.h`（`setImage` 改为 memcpy 深拷贝；补 `#include <cstring>`）
+- `mainwindow.cpp`（`applyOverlayInto` 删 `detach()`，QFont/QFontMetrics 改 static）
+- `cameraview.cpp`（同上）
+
+**编译结果：** 待 Qt Creator qmake → Rebuild 验证
+**运行验证：** 长时压测（≥8h）：任务管理器 CPU 曲线应平稳，`[PERF]` 日志 fps 稳定在 24-26，鼠标悬停无卡顿
+**风险点：** `setImage` 多一次 memcpy（约 8MB/帧），但这与原先 detach 触发的隐式 memcpy 等量，
+无额外开销；且使内存分配完全消失，实际 UI 线程负荷更低。
+
+---
+
 ## 代码与商业机密保密规则
 
 > **最高优先级规则，适用于本工程及后续所有工程。**

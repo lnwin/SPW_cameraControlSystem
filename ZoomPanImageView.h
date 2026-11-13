@@ -9,6 +9,7 @@
 #include <QResizeEvent>
 #include <QtMath>
 #include <cmath>
+#include <cstring>
 
 class ZoomPanImageView : public QWidget
 {
@@ -31,12 +32,25 @@ public:
 
     void setImage(const QImage& img)
     {
-        img_ = img;
-        if (img_.isNull()) return;
+        if (img.isNull()) {
+            img_ = QImage();
+            update();
+            return;
+        }
+
+        // 深拷贝到自有缓冲：img_ 永远不与外部的 overlayDispBuf_ 共享像素数据。
+        // 若直接 img_ = img（浅拷贝），三缓冲轮转时 overlayDispBuf_[slot].bits()
+        // 触发 Qt 的写时复制 detach，每帧分配/释放 8 MB，
+        // 长时间运行导致 Windows 堆碎片化、malloc 延迟劣化，UI 线程被卡住。
+        if (img_.size() != img.size() || img_.format() != img.format()) {
+            img_ = QImage(img.size(), img.format());
+        }
+        std::memcpy(img_.bits(), img.constBits(),
+                    static_cast<size_t>(img.sizeInBytes()));
 
         if (img_.size() != lastImgSize_) {
             lastImgSize_ = img_.size();
-            updateGeometry();   // 通知布局重新计算高度
+            updateGeometry();
             resetView();
         }
         update();
