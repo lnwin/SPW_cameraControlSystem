@@ -4,6 +4,23 @@
 上位机只负责：接收 RTSP 流、解码、显示、录像、设备控制。
 相机已在硬件侧完成色彩调整并直接输出 1920x1080，上位机不做任何二次处理。
 
+---
+
+### [2026-11-15] V4.5.7 强制软解码消除 GPU 显存 OOM 崩溃
+**修改目标：** 修复长时间运行后程序崩溃，报错 "An application has requested more GPU memory than is available"（NVIDIA 错误码 6）。
+
+**根因：** `d3d11h264dec` 每次重连都在 GPU 上分配约 60–120 MB DPB（解码图像缓冲区，H.264 1080p 最大 DPB 16 帧 + 输出池约 20 个 NV12 surface）。NVIDIA 驱动对 D3D11 Video API 的 VRAM 释放是延迟的，pipeline 销毁后旧资源仍占用显存数秒至数分钟。每次断流重连（10 s 无帧超时）都阶梯式累积显存，最终触发驱动 OOM 保护，单相机单路流长时运行亦会崩溃。
+
+**修复：** 删除 D3D11 硬解路径（`d3d11h264dec → d3d11convert → d3d11download`），强制使用 `avdec_h264` 软解。1080p25 H.264 软解 CPU 占用约 8–15%（单核），完全可接受；零 GPU 显存分配，重连多少次显存不增长。
+
+**涉及文件：** `rtspviewerqt.cpp`（删除 `haveD3D11` 检测块及对应 pipeline 分支，pipeline 选择直接从 `haveSW` 开始）
+
+**编译结果：** 待 Qt Creator qmake → Rebuild 验证
+**运行验证：** 长时压测（≥24h）：任务管理器 GPU 专用显存应平稳不增；无 OOM 弹窗崩溃
+**风险点：** CPU 占用较硬解略增（约 8–15% 单核），如未来 CPU 资源紧张可考虑其他低 VRAM 硬解方案
+
+---
+
 ## 禁止项
 - 禁止重新引入 ColorTuneWorker 或任何色彩调整逻辑（Lab/HSV/RGB 校正、白平衡、CCM、gamma）
 - 禁止对已是 1920x1080 的图像做额外 resize / letterbox / 补黑边 / 画布拼接

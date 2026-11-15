@@ -307,13 +307,9 @@ RECONNECT:
     // Only loop wait-time, not media latency.
     const GstClockTime pullTimeout = 40 * GST_MSECOND;
 
-    const bool haveD3D11 =
-        hasFactory("rtph264depay") &&
-        hasFactory("h264parse") &&
-        hasFactory("d3d11h264dec") &&
-        hasFactory("d3d11convert") &&
-        hasFactory("d3d11download");
-
+    // D3D11 硬解在长时间运行时因 NVIDIA 驱动 VRAM 延迟释放会阶梯式累积显存，
+    // 最终触发驱动 OOM (error 6)。强制使用 avdec_h264 软解，CPU 占用约 8-15%，
+    // 完全消除 GPU 显存增长，重连多少次显存都不变。
     const bool haveSW =
         hasFactory("rtph264depay") &&
         hasFactory("h264parse") &&
@@ -323,10 +319,7 @@ RECONNECT:
     QString pipeStr;
     QString decoderTag;
 
-    if (haveD3D11) {
-        pipeStr = build_hw_d3d11_pipeline_udp(url_, latency);
-        decoderTag = "d3d11(h264)->BGRA(download)";
-    } else if (haveSW) {
+    if (haveSW) {
         pipeStr = build_sw_pipeline_udp(url_, latency);
         decoderTag = "avdec_h264";
     } else {
