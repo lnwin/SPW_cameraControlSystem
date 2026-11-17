@@ -21,6 +21,28 @@
 
 ---
 
+### [2026-11-17] 多相机长时运行 NVIDIA OpenGL Driver Error code 6 崩溃根治（此前两次修复均未生效）
+**修改目标：** 修复多相机长时拉流后弹窗 "NVIDIA OpenGL Driver: An application has requested more GPU memory than is available… Error code: 6" 崩溃。
+
+**根因（均有运行时证据）：**
+1. **QML 软件渲染从未生效**：`qputenv("QSG_RHI_BACKEND","software")` 在 Qt 5.15 下是无效值，`runtime.log` 每次启动都有 `Unknown key "software" for QSG_RHI_BACKEND, falling back to default backend`。4 个 QQuickWidget 仍跑在 OpenGL 上，且含 QQuickWidget 的顶层窗口整体走 OpenGL 纹理合成，视频区每帧重绘都触发一次合成上传。
+2. **V4.5.7 "强制软解"从未生效**：部署目录与发布包都没有 `gstlibav.dll`，`avdec_h264` 不存在 → 落入 `decodebin` 兜底 → 自动选中 rank 最高的硬解（d3d12h264dec 258 / d3d11h264dec、nvh264dec 257）。每路相机每次重连都累积显存，相机路数越多越快耗尽；显存耗尽后由进程内的 OpenGL 驱动报错退出。
+
+**修复：**
+- `main.cpp`：改用 `QQuickWindow::setSceneGraphBackend(QSGRendererInterface::Software)`（并设 `QT_QUICK_BACKEND=software`），在 QApplication 之前调用。
+- `rtspviewerqt.cpp`：`gst_init_once()` 后新增 `demoteHardwareVideoDecoders()`，把 klass 含 "Hardware" 的视频解码器 rank 全部降为 NONE（仅进程内存）；解码器选择改为 `avdec_h264` → `openh264dec` → `decodebin`（此时只能选到软解）；`build_sw_pipeline_udp` 增加解码器名参数；所选解码器写入 `runtime.log`（`[GST] decoder selected:`）。
+
+**编译结果：** 通过（MSVC2019_64 + Qt 5.15.2 Release，`CONFIG+=qtquickcompiler`，jom）。
+**运行验证：** 已做：启动后进程未加载 opengl32/nvoglv64，`Unknown key` 警告消失；用部署目录 GStreamer 验证 `openh264dec` 对 mfh264enc / nvh264enc / openh264enc 产生的 1080p25 码流均 100/100 帧解出。**未做：** 真实相机拉流、多相机 ≥24h 压测、QML 软件渲染下的界面目检。
+**风险点：**
+- `openh264dec` 单线程软解，每路 1080p25 约占一个核的 10–25%，多相机时 CPU 线性增加；不支持隔行码流。
+- QML 改 CPU 光栅化，Canvas/动画均受支持，界面为简单控制面板，预期无感知。
+- **DLL 已补齐（2026-11-17）**：`E:\ThirdParty\Gstreamer` 安装时未含 restricted 组件（只有 .pdb/.lib），故从官方 GStreamer 1.26.10 MSVC x86_64 运行库 MSI（SHA256 校验通过，核心 DLL 与工程在用的逐字节一致）提取并放入 `release/` 与 V4.5.7 发布包：`gstreamer/lib/gstreamer-1.0/gstlibav.dll`；`gstreamer/bin/` 下 `avcodec-61 / avformat-61 / avutil-59 / avfilter-10 / swresample-5 / swscale-8 / opencore-amrnb-0 / opencore-amrwb-0`；发布包另补 `Qt5VirtualKeyboard.dll`。补齐后实际选用 `avdec_h264`（已验证加载并 100/100 帧解码），`openh264dec` 为后备。仅剩 `gstpython.dll -> python313.dll` 未补（用不到）。
+- **V4.5.8 发布包（2026-11-17）**：版本号 → V4.5.8（`qml/Main.qml`）。发布包在 V4.5.7 包基础上：换新 exe、清空 `logs/`、内置 VC++ 运行库 14.50（程序根目录与 `gstreamer/bin` 各一份，后者供 `gst-plugin-scanner.exe` 子进程经 PATH 找到）、删除无法加载的 `gstpython.dll`、README 重写为 UTF-8 BOM。依赖闭包 593 DLL 全通过；zip 条目名须为 UTF-8 + 正斜杠（.NET Framework `CreateFromDirectory` 会写反斜杠，bsdtar 不写 UTF-8 标记，均不可直接用）。洁净 PATH 下从解压副本启动通过，界面目检正常。
+- 以后打包必须带上上述文件；`E:\ThirdParty\Gstreamer` 本身未改动，从那里重新拷贝会再次漏掉。
+
+---
+
 ## 禁止项
 - 禁止重新引入 ColorTuneWorker 或任何色彩调整逻辑（Lab/HSV/RGB 校正、白平衡、CCM、gamma）
 - 禁止对已是 1920x1080 的图像做额外 resize / letterbox / 补黑边 / 画布拼接

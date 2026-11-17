@@ -20,6 +20,8 @@
 #include "languagemanager.h"
 #include <QQuickItem>
 #include <QQuickWidget>
+#include <QQuickWindow>
+#include <QSGRendererInterface>
 #include <QQmlContext>
 #include <QQmlEngine>
 
@@ -83,11 +85,12 @@ int main(int argc, char* argv[])
         Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
 #endif
 
-    // 【GPU显存泄漏修复】强制QQuickWidget使用软件渲染后端，避免长时间运行GPU纹理累积
-    // QQuickWidget默认使用OpenGL/D3D11硬件加速，Qt Scene Graph可能不及时释放纹理资源
-    // 软件渲染性能对QML UI足够，且避免与GStreamer D3D11解码器共享GPU显存池
-    qputenv("QSG_RHI_BACKEND", "software");
-    qInfo("[STARTUP] QSG_RHI_BACKEND=software (防止QQuickWidget GPU显存累积)");
+    // 【GPU显存修复】强制 Qt Quick 使用软件渲染后端（必须在任何 QQuickWidget 创建之前）。
+    // Qt 5.15 下 QSG_RHI_BACKEND=software 是无效值（运行日志报 Unknown key 并回落到 OpenGL），
+    // 正确做法是 setSceneGraphBackend(Software)。生效后进程内不再创建任何 OpenGL 上下文，
+    // 顶层窗口也不再走 OpenGL 纹理合成，NVIDIA OpenGL 驱动不会被加载。
+    QQuickWindow::setSceneGraphBackend(QSGRendererInterface::Software);
+    qputenv("QT_QUICK_BACKEND", "software");   // 双保险（同一设置的环境变量形式）
 
     setupGStreamerRuntime(argv[0]);
 

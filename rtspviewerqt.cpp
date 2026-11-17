@@ -14,6 +14,8 @@
 
 #include <QElapsedTimer>
 #include <QThread>
+#include <QDebug>
+#include <cstring>
 #include <algorithm>
 #include <functional>
 #include <mutex>
@@ -27,11 +29,34 @@ extern "C" {
 #include <gst/video/video.h>
 }
 
+// 把所有硬件视频解码器（klass 含 "Hardware"：d3d11/d3d12/nvcodec/qsv/amf 等）rank 降为 NONE。
+// 仅影响本进程内存中的 registry，不落盘。这样即使走 decodebin 兜底，
+// 自动选型也只会选到软解，杜绝任何 GPU 显存分配。
+static void demoteHardwareVideoDecoders()
+{
+    GList* list = gst_element_factory_list_get_elements(
+        (GstElementFactoryListType)(GST_ELEMENT_FACTORY_TYPE_DECODER |
+                                    GST_ELEMENT_FACTORY_TYPE_MEDIA_VIDEO),
+        GST_RANK_MARGINAL);
+    int demoted = 0;
+    for (GList* l = list; l; l = l->next) {
+        GstElementFactory* f = GST_ELEMENT_FACTORY(l->data);
+        const gchar* klass = gst_element_factory_get_metadata(f, GST_ELEMENT_METADATA_KLASS);
+        if (klass && strstr(klass, "Hardware")) {
+            gst_plugin_feature_set_rank(GST_PLUGIN_FEATURE(f), GST_RANK_NONE);
+            ++demoted;
+        }
+    }
+    gst_plugin_feature_list_free(list);
+    qInfo("[GST] demoted %d hardware video decoders to RANK_NONE (software decode only)", demoted);
+}
+
 static void gst_init_once()
 {
     static std::once_flag f;
     std::call_once(f, []{
         gst_init(nullptr, nullptr);
+        demoteHardwareVideoDecoders();
     });
 }
 
@@ -145,7 +170,7 @@ static QString build_hw_d3d11_pipeline_udp(const QString& url, int latencyMs)
         .arg(kPreDecodeQueue);
 }
 
-static QString build_sw_pipeline_udp(const QString& url, int latencyMs)
+static QString build_sw_pipeline_udp(const QString& url, int latencyMs, const char* decoder)
 {
     return QString(
                "rtspsrc name=src location=%1 protocols=udp latency=%2 buffer-mode=auto "
@@ -154,7 +179,7 @@ static QString build_sw_pipeline_udp(const QString& url, int latencyMs)
                "! rtph264depay "
                "! h264parse "
                "! %6 "
-               "! avdec_h264 "
+               "! %7 "
                "! videoconvert "
                "! video/x-raw,format=BGRA "
                "! queue leaky=downstream max-size-buffers=2 max-size-time=0 max-size-bytes=0 "
@@ -164,7 +189,8 @@ static QString build_sw_pipeline_udp(const QString& url, int latencyMs)
         .arg(kUdpRcvBufBytes)
         .arg(kDropOnLatency ? "true" : "false")
         .arg(kPostSrcQueue)
-        .arg(kPreDecodeQueue);
+        .arg(kPreDecodeQueue)
+        .arg(QLatin1String(decoder));
 }
 
 static QString build_fallback_decodebin_udp(const QString& url, int latencyMs)
@@ -310,22 +336,31 @@ RECONNECT:
     // D3D11 硬解在长时间运行时因 NVIDIA 驱动 VRAM 延迟释放会阶梯式累积显存，
     // 最终触发驱动 OOM (error 6)。强制使用 avdec_h264 软解，CPU 占用约 8-15%，
     // 完全消除 GPU 显存增长，重连多少次显存都不变。
-    const bool haveSW =
+    // 注意：avdec_h264 来自 gstlibav.dll，部署包中未必存在；缺失时依次回退到
+    // openh264dec（同为纯软解）。最后的 decodebin 兜底也只会选到软解，
+    // 因为 gst_init_once() 已把全部硬件解码器 rank 降为 NONE。
+    const bool haveBase =
         hasFactory("rtph264depay") &&
         hasFactory("h264parse") &&
-        hasFactory("avdec_h264") &&
         hasFactory("videoconvert");
+
+    const char* swDecoder = nullptr;
+    if (haveBase) {
+        if (hasFactory("avdec_h264"))       swDecoder = "avdec_h264";
+        else if (hasFactory("openh264dec")) swDecoder = "openh264dec";
+    }
 
     QString pipeStr;
     QString decoderTag;
 
-    if (haveSW) {
-        pipeStr = build_sw_pipeline_udp(url_, latency);
-        decoderTag = "avdec_h264";
+    if (swDecoder) {
+        pipeStr = build_sw_pipeline_udp(url_, latency, swDecoder);
+        decoderTag = QLatin1String(swDecoder);
     } else {
         pipeStr = build_fallback_decodebin_udp(url_, latency);
-        decoderTag = "decodebin(fallback)";
+        decoderTag = "decodebin(fallback, sw-only)";
     }
+    qInfo().noquote() << "[GST] decoder selected:" << decoderTag;
 
     emit logLine(QString("[GST] pipeline: %1").arg(pipeStr));
     emit logLine(QString("[GST] started (udp) | decoder=%1 | latency=%2ms | drop-on-latency=%3 | udpbuf=%4MB")
