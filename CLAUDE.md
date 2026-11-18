@@ -43,6 +43,26 @@
 
 ---
 
+### [2026-11-18] SMD 分支：exe 图标、界面图标与公司名称替换为 SMD
+**修改目标：** exe 图标、界面 Logo、公司名称统一换成 SMD（素材来自 `release/icons/SMD.ico`、`release/icons/smd.png`）。
+
+**核心改动：**
+- `release/icons/current/Slogo.png`：由 `smd.png` 裁掉透明边后缩放到宽 600 生成，覆盖原文件，qrc / ui / QML / C++ 中所有引用路径不变。
+- `release/icons/current/Slogo.ico`：由 `smd.png` 生成 16/24/32/48/64/128/256 多尺寸 ico，作为 exe 图标。`SMD.ico` 原件仅 32x32，不适合作 exe 图标。
+- `SPW_cameraControlSystem.pro`：`win32` 段新增 `QMAKE_TARGET_COMPANY`、`QMAKE_TARGET_DESCRIPTION`、`QMAKE_TARGET_COPYRIGHT`，写入 exe 属性中的公司名、描述、版权。
+- `qml/Main.qml`：标题栏公司名改为 `SMD  V4.5.8`；Logo 宽高比由 547/379 改为 600/239，匹配新图。
+- 本地 `SPW_cameraControlSystem_resource.rc` 也已手改，但它在 .gitignore 中，由 qmake 自动生成，实际以 `.pro` 为准。
+
+**未改动：** 产品名 "SPW 工业相机控制系统"（TopStatusBar.qml、hudwindow.cpp 窗口标题、四个 .ts 翻译）、QSettings 组织名 "SPwater"（改了会丢失用户已保存的设置）、sdk/ 目录下的版权声明。
+
+**编译结果：** 待 Qt Creator qmake → Rebuild 验证（需 qmake 以重新生成 .rc，exe 图标才会更新）
+**运行验证：** exe 文件图标与右键属性（公司名/描述/版权）为 SMD；窗口左上角与标题栏 Logo 为 SMD；标题栏公司名显示 SMD
+**风险点：**
+- `release/` 被 .gitignore 忽略，`Slogo.ico` 不受 git 跟踪，其他机器拉取后拿不到新 exe 图标；需强制添加（`git add -f`）或调整 .gitignore，请你决定。
+- Windows 资源管理器有图标缓存，替换后可能需要重启资源管理器或改名后才能看到新图标。
+
+---
+
 ## 禁止项
 - 禁止重新引入 ColorTuneWorker 或任何色彩调整逻辑（Lab/HSV/RGB 校正、白平衡、CCM、gamma）
 - 禁止对已是 1920x1080 的图像做额外 resize / letterbox / 补黑边 / 画布拼接

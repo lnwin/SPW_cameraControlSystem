@@ -5,6 +5,9 @@ QMAKE_CXXFLAGS += -utf-8
 
 win32 {
     RC_ICONS = $$PWD/release/icons/current/Slogo.ico
+    QMAKE_TARGET_COMPANY = SMD
+    QMAKE_TARGET_DESCRIPTION = SMD Camera Control System
+    QMAKE_TARGET_COPYRIGHT = Copyright (C) SMD. All rights reserved.
 }
 
 SOURCES += \
