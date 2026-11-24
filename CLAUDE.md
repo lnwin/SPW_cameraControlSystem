@@ -43,6 +43,14 @@
 
 ---
 
+### [2026-11-24] AOHI 分支：图标与公司名更换为 AOHI / 杭州鳌海海洋工程技术有限公司
+**修改目标：** exe 图标、窗口图标、标题栏 Logo、公司名称全部换成 AOHI。
+**涉及文件：** `SPW_cameraControlSystem.pro`（`RC_ICONS` → `release/icons/AOHI.ico`；新增 `QMAKE_TARGET_COMPANY/COPYRIGHT`；`QMAKE_RC += /c65001`，否则 rc.exe 按 GBK 读 UTF-8 的 .rc，中文公司名乱码）、`icons.qrc`（新增 `:/icons/AOHI.ico`、`:/icons/AOHI_logo.png`）、`main.cpp`（窗口图标）、`mainwindow.ui`（图标与 logo）、`qml/Main.qml`（标题栏 Logo 改走 qrc，加白色底板；公司名）、`release/icons/AOHI_logo.png`（由 AOHI.jpg 裁掉白边生成，689×131）。
+**编译结果：** 通过（MSVC2019_64 + Qt 5.15.2 Release，jom）；exe 属性中公司名/版权中文正确，图标已嵌入。
+**风险点：** `AOHI.ico` 只有 96×96 一种尺寸，资源管理器小图标为缩放结果，横版 logo 在 16/32px 下难辨认，建议另出多尺寸方形 ico。`release/` 被 .gitignore 忽略，提交时 `AOHI.ico`/`AOHI_logo.png` 需 `git add -f`。
+
+---
+
 ## 禁止项
 - 禁止重新引入 ColorTuneWorker 或任何色彩调整逻辑（Lab/HSV/RGB 校正、白平衡、CCM、gamma）
 - 禁止对已是 1920x1080 的图像做额外 resize / letterbox / 补黑边 / 画布拼接

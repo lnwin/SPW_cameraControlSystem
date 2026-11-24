@@ -36,16 +36,28 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 8
 
-                Image {
-                    source: appIconDir + "Slogo.png"
-                    height: 20
-                    width: height * (547/379)
-                    fillMode: Image.PreserveAspectFit
+                // AOHI logo 为白底深色图，加白色底板保证在深色标题栏上可辨识
+                Rectangle {
+                    height: 22
+                    width: aohiLogo.width + 8
+                    radius: 3
+                    color: "#ffffff"
                     anchors.verticalCenter: parent.verticalCenter
+
+                    Image {
+                        id: aohiLogo
+                        source: "qrc:/icons/AOHI_logo.png"
+                        height: 18
+                        width: height * (689/131)
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        mipmap: true
+                        anchors.centerIn: parent
+                    }
                 }
 
                 Text {
-                    text: "舟山渊视科技有限公司  V4.5.8"
+                    text: "杭州鳌海海洋工程技术有限公司  V4.5.8"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"

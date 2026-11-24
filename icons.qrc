@@ -1,6 +1,8 @@
 <RCC>
     <qresource prefix="/">
         <file alias="icons/current/Slogo.png">release/icons/current/Slogo.png</file>
+        <file alias="icons/AOHI.ico">release/icons/AOHI.ico</file>
+        <file alias="icons/AOHI_logo.png">release/icons/AOHI_logo.png</file>
     </qresource>
     <qresource prefix="/new/prefix1">
         <file>release/icons/current/03.png</file>

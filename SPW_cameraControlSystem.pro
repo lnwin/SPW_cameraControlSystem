@@ -4,7 +4,11 @@ QMAKE_CFLAGS += -utf-8
 QMAKE_CXXFLAGS += -utf-8
 
 win32 {
-    RC_ICONS = $$PWD/release/icons/current/Slogo.ico
+    RC_ICONS = $$PWD/release/icons/AOHI.ico
+    # qmake 生成的 .rc 为 UTF-8，rc.exe 默认按系统 ANSI(GBK) 读取，需显式指定
+    QMAKE_RC += /c65001
+    QMAKE_TARGET_COMPANY = "杭州鳌海海洋工程技术有限公司"
+    QMAKE_TARGET_COPYRIGHT = "Copyright (C) 杭州鳌海海洋工程技术有限公司. All rights reserved."
 }
 
 SOURCES += \
