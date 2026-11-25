@@ -43,6 +43,15 @@
 
 ---
 
+### [2026-11-25] 更换 Logo 与公司名称为 OCEANIS ROBOTICS
+**修改目标：** exe 图标、窗口图标、标题栏 Logo 换为 `release/icons/OCEANS.ico`；公司名换为 "OCEANIS ROBOTICS"。
+**涉及文件：** `SPW_cameraControlSystem.pro`（`RC_ICONS` → OCEANS.ico，新增 `QMAKE_TARGET_COMPANY`）、`icons.qrc`（新增 `:/icons/current/OCEANS.png`）、`main.cpp`（`setWindowIcon`）、`mainwindow.ui`（windowIcon）、`qml/Main.qml`（标题栏 Logo 改用 qrc 资源、宽高 1:1；公司名文字）。
+**说明：** 部署目录无 qico 图像插件，QML/QIcon 无法直接读 .ico，故由 OCEANS.ico（单尺寸 72×72）转出 `release/icons/current/OCEANS.png` 并编入 qrc，不依赖部署目录文件。`release/` 被 .gitignore 忽略，该 PNG 与 ico 不入库，需自行保留。
+**编译结果：** 通过（MSVC2019_64 + Qt 5.15.2 Release，qtquickcompiler，jom）；生成 rc 中图标与 CompanyName 已正确。
+**风险点：** ico 仅 72×72 一种尺寸，资源管理器大图标/高 DPI 下会被放大显得模糊，建议提供含 16/32/48/256 的多尺寸 ico。
+
+---
+
 ## 禁止项
 - 禁止重新引入 ColorTuneWorker 或任何色彩调整逻辑（Lab/HSV/RGB 校正、白平衡、CCM、gamma）
 - 禁止对已是 1920x1080 的图像做额外 resize / letterbox / 补黑边 / 画布拼接

@@ -4,7 +4,8 @@ QMAKE_CFLAGS += -utf-8
 QMAKE_CXXFLAGS += -utf-8
 
 win32 {
-    RC_ICONS = $$PWD/release/icons/current/Slogo.ico
+    RC_ICONS = $$PWD/release/icons/OCEANS.ico
+    QMAKE_TARGET_COMPANY = "OCEANIS ROBOTICS"
 }
 
 SOURCES += \

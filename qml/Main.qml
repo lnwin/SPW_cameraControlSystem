@@ -37,15 +37,15 @@ Rectangle {
                 spacing: 8
 
                 Image {
-                    source: appIconDir + "Slogo.png"
+                    source: "qrc:/icons/current/OCEANS.png"
                     height: 20
-                    width: height * (547/379)
+                    width: height
                     fillMode: Image.PreserveAspectFit
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
                 Text {
-                    text: "舟山渊视科技有限公司  V4.5.8"
+                    text: "OCEANIS ROBOTICS  V4.5.8"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
