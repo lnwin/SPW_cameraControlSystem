@@ -214,6 +214,13 @@ MainWindow::MainWindow(QWidget* parent)
         }
     });
 
+    // 相机离线被 CameraManager 移除时，同步移除视频网格里对应的窗口；
+    // 否则旧窗口持有已销毁 CameraView 的悬空指针，同一相机重连后会崩溃。
+    connect(cameraMgr_, &CameraManager::cameraRemoved, this, [this](const QString& sn){
+        qInfo() << "[MultiCam] Camera removed:" << sn;
+        if (videoGrid_) videoGrid_->removeCameraWindow(sn);
+    });
+
     connect(cameraMgr_, &CameraManager::selectedCameraChanged, this, &MainWindow::onCameraSelected);
     connect(cameraMgr_, &CameraManager::activeStreamingCountChanged, this, &MainWindow::onActiveStreamingCountChanged);
     connect(cameraMgr_, &CameraManager::logMessage, this, &MainWindow::onCameraLogMessage);

@@ -105,15 +105,16 @@ CameraView::~CameraView()
 
         stopPullTimer();
 
-        viewer_->stop();
-        if (!viewer_->wait(2000)) {
-            qWarning() << "[CameraView] Viewer thread timeout, terminating, SN:" << sn_;
-            viewer_->terminate();
-            viewer_->wait(500);
-        }
-
-        viewer_->deleteLater();
+        // 与 disconnect() 一致：分离旧拉流线程并异步回收，不阻塞、不 terminate()。
+        RtspViewerQt* oldViewer = viewer_;
         viewer_ = nullptr;
+        QObject::disconnect(oldViewer, nullptr, nullptr, nullptr);
+        oldViewer->setParent(nullptr);
+        QObject::connect(oldViewer, &QThread::finished, oldViewer, &QObject::deleteLater);
+        oldViewer->stop();
+        if (!oldViewer->isRunning()) {
+            oldViewer->deleteLater();
+        }
 
         connected_ = false;
         if (view_) {
@@ -126,12 +127,17 @@ CameraView::~CameraView()
         qDebug() << "[CameraView] Quitting recorder thread, SN:" << sn_;
         recThread_->quit();
 
-        if (!recThread_->wait(5000)) {  // 等待5秒
-            qWarning() << "[CameraView] Recorder thread did not finish in time, terminating, SN:" << sn_;
-            recThread_->terminate();  // 强制终止
-            recThread_->wait(1000);   // 再等1秒
+        // 不再 terminate()：强杀正在编码/写文件的线程会留下损坏的 MP4 和未释放的锁。
+        // 给足时间让其自行收尾；仍未退出则放弃回收（有意泄漏），避免删除运行中的线程导致崩溃。
+        if (!recThread_->wait(15000)) {
+            qWarning() << "[CameraView] Recorder thread still running after 15s, leaking it instead of terminate, SN:" << sn_;
+            // recThread_ 以 this 为父对象，必须先摘出父子关系，否则 QObject 析构会连带删除仍在运行的线程。
+            recThread_->setParent(nullptr);
+            recorder_ = nullptr;
+            recThread_ = nullptr;
+        } else {
+            qDebug() << "[CameraView] Recorder thread stopped, SN:" << sn_;
         }
-        qDebug() << "[CameraView] Recorder thread stopped, SN:" << sn_;
     }
 
     // 4. 删除录像器(现在线程已经停止,可以安全删除)
@@ -192,16 +198,19 @@ void CameraView::disconnect()
     qDebug() << "[CameraView] Calling viewer_->stop(), SN:" << sn_;
     viewer_->stop();
 
-    qDebug() << "[CameraView] Waiting for viewer thread, SN:" << sn_;
-    if (!viewer_->wait(2000)) {  // 只等待 2 秒
-        qWarning() << "[CameraView] Viewer thread timeout, terminating, SN:" << sn_;
-        viewer_->terminate();
-        viewer_->wait(500);  // 再等 0.5 秒
-    }
-
-    qDebug() << "[CameraView] Deleting viewer (deleteLater), SN:" << sn_;
-    viewer_->deleteLater();
+    // 异步回收旧拉流线程：不在 UI 线程等待，也绝不 terminate()。
+    // 断网时 GStreamer 停管线可能阻塞数秒，强杀线程会让 GStreamer 内部锁/管线残留，
+    // 导致同一相机重连后崩溃。线程自行停止，结束后由 finished 信号触发 deleteLater。
+    qDebug() << "[CameraView] Detaching viewer for async stop, SN:" << sn_;
+    RtspViewerQt* oldViewer = viewer_;
     viewer_ = nullptr;
+    QObject::disconnect(oldViewer, nullptr, nullptr, nullptr);  // 不再向本对象发信号
+    oldViewer->setParent(nullptr);                              // 不随 CameraView 销毁
+    QObject::connect(oldViewer, &QThread::finished, oldViewer, &QObject::deleteLater);
+    oldViewer->stop();
+    if (!oldViewer->isRunning()) {
+        oldViewer->deleteLater();  // 已结束则不会再发 finished
+    }
 
     connected_ = false;
     view_->setImage(QImage());

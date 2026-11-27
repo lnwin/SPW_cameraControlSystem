@@ -457,6 +457,17 @@ void MultiCameraVideoGrid::removeCameraWindow(const QString& sn)
     }
 
     windows_.remove(sn);
+    // 视频视图归 CameraView 所有（~CameraView 会 delete view_），必须先从窗口摘出来，
+    // 否则窗口销毁时会连带删除它，之后 ~CameraView 再 delete 就是重复释放。
+    // 窗口里的 cameraView_ 在 CameraView 销毁后即为悬空指针，所以这里立即隐藏窗口并断开事件过滤。
+    if (CameraView* cv = window->cameraView()) {
+        if (ZoomPanImageView* v = cv->view()) {
+            v->removeEventFilter(window);
+            v->hide();
+            v->setParent(nullptr);
+        }
+    }
+    window->hide();
     window->deleteLater();
 
     // 如果移除的是选中的窗口，清除选中状态
