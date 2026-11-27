@@ -39,13 +39,13 @@ Rectangle {
                 Image {
                     source: appIconDir + "Slogo.png"
                     height: 20
-                    width: height * (547/379)
+                    width: height * (512/328)
                     fillMode: Image.PreserveAspectFit
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
                 Text {
-                    text: "舟山渊视科技有限公司  V4.5.9"
+                    text: "SMD  V4.5.9"
                     color: "#00cc88"
                     font.pixelSize: 12
                     font.family: "Microsoft YaHei UI"
